@@ -104,6 +104,103 @@
     opacity: 1;
   }
 
+  /* --- Calibration overlay --- */
+  #calibration-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: rgba(8, 8, 14, 0.92);
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: default;
+  }
+
+  #calibration-overlay.active {
+    display: flex;
+  }
+
+  #calibration-overlay .cal-title {
+    font-family: 'Fraunces', Georgia, serif;
+    font-variation-settings: 'WONK' 1, 'SOFT' 100;
+    font-size: 24px;
+    font-weight: 300;
+    color: #e8e4dc;
+    margin-bottom: 8px;
+  }
+
+  #calibration-overlay .cal-subtitle {
+    font-family: 'Literata', Georgia, serif;
+    font-size: 14px;
+    color: rgba(232, 228, 220, 0.45);
+    margin-bottom: 40px;
+    text-align: center;
+    line-height: 1.6;
+    max-width: 400px;
+  }
+
+  #calibration-overlay .cal-progress {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: rgba(194, 113, 79, 0.6);
+    letter-spacing: 0.08em;
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .cal-target {
+    position: fixed;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid rgba(194, 113, 79, 0.5);
+    background: rgba(194, 113, 79, 0.08);
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+    z-index: 210;
+  }
+
+  .cal-target.active {
+    display: flex;
+    animation: cal-pulse 1.5s ease-in-out infinite;
+  }
+
+  .cal-target:hover {
+    border-color: #C2714F;
+    background: rgba(194, 113, 79, 0.2);
+    transform: scale(1.15);
+  }
+
+  .cal-target .cal-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #C2714F;
+  }
+
+  .cal-target.clicked {
+    border-color: rgba(139, 158, 126, 0.7);
+    background: rgba(139, 158, 126, 0.15);
+    animation: none;
+    transform: scale(0.9);
+    pointer-events: none;
+  }
+
+  .cal-target.clicked .cal-dot {
+    background: #8B9E7E;
+  }
+
+  @keyframes cal-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(194, 113, 79, 0.3); }
+    50% { box-shadow: 0 0 0 12px rgba(194, 113, 79, 0); }
+  }
+
   #radius-indicator {
     position: fixed;
     top: 20px;
@@ -171,6 +268,15 @@
 </div>
 
 <div id="radius-indicator"></div>
+
+<div id="calibration-overlay">
+  <div class="cal-title">Calibrate Your Gaze</div>
+  <div class="cal-subtitle">
+    Look at each target and click it. Keep your head still — just move your eyes.
+    The more targets you click, the better the tracking gets.
+  </div>
+  <div class="cal-progress" id="cal-progress">0 / 9</div>
+</div>
 
 <div id="note">
   Move to read. Your fovea is smaller than you think. Scroll to resize the lens.
@@ -325,12 +431,111 @@ canvas.addEventListener('wheel', (e) => {
   radiusFlashTimer = 90 // ~1.5 seconds at 60fps
 }, { passive: false })
 
+// --- Calibration system ---
+const calibrationOverlay = document.getElementById('calibration-overlay')
+const calProgressEl = document.getElementById('cal-progress')
+let calibrationTargets = []
+let calibrationComplete = false
+
+// 9-point calibration grid (percentage positions)
+const CAL_POINTS = [
+  { x: 10, y: 10 }, { x: 50, y: 10 }, { x: 90, y: 10 },
+  { x: 10, y: 50 }, { x: 50, y: 50 }, { x: 90, y: 50 },
+  { x: 10, y: 90 }, { x: 50, y: 90 }, { x: 90, y: 90 },
+]
+
+function createCalibrationTargets() {
+  // Remove old targets
+  calibrationTargets.forEach(t => t.el.remove())
+  calibrationTargets = []
+
+  // Shuffle order for variety
+  const order = [...CAL_POINTS].sort(() => Math.random() - 0.5)
+
+  order.forEach((pt, i) => {
+    const el = document.createElement('div')
+    el.className = 'cal-target'
+    el.innerHTML = '<div class="cal-dot"></div>'
+    el.style.left = `calc(${pt.x}% - 20px)`
+    el.style.top = `calc(${pt.y}% - 20px)`
+    document.body.appendChild(el)
+    calibrationTargets.push({ el, pt, clicked: false, index: i })
+  })
+}
+
+function showNextTarget() {
+  const clicked = calibrationTargets.filter(t => t.clicked).length
+  calProgressEl.textContent = `${clicked} / ${calibrationTargets.length}`
+
+  if (clicked >= calibrationTargets.length) {
+    // All done — close calibration
+    finishCalibration()
+    return
+  }
+
+  // Show the next unclicked target
+  const next = calibrationTargets.find(t => !t.clicked)
+  if (next) {
+    next.el.classList.add('active')
+    next.el.addEventListener('click', () => handleTargetClick(next), { once: true })
+  }
+}
+
+function handleTargetClick(target) {
+  target.clicked = true
+  target.el.classList.remove('active')
+  target.el.classList.add('clicked')
+
+  // Feed click position to WebGazer for calibration
+  // WebGazer uses click events to train its regression model,
+  // so clicking while looking at the target IS the calibration
+  const rect = target.el.getBoundingClientRect()
+  const cx = rect.left + rect.width / 2
+  const cy = rect.top + rect.height / 2
+
+  // Record a few extra training points around the click
+  if (typeof webgazer !== 'undefined' && webgazer.recordScreenPosition) {
+    webgazer.recordScreenPosition(cx, cy, 'click')
+  }
+
+  // Brief pause, then show next
+  setTimeout(showNextTarget, 400)
+}
+
+function finishCalibration() {
+  calibrationComplete = true
+  calibrationOverlay.classList.remove('active')
+
+  // Clean up targets after fade
+  setTimeout(() => {
+    calibrationTargets.forEach(t => t.el.remove())
+    calibrationTargets = []
+  }, 500)
+
+  // Show a brief success message
+  calibrationHint.textContent = 'Calibrated. Move your eyes to read.'
+  calibrationHint.classList.add('visible')
+  setTimeout(() => calibrationHint.classList.remove('visible'), 4000)
+}
+
+function startCalibration() {
+  calibrationComplete = false
+  calibrationOverlay.classList.add('active')
+  createCalibrationTargets()
+
+  // Show first target after a brief pause (let user read instructions)
+  setTimeout(showNextTarget, 1500)
+}
+
 // --- Eye tracking mode ---
 btnMouse.addEventListener('click', () => {
   inputMode = 'mouse'
   btnMouse.classList.add('active')
   btnEyes.classList.remove('active')
   calibrationHint.classList.remove('visible')
+  calibrationOverlay.classList.remove('active')
+  calibrationTargets.forEach(t => t.el.remove())
+  calibrationTargets = []
 
   if (webgazerReady && typeof webgazer !== 'undefined') {
     try { webgazer.pause() } catch (_) {}
@@ -341,31 +546,30 @@ btnEyes.addEventListener('click', async () => {
   inputMode = 'eyes'
   btnEyes.classList.add('active')
   btnMouse.classList.remove('active')
-  calibrationHint.classList.add('visible')
-
-  // Hide hint after a while
-  setTimeout(() => {
-    calibrationHint.classList.remove('visible')
-  }, 12000)
 
   if (webgazerReady) {
     try { webgazer.resume() } catch (_) {}
+    // Offer recalibration
+    if (calibrationComplete) {
+      calibrationHint.textContent = 'Eye tracking active. Click "Eye Tracking" again to recalibrate.'
+      calibrationHint.classList.add('visible')
+      setTimeout(() => calibrationHint.classList.remove('visible'), 4000)
+    } else {
+      startCalibration()
+    }
     return
   }
 
   // Initialize WebGazer
   if (typeof webgazer === 'undefined') {
-    // WebGazer script hasn't loaded — fall back silently
     console.warn('WebGazer not available. Falling back to mouse.')
     inputMode = 'mouse'
     btnMouse.classList.add('active')
     btnEyes.classList.remove('active')
-    calibrationHint.classList.remove('visible')
     return
   }
 
   try {
-    // MediaPipe face_mesh assets are served locally from mediapipe/face_mesh/
     webgazer
       .setRegression('ridge')
       .setGazeListener((data, _timestamp) => {
@@ -377,7 +581,7 @@ btnEyes.addEventListener('click', async () => {
     await webgazer.begin()
     webgazerReady = true
 
-    // Style the video preview after it exists
+    // Style the video preview
     setTimeout(() => {
       const videoContainer = document.getElementById('webgazerVideoContainer')
       if (videoContainer) {
@@ -396,17 +600,18 @@ btnEyes.addEventListener('click', async () => {
           opacity: 0.7 !important;
         `
       }
-      // Hide the default gaze dot
       const gazeDot = document.getElementById('webgazerGazeDot')
       if (gazeDot) gazeDot.style.display = 'none'
     }, 500)
+
+    // Start calibration after WebGazer initializes
+    setTimeout(startCalibration, 1000)
 
   } catch (err) {
     console.warn('Eye tracking unavailable:', err.message)
     inputMode = 'mouse'
     btnMouse.classList.add('active')
     btnEyes.classList.remove('active')
-    calibrationHint.classList.remove('visible')
   }
 })
 
