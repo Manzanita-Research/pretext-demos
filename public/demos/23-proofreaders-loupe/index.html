@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Proofreader's Loupe</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,400&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;1,7..72,400&family=JetBrains+Mono:wght@300;400&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #FAF9F6;
+    color: #2C2C2C;
+    font-family: 'JetBrains Mono', monospace;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    cursor: none;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1000;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  header {
+    padding: 16px 32px 12px;
+    display: flex;
+    align-items: baseline;
+    gap: 24px;
+    border-bottom: 1px solid #E8E5DF;
+    flex-shrink: 0;
+    z-index: 10;
+    background: #FAF9F6;
+  }
+
+  header h1 {
+    font-family: 'Fraunces', serif;
+    font-variation-settings: 'WONK' 1, 'SOFT' 100;
+    font-weight: 300;
+    font-size: 20px;
+    color: #6B3A2A;
+    letter-spacing: 0.04em;
+  }
+
+  header .subtitle {
+    font-size: 10px;
+    color: #5C5C5C;
+    letter-spacing: 0.05em;
+  }
+
+  .controls-bar {
+    padding: 8px 32px;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    border-bottom: 1px solid #E8E5DF;
+    flex-shrink: 0;
+    z-index: 10;
+    background: #FAF9F6;
+  }
+
+  .control-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .control-group label {
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #6B3A2A;
+  }
+
+  .control-group input[type="range"] {
+    width: 80px;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: #E8E5DF;
+    border-radius: 2px;
+    outline: none;
+  }
+
+  .control-group input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #C2714F;
+    cursor: pointer;
+  }
+
+  .control-group .value {
+    font-size: 9px;
+    color: #5C5C5C;
+    min-width: 28px;
+  }
+
+  .btn-small {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: none;
+    border: 1px solid #E8E5DF;
+    color: #6B3A2A;
+    padding: 4px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .btn-small:hover { background: #E8E5DF; }
+
+  .canvas-wrap {
+    flex: 1;
+    position: relative;
+    min-height: 0;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .caption {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: #5C5C5C;
+    letter-spacing: 0.04em;
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  .text-panel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 360px;
+    max-height: 100%;
+    background: rgba(250, 249, 246, 0.96);
+    border-left: 1px solid #E8E5DF;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
+  }
+
+  .text-panel.open { transform: translateX(0); }
+
+  .text-panel-header {
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #E8E5DF;
+    flex-shrink: 0;
+  }
+
+  .text-panel-header .label {
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #6B3A2A;
+  }
+
+  .text-panel textarea {
+    flex: 1;
+    padding: 16px;
+    border: none;
+    background: transparent;
+    font-family: 'Literata', Georgia, serif;
+    font-size: 13px;
+    line-height: 1.7;
+    color: #2C2C2C;
+    resize: none;
+    outline: none;
+  }
+
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(44, 44, 44, 0.4);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    cursor: default;
+  }
+
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: #FAF9F6;
+    border: 1px solid #E8E5DF;
+    border-radius: 8px;
+    padding: 32px 36px;
+    max-width: 520px;
+    width: 90%;
+    box-shadow: 0 12px 40px rgba(44, 44, 44, 0.12);
+  }
+
+  .modal h2 {
+    font-family: 'Fraunces', serif;
+    font-variation-settings: 'WONK' 1, 'SOFT' 100;
+    font-weight: 400;
+    font-size: 20px;
+    color: #6B3A2A;
+    margin-bottom: 16px;
+  }
+
+  .modal p {
+    font-family: 'Literata', Georgia, serif;
+    font-size: 14px;
+    line-height: 1.7;
+    color: #2C2C2C;
+    margin-bottom: 12px;
+  }
+
+  .modal .close-btn {
+    margin-top: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: none;
+    border: 1px solid #E8E5DF;
+    color: #6B3A2A;
+    padding: 6px 16px;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+
+  .modal .close-btn:hover { background: #E8E5DF; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>The Proofreader's Loupe</h1>
+  <span class="subtitle">pretext demo 23</span>
+</header>
+
+<div class="controls-bar">
+  <div class="control-group">
+    <label>Loupe size</label>
+    <input type="range" id="loupeSize" min="60" max="200" value="120">
+    <span class="value" id="loupeSizeVal">120</span>
+  </div>
+  <div class="control-group">
+    <label>Magnification</label>
+    <input type="range" id="magLevel" min="1.5" max="3" step="0.1" value="2">
+    <span class="value" id="magLevelVal">2.0x</span>
+  </div>
+  <button class="btn-small" id="toggleTextBtn">Edit text</button>
+  <button class="btn-small" id="whyBtn">Why we built this</button>
+</div>
+
+<div class="canvas-wrap">
+  <canvas id="canvas"></canvas>
+  <div class="caption">Every line reflows in real time — this is not zoom.</div>
+
+  <div class="text-panel" id="textPanel">
+    <div class="text-panel-header">
+      <span class="label">Source text</span>
+      <button class="btn-small" id="closeTextBtn">Close</button>
+    </div>
+    <textarea id="sourceText"></textarea>
+  </div>
+</div>
+
+<div class="modal-overlay" id="whyModal">
+  <div class="modal">
+    <h2>Why We Built This</h2>
+    <p>Browser zoom is all-or-nothing. Pinch-to-zoom breaks layout. We wanted magnification that respects the reading experience — enlarge exactly what you need while the rest of the page stays coherent.</p>
+    <p>Under the loupe, text reflows at double size with comfortable spacing. Around it, every line recalculates its breaks in real time. Fifty lines, sixty times a second, zero jank.</p>
+    <button class="close-btn" id="closeModal">Close</button>
+  </div>
+</div>
+
+<script type="module">
+import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
+
+const DEFAULT_TEXT = `The specimen before you contains three deliberate errors. In the second paragraph, a comma splice joins two independent clauses that deserve separation. Near the bottom of the third paragraph, 'accomodate' is missing its second m. And somewhere in the fourth paragraph, a word has been duplicated duplicated without detection. These are the kinds of errors that hide in plain sight at normal reading size. A careful reader with the right instrument catches them all.
+
+The art of proofreading has always been an act of attention, a willingness to slow down when every instinct says to keep reading. Most errors survive not because they are invisible but because the eye is trained to see what it expects, not what is there. A comma in the wrong place changes meaning, a misspelled word hides behind its neighbors.
+
+Good typography serves this attention. Comfortable line lengths, generous spacing, clear hierarchy \u2014 these are not decorative choices, they are tools that help a reader accomodate more information with less fatigue. The best typesetters have always known that the space between words matters as much as the words themselves.
+
+There is something satisfying about finding the fault in a seemingly perfect page. The duplicated duplicated word, the misplaced mark, the spelling that almost passed \u2014 each one caught is a small victory for careful reading. The right magnification, at the right moment, makes the invisible visible.`
+
+// --- DOM ---
+const canvas = document.getElementById('canvas')
+const ctx = canvas.getContext('2d')
+const sourceTextEl = document.getElementById('sourceText')
+const loupeSizeSlider = document.getElementById('loupeSize')
+const magLevelSlider = document.getElementById('magLevel')
+const loupeSizeVal = document.getElementById('loupeSizeVal')
+const magLevelVal = document.getElementById('magLevelVal')
+
+sourceTextEl.value = DEFAULT_TEXT
+
+// --- State ---
+let W = 0, H = 0
+let mouseX = -1000, mouseY = -1000
+let loupeRadius = 120
+let magnification = 2.0
+let preparedNormal = null
+let preparedMag = null
+let needsPrepare = true
+
+const NORMAL_SIZE = 16
+const NORMAL_LH = 28
+const PAD = 60
+const MAX_TEXT_W = 620
+
+function magSize() { return Math.round(NORMAL_SIZE * magnification) }
+function magLH() { return Math.round(NORMAL_LH * magnification) }
+function textWidth() { return Math.min(MAX_TEXT_W, W - PAD * 2) }
+function textX() { return Math.max(PAD, (W - textWidth()) / 2) }
+
+// --- Prepare ---
+function prepareTexts() {
+  const text = sourceTextEl.value
+  if (!text.trim()) { preparedNormal = null; preparedMag = null; return }
+  const nf = `${NORMAL_SIZE}px Literata, Georgia, serif`
+  const mf = `${magSize()}px Literata, Georgia, serif`
+  try {
+    preparedNormal = prepareWithSegments(text, nf)
+    preparedMag = prepareWithSegments(text, mf)
+  } catch (e) {
+    console.error('prepare failed:', e)
+    preparedNormal = null; preparedMag = null
+  }
+  needsPrepare = false
+}
+
+// --- Resize ---
+function resize() {
+  const wrap = canvas.parentElement
+  const dpr = window.devicePixelRatio || 1
+  W = wrap.clientWidth
+  H = wrap.clientHeight
+  canvas.width = W * dpr
+  canvas.height = H * dpr
+  canvas.style.width = W + 'px'
+  canvas.style.height = H + 'px'
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+}
+
+// --- Easing for smooth loupe boundary ---
+// Returns a blend factor [0,1] where 0 = normal, 1 = fully magnified
+// based on how close a y-position is to the loupe center
+function loupeInfluence(lineY, lineH, loupeCenterY, loupeR) {
+  // Distance from line center to loupe center
+  const lineCenterY = lineY + lineH * 0.5
+  const dist = Math.abs(lineCenterY - loupeCenterY)
+  if (dist > loupeR) return 0
+  // Smooth falloff using cosine
+  const t = dist / loupeR
+  return 0.5 * (1 + Math.cos(t * Math.PI))
+}
+
+// --- Render ---
+function render() {
+  if (needsPrepare) prepareTexts()
+  ctx.clearRect(0, 0, W, H)
+  if (!preparedNormal || !preparedMag) { requestAnimationFrame(render); return }
+
+  const loupeR = loupeRadius
+  const lx = mouseX
+  const ly = mouseY
+  const tw = textWidth()
+  const tx = textX()
+  const startY = 36
+  const mLH = magLH()
+  const mSz = magSize()
+  const loupeActive = lx > -500
+
+  // ---------------------------------------------------------------
+  // PHASE 1: Layout all text at NORMAL size to get line positions
+  //          and cursor positions so we can map between the two.
+  // ---------------------------------------------------------------
+  const normalLines = []
+  let cursor = { segmentIndex: 0, graphemeIndex: 0 }
+  for (let i = 0; i < 500; i++) {
+    const line = layoutNextLine(preparedNormal, cursor, tw)
+    if (!line) break
+    normalLines.push({ text: line.text, start: cursor, end: line.end })
+    cursor = line.end
+  }
+
+  // ---------------------------------------------------------------
+  // PHASE 2: Layout all text at MAGNIFIED size.
+  // ---------------------------------------------------------------
+  const magLines = []
+  let magCursor = { segmentIndex: 0, graphemeIndex: 0 }
+  for (let i = 0; i < 500; i++) {
+    const line = layoutNextLine(preparedMag, magCursor, tw)
+    if (!line) break
+    magLines.push({ text: line.text, start: magCursor, end: line.end })
+    magCursor = line.end
+  }
+
+  // ---------------------------------------------------------------
+  // PHASE 3: Adaptive layout.
+  // Walk through the text character-by-character (line-by-line in
+  // normal space). For each normal-layout line, compute where its
+  // baseline sits on the page. If that line overlaps the loupe's
+  // vertical range, we expand its line height (and will render it
+  // magnified inside the loupe). Outside the loupe, text stays
+  // normal. The vertical positions accumulate as we go, so lines
+  // below the loupe naturally shift down.
+  //
+  // This produces a "bulge" effect: the loupe zone expands, and
+  // lines above/below stay put (above) or shift down (below).
+  // ---------------------------------------------------------------
+
+  // For each normal line, compute: rendered y-position, effective
+  // line height (blended between normal and magnified based on
+  // proximity to loupe center).
+  const renderedLines = []
+  let y = startY
+
+  // We also need a mapping from normal line index -> which mag lines
+  // cover the same text. Build a char-offset table.
+  // Char offset at start of normal line i
+  const normalCharOffsets = [0]
+  for (let i = 0; i < normalLines.length; i++) {
+    normalCharOffsets.push(normalCharOffsets[i] + normalLines[i].text.length)
+  }
+  const magCharOffsets = [0]
+  for (let i = 0; i < magLines.length; i++) {
+    magCharOffsets.push(magCharOffsets[i] + magLines[i].text.length)
+  }
+
+  for (let i = 0; i < normalLines.length; i++) {
+    const nl = normalLines[i]
+
+    // Compute influence: how much this line is inside the loupe
+    const influence = loupeActive
+      ? loupeInfluence(y, NORMAL_LH, ly, loupeR)
+      : 0
+
+    // Blended line height
+    const lh = NORMAL_LH + influence * (mLH - NORMAL_LH)
+
+    renderedLines.push({
+      normalIndex: i,
+      text: nl.text,
+      y: y,
+      lineHeight: lh,
+      influence: influence
+    })
+
+    y += lh
+  }
+
+  // ---------------------------------------------------------------
+  // PHASE 4: Render.
+  // Two passes: first render all text normally (outside loupe),
+  // then clip to loupe circle and render magnified text.
+  // ---------------------------------------------------------------
+
+  // 4a: Normal text (everything)
+  ctx.save()
+  ctx.font = `${NORMAL_SIZE}px Literata, Georgia, serif`
+  ctx.fillStyle = '#2C2C2C'
+  ctx.textBaseline = 'alphabetic'
+
+  for (const rl of renderedLines) {
+    // Baseline offset: place text at y + some portion of lineHeight
+    const baseline = rl.y + rl.lineHeight * 0.75
+    if (baseline < -NORMAL_LH || baseline > H + NORMAL_LH) continue
+
+    if (rl.influence > 0.01) {
+      // Fade out normal text in the loupe zone so magnified text takes over
+      ctx.globalAlpha = Math.max(0, 1 - rl.influence * 1.5)
+    }
+    ctx.fillText(rl.text, tx, baseline)
+    ctx.globalAlpha = 1
+  }
+  ctx.restore()
+
+  // 4b: Magnified text inside the loupe circle
+  if (loupeActive) {
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(lx, ly, loupeR, 0, Math.PI * 2)
+    ctx.clip()
+
+    // Glass effect: slight brightness
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.05)'
+    ctx.beginPath()
+    ctx.arc(lx, ly, loupeR, 0, Math.PI * 2)
+    ctx.fill()
+
+    // Find which mag lines should be drawn.
+    // We need to position mag lines so they align with the displaced
+    // normal lines in the loupe zone.
+    //
+    // Strategy: find the first rendered line that has influence > 0.
+    // Get its character offset. Find the corresponding mag line.
+    // Render mag lines from there, using mLH spacing, starting at
+    // the y-position of that first affected rendered line.
+
+    let firstAffectedIdx = -1
+    for (let i = 0; i < renderedLines.length; i++) {
+      if (renderedLines[i].influence > 0.01) {
+        firstAffectedIdx = i
+        break
+      }
+    }
+
+    if (firstAffectedIdx >= 0) {
+      const charOffset = normalCharOffsets[firstAffectedIdx]
+
+      // Find corresponding mag line
+      let magStartIdx = 0
+      for (let i = 0; i < magCharOffsets.length - 1; i++) {
+        if (magCharOffsets[i + 1] > charOffset) {
+          magStartIdx = i
+          break
+        }
+      }
+
+      // Compute the y-offset for mag lines.
+      // The first affected rendered line is at renderedLines[firstAffectedIdx].y.
+      // The mag line that corresponds to the same text should start at the same y.
+      // But the mag line might start a bit earlier in the text (since it might
+      // include chars from before the normal line boundary). Adjust:
+      const charDiff = charOffset - magCharOffsets[magStartIdx]
+      // If charDiff > 0, the mag line starts before our affected zone, so we
+      // need to offset up a bit. For simplicity, just start at the rendered y.
+
+      const affectedY = renderedLines[firstAffectedIdx].y
+      const magBaseline = affectedY + mLH * 0.75
+
+      ctx.font = `${mSz}px Literata, Georgia, serif`
+      ctx.fillStyle = '#2C2C2C'
+      ctx.textBaseline = 'alphabetic'
+
+      for (let i = magStartIdx; i < magLines.length; i++) {
+        const myBase = magBaseline + (i - magStartIdx) * mLH
+        if (myBase > ly + loupeR + mLH) break
+        if (myBase < ly - loupeR - mLH) continue
+        ctx.fillText(magLines[i].text, tx, myBase)
+      }
+    }
+
+    ctx.restore()
+
+    // --- Loupe border ---
+    ctx.save()
+    ctx.shadowColor = 'rgba(194, 113, 79, 0.25)'
+    ctx.shadowBlur = 20
+    ctx.shadowOffsetY = 4
+    ctx.beginPath()
+    ctx.arc(lx, ly, loupeR, 0, Math.PI * 2)
+    ctx.strokeStyle = '#C2714F'
+    ctx.lineWidth = 2.5
+    ctx.stroke()
+    ctx.restore()
+
+    // Inner highlight
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(lx, ly, loupeR - 1, 0, Math.PI * 2)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)'
+    ctx.lineWidth = 1
+    ctx.stroke()
+    ctx.restore()
+
+    // Glass gradient
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(lx, ly, loupeR, 0, Math.PI * 2)
+    ctx.clip()
+    const grad = ctx.createRadialGradient(
+      lx - loupeR * 0.3, ly - loupeR * 0.3, 0,
+      lx, ly, loupeR
+    )
+    grad.addColorStop(0, 'rgba(255, 255, 255, 0.04)')
+    grad.addColorStop(0.7, 'rgba(255, 255, 255, 0)')
+    grad.addColorStop(1, 'rgba(0, 0, 0, 0.03)')
+    ctx.fillStyle = grad
+    ctx.fillRect(lx - loupeR, ly - loupeR, loupeR * 2, loupeR * 2)
+    ctx.restore()
+  }
+
+  requestAnimationFrame(render)
+}
+
+// --- Events ---
+canvas.addEventListener('mousemove', e => {
+  const r = canvas.getBoundingClientRect()
+  mouseX = e.clientX - r.left
+  mouseY = e.clientY - r.top
+})
+canvas.addEventListener('mouseleave', () => { mouseX = -1000; mouseY = -1000 })
+
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault()
+  const t = e.touches[0]
+  const r = canvas.getBoundingClientRect()
+  mouseX = t.clientX - r.left
+  mouseY = t.clientY - r.top
+}, { passive: false })
+canvas.addEventListener('touchend', () => { mouseX = -1000; mouseY = -1000 })
+
+// Sliders
+loupeSizeSlider.addEventListener('input', () => {
+  loupeRadius = parseInt(loupeSizeSlider.value)
+  loupeSizeVal.textContent = loupeRadius
+})
+magLevelSlider.addEventListener('input', () => {
+  magnification = parseFloat(magLevelSlider.value)
+  magLevelVal.textContent = magnification.toFixed(1) + 'x'
+  needsPrepare = true
+})
+
+// Text panel
+const textPanel = document.getElementById('textPanel')
+document.getElementById('toggleTextBtn').addEventListener('click', () => {
+  textPanel.classList.toggle('open')
+})
+document.getElementById('closeTextBtn').addEventListener('click', () => {
+  textPanel.classList.remove('open')
+})
+sourceTextEl.addEventListener('input', () => { needsPrepare = true })
+
+// Modal
+document.getElementById('whyBtn').addEventListener('click', () => {
+  document.getElementById('whyModal').classList.add('open')
+})
+document.getElementById('closeModal').addEventListener('click', () => {
+  document.getElementById('whyModal').classList.remove('open')
+})
+document.getElementById('whyModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.remove('open')
+})
+
+// Resize
+window.addEventListener('resize', resize)
+
+// --- Init ---
+function init() {
+  resize()
+  // Position loupe off-center on first load
+  mouseX = W * 0.35
+  mouseY = H * 0.4
+  document.fonts.ready.then(() => {
+    prepareTexts()
+    requestAnimationFrame(render)
+  })
+}
+
+init()
+</script>
+</body>
+</html>

@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Adaptive Reader</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=JetBrains+Mono:wght@400;500&family=Literata:ital,opsz,wght@0,7..72,200..900;1,7..72,200..900&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #FAF9F6;
+    color: #2C2C2C;
+    font-family: 'Literata', Georgia, serif;
+    height: 100vh;
+    width: 100vw;
+    display: flex;
+    overflow: hidden;
+  }
+
+  /* Paper grain texture */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1000;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* Reading area */
+  #reading-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow-y: auto;
+    padding: 40px 20px 80px;
+    position: relative;
+  }
+
+  #reading-header {
+    text-align: center;
+    margin-bottom: 32px;
+    max-width: 720px;
+    width: 100%;
+  }
+
+  #reading-header h1 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 14px;
+    font-weight: 400;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: #6B3A2A;
+    font-variation-settings: 'WONK' 1, 'SOFT' 100;
+    margin-bottom: 8px;
+  }
+
+  #reading-header p {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #5C5C5C;
+    letter-spacing: 0.05em;
+  }
+
+  #canvas-container {
+    position: relative;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+  }
+
+  canvas {
+    display: block;
+  }
+
+  /* Performance counter */
+  #perf-counter {
+    position: fixed;
+    bottom: 12px;
+    left: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #5C5C5C;
+    letter-spacing: 0.02em;
+    z-index: 50;
+    opacity: 0.7;
+    pointer-events: none;
+  }
+
+  /* Control panel */
+  #controls {
+    width: 300px;
+    min-width: 300px;
+    background: #FAF9F6;
+    border-left: 1px solid #E8E5DF;
+    padding: 32px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    overflow-y: auto;
+    box-shadow: -4px 0 24px rgba(107,58,42,0.04);
+    z-index: 10;
+  }
+
+  #controls h2 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 18px;
+    font-weight: 400;
+    color: #6B3A2A;
+    font-variation-settings: 'WONK' 1, 'SOFT' 100;
+  }
+
+  /* Preset buttons */
+  .presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .preset-btn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.03em;
+    padding: 6px 12px;
+    border: 1px solid #E8E5DF;
+    border-radius: 4px;
+    background: #FAF9F6;
+    color: #6B3A2A;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .preset-btn:hover {
+    background: #f0ebe4;
+    border-color: #C2714F;
+  }
+
+  .preset-btn.active {
+    background: #C2714F;
+    color: #FAF9F6;
+    border-color: #C2714F;
+  }
+
+  /* Slider groups */
+  .slider-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .slider-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+
+  .slider-label span:first-child {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #6B3A2A;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .slider-label .slider-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #5C5C5C;
+  }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 3px;
+    background: #C49A3C;
+    outline: none;
+    border-radius: 2px;
+    cursor: pointer;
+    opacity: 0.4;
+    margin: 6px 0;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #C2714F;
+    border: 2px solid #FAF9F6;
+    box-shadow: 0 0 0 1px rgba(107,58,42,0.2), 0 2px 6px rgba(107,58,42,0.25);
+    cursor: grab;
+    transition: transform 0.15s ease;
+  }
+
+  input[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+  }
+
+  input[type="range"]::-webkit-slider-thumb:active {
+    cursor: grabbing;
+    transform: scale(1.1);
+  }
+
+  input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #C2714F;
+    border: 2px solid #FAF9F6;
+    box-shadow: 0 0 0 1px rgba(107,58,42,0.2), 0 2px 6px rgba(107,58,42,0.25);
+    cursor: grab;
+  }
+
+  /* More controls toggle */
+  #more-toggle {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.03em;
+    color: #5C5C5C;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px 0;
+    text-align: left;
+    transition: color 0.2s;
+  }
+
+  #more-toggle:hover {
+    color: #C2714F;
+  }
+
+  #extra-controls {
+    display: none;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  #extra-controls.visible {
+    display: flex;
+  }
+
+  /* Custom text area */
+  #custom-text-section {
+    border-top: 1px solid #E8E5DF;
+    padding-top: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  #custom-text-toggle {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.03em;
+    color: #5C5C5C;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    text-align: left;
+    transition: color 0.2s;
+  }
+
+  #custom-text-toggle:hover {
+    color: #C2714F;
+  }
+
+  #custom-text-area {
+    display: none;
+    width: 100%;
+    min-height: 120px;
+    padding: 10px;
+    font-family: 'Literata', Georgia, serif;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #2C2C2C;
+    background: #fff;
+    border: 1px solid #E8E5DF;
+    border-radius: 4px;
+    resize: vertical;
+    outline: none;
+  }
+
+  #custom-text-area:focus {
+    border-color: #C2714F;
+  }
+
+  #custom-text-area.visible {
+    display: block;
+  }
+
+  #apply-text-btn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.03em;
+    padding: 6px 12px;
+    border: 1px solid #C2714F;
+    border-radius: 4px;
+    background: #C2714F;
+    color: #FAF9F6;
+    cursor: pointer;
+    display: none;
+    transition: opacity 0.2s;
+  }
+
+  #apply-text-btn.visible {
+    display: inline-block;
+  }
+
+  #apply-text-btn:hover {
+    opacity: 0.85;
+  }
+
+  /* Why modal */
+  #why-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(44,44,44,0.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+  }
+
+  #why-overlay.visible {
+    display: flex;
+  }
+
+  #why-modal {
+    background: #FAF9F6;
+    max-width: 520px;
+    width: 90%;
+    padding: 40px;
+    border-radius: 8px;
+    box-shadow: 0 16px 48px rgba(107,58,42,0.15);
+    position: relative;
+  }
+
+  #why-modal h3 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 20px;
+    font-weight: 400;
+    color: #6B3A2A;
+    font-variation-settings: 'WONK' 1, 'SOFT' 100;
+    margin-bottom: 16px;
+  }
+
+  #why-modal p {
+    font-family: 'Literata', Georgia, serif;
+    font-size: 15px;
+    line-height: 1.7;
+    color: #2C2C2C;
+  }
+
+  #why-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: none;
+    border: none;
+    font-size: 20px;
+    color: #5C5C5C;
+    cursor: pointer;
+    padding: 4px;
+    line-height: 1;
+  }
+
+  #why-close:hover {
+    color: #C2714F;
+  }
+
+  #why-link {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.03em;
+    color: #5C5C5C;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    text-align: left;
+    text-decoration: underline;
+    text-decoration-color: #E8E5DF;
+    text-underline-offset: 3px;
+    transition: color 0.2s;
+  }
+
+  #why-link:hover {
+    color: #C2714F;
+  }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    body {
+      flex-direction: column;
+    }
+    #controls {
+      width: 100%;
+      min-width: unset;
+      border-left: none;
+      border-top: 1px solid #E8E5DF;
+      max-height: 40vh;
+      padding: 20px 16px;
+    }
+    #reading-area {
+      padding: 20px 12px 40px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div id="reading-area">
+  <div id="reading-header">
+    <h1>The Adaptive Reader</h1>
+    <p>drag the sliders. find what feels right.</p>
+  </div>
+  <div id="canvas-container">
+    <canvas id="canvas"></canvas>
+  </div>
+</div>
+
+<div id="controls">
+  <h2>Reading Comfort</h2>
+
+  <div class="presets">
+    <button class="preset-btn active" data-preset="default">Default</button>
+    <button class="preset-btn" data-preset="dyslexia">Dyslexia-friendly</button>
+    <button class="preset-btn" data-preset="lowvision">Low Vision</button>
+    <button class="preset-btn" data-preset="dense">Dense</button>
+  </div>
+
+  <div class="slider-group">
+    <div class="slider-label">
+      <span>Line Width</span>
+      <span class="slider-value" id="line-width-val">88ch</span>
+    </div>
+    <input type="range" id="line-width" min="40" max="100" value="88" step="1">
+  </div>
+
+  <button id="more-toggle">+ More controls</button>
+
+  <div id="extra-controls">
+    <div class="slider-group">
+      <div class="slider-label">
+        <span>Line Height</span>
+        <span class="slider-value" id="line-height-val">1.30</span>
+      </div>
+      <input type="range" id="line-height" min="100" max="250" value="130" step="1">
+    </div>
+
+    <div class="slider-group">
+      <div class="slider-label">
+        <span>Font Size</span>
+        <span class="slider-value" id="font-size-val">16px</span>
+      </div>
+      <input type="range" id="font-size" min="12" max="28" value="16" step="0.5">
+    </div>
+
+    <div class="slider-group">
+      <div class="slider-label">
+        <span>Letter Spacing</span>
+        <span class="slider-value" id="letter-spacing-val">0.00em</span>
+      </div>
+      <input type="range" id="letter-spacing" min="-20" max="100" value="0" step="1">
+    </div>
+  </div>
+
+  <div id="custom-text-section">
+    <button id="custom-text-toggle">+ Paste your own text</button>
+    <textarea id="custom-text-area" placeholder="Paste your text here..."></textarea>
+    <button id="apply-text-btn">Apply text</button>
+  </div>
+
+  <button id="why-link">Why we built this</button>
+</div>
+
+<div id="perf-counter">layout: --</div>
+
+<div id="why-overlay">
+  <div id="why-modal">
+    <button id="why-close">&times;</button>
+    <h3>Why We Built This</h3>
+    <p>Reading is physical. Your eyes have preferences your conscious mind has never met. We built this because accessibility tools give you three presets and a reload &mdash; but comfort is a spectrum, not a menu. Drag a slider and watch the text reflow in real time, at 60 frames per second, until it feels right. That's what a text engine should do.</p>
+  </div>
+</div>
+
+<script type="module">
+import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
+
+// --- Default text ---
+const DEFAULT_TEXT = `We have almost lost the ability to read slowly. Every interface we use rewards skimming \u2014 bold keywords, bullet points, highlighted passages that spare us the trouble of finding meaning ourselves. But some writing exists specifically to resist that speed. It asks you to sit with a sentence, to let the rhythm of the words set the pace rather than your anxiety about what comes next.
+
+Typography serves this patience. A comfortable line length \u2014 neither so short that your eye bounces constantly nor so long that you lose your place on the return \u2014 is the difference between reading as labor and reading as rest. Line height gives each row of text room to breathe, space for your eye to land cleanly at the start of the next line without drifting.
+
+These are not aesthetic preferences. They are physical facts about how human vision processes text. Your eyes have a focal range, a saccade pattern, a scanning rhythm. Every reader\u2019s is slightly different. What feels comfortable to one person feels cramped or sparse to another. The problem with most reading interfaces is that they give you three options and a reload button. Comfort is a spectrum. Your body already knows what it wants \u2014 it just needs an instrument sensitive enough to find it.`
+
+let currentText = DEFAULT_TEXT
+
+// --- Canvas setup ---
+const canvas = document.getElementById('canvas')
+const ctx = canvas.getContext('2d')
+const dpr = window.devicePixelRatio || 1
+const perfCounter = document.getElementById('perf-counter')
+
+// --- Slider elements ---
+const lineWidthSlider = document.getElementById('line-width')
+const lineHeightSlider = document.getElementById('line-height')
+const fontSizeSlider = document.getElementById('font-size')
+const letterSpacingSlider = document.getElementById('letter-spacing')
+
+const lineWidthVal = document.getElementById('line-width-val')
+const lineHeightVal = document.getElementById('line-height-val')
+const fontSizeVal = document.getElementById('font-size-val')
+const letterSpacingVal = document.getElementById('letter-spacing-val')
+
+// --- State ---
+let state = {
+  lineWidthCh: 88,
+  lineHeight: 1.3,
+  fontSize: 16,
+  letterSpacing: 0,
+}
+
+// Animated state (for smooth transitions)
+let animState = { ...state }
+let animTarget = null
+let animStart = null
+let animDuration = 400
+let animStartState = null
+
+// --- Presets ---
+const PRESETS = {
+  default: { lineWidthCh: 88, lineHeight: 1.3, fontSize: 16, letterSpacing: 0 },
+  dyslexia: { lineWidthCh: 55, lineHeight: 1.8, fontSize: 18, letterSpacing: 0.05 },
+  lowvision: { lineWidthCh: 50, lineHeight: 2.0, fontSize: 24, letterSpacing: 0.02 },
+  dense: { lineWidthCh: 95, lineHeight: 1.2, fontSize: 14, letterSpacing: -0.01 },
+}
+
+// --- Measure ch width for current font ---
+function measureChWidth(fontSize) {
+  ctx.font = `${fontSize}px 'Literata', Georgia, serif`
+  return ctx.measureText('0').width
+}
+
+// --- Layout + Render ---
+function render() {
+  const s = animState
+  const container = document.getElementById('reading-area')
+  const containerWidth = container.clientWidth
+  const containerHeight = container.clientHeight
+
+  // Compute pixel width from ch units
+  const chPx = measureChWidth(s.fontSize)
+  const textWidthPx = Math.min(s.lineWidthCh * chPx, containerWidth - 60)
+
+  // Canvas sizing
+  const canvasW = Math.max(textWidthPx + 40, 200)
+  const canvasH = containerHeight - 120
+
+  canvas.width = canvasW * dpr
+  canvas.height = canvasH * dpr
+  canvas.style.width = canvasW + 'px'
+  canvas.style.height = canvasH + 'px'
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+
+  // Clear
+  ctx.clearRect(0, 0, canvasW, canvasH)
+
+  // Font string for pretext
+  const fontString = `${s.fontSize}px 'Literata', Georgia, serif`
+
+  // Performance timing start
+  const t0 = performance.now()
+
+  // Prepare text for layout (must be called fresh each render since
+  // layoutNextLine consumes state from the prepared object)
+  const prepared = prepareWithSegments(currentText, fontString)
+
+  // Layout lines using the segments API:
+  // layoutNextLine(prepared, cursor, width) returns { ascent, descent, width, segments, end }
+  const marginX = (canvasW - textWidthPx) / 2
+  const lineHeightPx = s.fontSize * s.lineHeight
+  let y = 20
+  let cursor = 0
+  const lines = []
+  let safetyCount = 0
+
+  while (y + lineHeightPx < canvasH && safetyCount < 2000) {
+    const line = layoutNextLine(prepared, cursor, textWidthPx)
+    if (!line) break
+    lines.push({ segments: line.segments, ascent: line.ascent, descent: line.descent, lineY: y })
+    cursor = line.end
+    y += lineHeightPx
+    safetyCount++
+  }
+
+  const t1 = performance.now()
+  const layoutUs = ((t1 - t0) * 1000).toFixed(0)
+  perfCounter.textContent = `layout: ${layoutUs}\u03BCs`
+
+  // Render text
+  ctx.font = fontString
+  ctx.fillStyle = '#2C2C2C'
+  ctx.textBaseline = 'alphabetic'
+
+  for (const line of lines) {
+    const baseline = line.lineY + line.ascent
+    if (line.segments) {
+      for (const seg of line.segments) {
+        // Apply letter spacing by drawing character by character
+        if (Math.abs(s.letterSpacing) > 0.001) {
+          let cx = marginX + seg.x
+          for (let i = 0; i < seg.value.length; i++) {
+            ctx.fillText(seg.value[i], cx, baseline)
+            cx += ctx.measureText(seg.value[i]).width + (s.letterSpacing * s.fontSize)
+          }
+        } else {
+          ctx.fillText(seg.value, marginX + seg.x, baseline)
+        }
+      }
+    }
+  }
+}
+
+// --- Animation loop ---
+function lerp(a, b, t) { return a + (b - a) * t }
+
+function easeInOut(t) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+}
+
+let needsRender = true
+
+function animate(timestamp) {
+  let changed = false
+
+  if (animTarget) {
+    if (!animStart) {
+      animStart = timestamp
+      animStartState = { ...animState }
+    }
+    const elapsed = timestamp - animStart
+    const progress = Math.min(elapsed / animDuration, 1)
+    const t = easeInOut(progress)
+
+    animState.lineWidthCh = lerp(animStartState.lineWidthCh, animTarget.lineWidthCh, t)
+    animState.lineHeight = lerp(animStartState.lineHeight, animTarget.lineHeight, t)
+    animState.fontSize = lerp(animStartState.fontSize, animTarget.fontSize, t)
+    animState.letterSpacing = lerp(animStartState.letterSpacing, animTarget.letterSpacing, t)
+
+    updateSliderDisplays()
+    changed = true
+
+    if (progress >= 1) {
+      animTarget = null
+      animStart = null
+      animStartState = null
+      state = { ...animState }
+    }
+  }
+
+  if (changed || needsRender) {
+    render()
+    needsRender = false
+  }
+
+  requestAnimationFrame(animate)
+}
+
+function updateSliderDisplays() {
+  lineWidthVal.textContent = `${Math.round(animState.lineWidthCh)}ch`
+  lineHeightVal.textContent = animState.lineHeight.toFixed(2)
+  fontSizeVal.textContent = `${animState.fontSize.toFixed(1)}px`
+  letterSpacingVal.textContent = `${animState.letterSpacing.toFixed(2)}em`
+
+  // Update slider positions during animation
+  lineWidthSlider.value = animState.lineWidthCh
+  lineHeightSlider.value = animState.lineHeight * 100
+  fontSizeSlider.value = animState.fontSize
+  letterSpacingSlider.value = animState.letterSpacing * 1000
+}
+
+// --- Slider handlers ---
+function onSliderInput() {
+  // Cancel any animation
+  animTarget = null
+  animStart = null
+  animStartState = null
+
+  state.lineWidthCh = parseFloat(lineWidthSlider.value)
+  state.lineHeight = parseFloat(lineHeightSlider.value) / 100
+  state.fontSize = parseFloat(fontSizeSlider.value)
+  state.letterSpacing = parseFloat(letterSpacingSlider.value) / 1000
+
+  animState = { ...state }
+  updateSliderDisplays()
+  clearActivePreset()
+  needsRender = true
+}
+
+lineWidthSlider.addEventListener('input', onSliderInput)
+lineHeightSlider.addEventListener('input', onSliderInput)
+fontSizeSlider.addEventListener('input', onSliderInput)
+letterSpacingSlider.addEventListener('input', onSliderInput)
+
+// --- Presets ---
+function clearActivePreset() {
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'))
+}
+
+function applyPreset(name) {
+  const preset = PRESETS[name]
+  if (!preset) return
+
+  clearActivePreset()
+  document.querySelector(`[data-preset="${name}"]`)?.classList.add('active')
+
+  animTarget = { ...preset }
+  animStart = null
+  animDuration = 400
+}
+
+document.querySelectorAll('.preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => applyPreset(btn.dataset.preset))
+})
+
+// --- More controls toggle ---
+const moreToggle = document.getElementById('more-toggle')
+const extraControls = document.getElementById('extra-controls')
+let moreOpen = false
+
+moreToggle.addEventListener('click', () => {
+  moreOpen = !moreOpen
+  extraControls.classList.toggle('visible', moreOpen)
+  moreToggle.textContent = moreOpen ? '\u2212 Fewer controls' : '+ More controls'
+})
+
+// --- Custom text ---
+const customTextToggle = document.getElementById('custom-text-toggle')
+const customTextArea = document.getElementById('custom-text-area')
+const applyTextBtn = document.getElementById('apply-text-btn')
+let customTextOpen = false
+
+customTextToggle.addEventListener('click', () => {
+  customTextOpen = !customTextOpen
+  customTextArea.classList.toggle('visible', customTextOpen)
+  applyTextBtn.classList.toggle('visible', customTextOpen)
+  customTextToggle.textContent = customTextOpen ? '\u2212 Hide text input' : '+ Paste your own text'
+})
+
+applyTextBtn.addEventListener('click', () => {
+  const text = customTextArea.value.trim()
+  if (text) {
+    currentText = text
+    needsRender = true
+  }
+})
+
+// --- Why modal ---
+const whyOverlay = document.getElementById('why-overlay')
+document.getElementById('why-link').addEventListener('click', () => {
+  whyOverlay.classList.add('visible')
+})
+document.getElementById('why-close').addEventListener('click', () => {
+  whyOverlay.classList.remove('visible')
+})
+whyOverlay.addEventListener('click', (e) => {
+  if (e.target === whyOverlay) whyOverlay.classList.remove('visible')
+})
+
+// --- Resize handling ---
+window.addEventListener('resize', () => {
+  needsRender = true
+})
+
+// --- Auto-animate on load ---
+// After 2 seconds, sweep line width from too-wide (88) to comfortable (65) over 1.5s
+setTimeout(() => {
+  animTarget = { ...state, lineWidthCh: 65 }
+  animStart = null
+  animDuration = 1500
+}, 2000)
+
+// --- Start ---
+updateSliderDisplays()
+requestAnimationFrame(animate)
+</script>
+</body>
+</html>

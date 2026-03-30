@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Shape Flow Editor</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,400&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;1,7..72,400&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #FAF9F6;
+    color: #2C2C2C;
+    font-family: 'Literata', Georgia, serif;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Paper grain overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.03;
+    background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  header {
+    padding: 14px 28px 10px;
+    display: flex;
+    align-items: baseline;
+    gap: 20px;
+    border-bottom: 1px solid #E8E5DF;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 20;
+  }
+
+  header h1 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 300;
+    font-size: 20px;
+    color: #2C2C2C;
+    letter-spacing: 0.04em;
+    font-variation-settings: 'WONK' 1, 'SOFT' 100;
+  }
+
+  header .subtitle {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: #5C5C5C;
+    letter-spacing: 0.06em;
+  }
+
+  .main-area {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    min-height: 0;
+    position: relative;
+  }
+
+  #canvas-wrap {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+
+  canvas {
+    display: block;
+    cursor: default;
+  }
+
+  /* Preset shape buttons */
+  .shape-bar {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 8px;
+    z-index: 15;
+  }
+
+  .shape-btn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 6px 14px;
+    border: 1px solid #E8E5DF;
+    border-radius: 4px;
+    background: rgba(250, 249, 246, 0.9);
+    color: #5C5C5C;
+    cursor: pointer;
+    transition: all 0.2s;
+    backdrop-filter: blur(8px);
+  }
+
+  .shape-btn:hover {
+    border-color: #C2714F;
+    color: #C2714F;
+  }
+
+  .shape-btn.active {
+    background: #C2714F;
+    color: #FAF9F6;
+    border-color: #C2714F;
+  }
+
+  /* Label */
+  .tagline {
+    position: absolute;
+    bottom: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #6B3A2A;
+    opacity: 0.5;
+    white-space: nowrap;
+    z-index: 15;
+  }
+
+  /* Side panels */
+  .side-panel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 340px;
+    height: 100%;
+    background: rgba(250, 249, 246, 0.95);
+    backdrop-filter: blur(12px);
+    border-left: 1px solid #E8E5DF;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+  }
+
+  .side-panel.open {
+    transform: translateX(0);
+  }
+
+  .panel-header {
+    padding: 14px 18px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #E8E5DF;
+    flex-shrink: 0;
+  }
+
+  .panel-header .label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #6B3A2A;
+  }
+
+  .panel-close {
+    background: none;
+    border: none;
+    font-size: 16px;
+    color: #5C5C5C;
+    cursor: pointer;
+    padding: 2px 6px;
+    line-height: 1;
+  }
+
+  .panel-close:hover {
+    color: #C2714F;
+  }
+
+  .panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 18px;
+    min-height: 0;
+  }
+
+  /* Code panel */
+  .code-block {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    line-height: 1.8;
+    color: #5C5C5C;
+  }
+
+  .code-block .line {
+    padding: 1px 6px;
+    border-radius: 2px;
+    transition: background 0.15s, color 0.15s;
+    white-space: pre;
+  }
+
+  .code-block .line.active {
+    background: rgba(194, 113, 79, 0.1);
+    color: #C2714F;
+  }
+
+  .code-block .comment {
+    color: #8B9E7E;
+  }
+
+  .code-block .keyword {
+    color: #C2714F;
+  }
+
+  .code-block .string {
+    color: #C49A3C;
+  }
+
+  .code-block .fn {
+    color: #6B3A2A;
+  }
+
+  /* Text panel textarea */
+  #text-input {
+    width: 100%;
+    height: 100%;
+    min-height: 200px;
+    resize: none;
+    border: none;
+    background: transparent;
+    font-family: 'Literata', Georgia, serif;
+    font-size: 13px;
+    line-height: 1.7;
+    color: #2C2C2C;
+    outline: none;
+  }
+
+  /* Toggle buttons in header */
+  .header-btns {
+    margin-left: auto;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .header-btn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    padding: 4px 10px;
+    border: 1px solid #E8E5DF;
+    border-radius: 3px;
+    background: transparent;
+    color: #5C5C5C;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .header-btn:hover {
+    border-color: #C2714F;
+    color: #C2714F;
+  }
+
+  .header-btn.active {
+    background: rgba(194, 113, 79, 0.08);
+    border-color: #C2714F;
+    color: #C2714F;
+  }
+
+  .info-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 1px solid #E8E5DF;
+    background: transparent;
+    color: #6B3A2A;
+    font-family: 'Literata', Georgia, serif;
+    font-size: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+  }
+
+  .info-btn:hover {
+    border-color: #C2714F;
+    color: #C2714F;
+  }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(107, 58, 42, 0.15);
+    backdrop-filter: blur(4px);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s;
+  }
+
+  .modal-overlay.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .modal {
+    background: #FAF9F6;
+    border-radius: 8px;
+    box-shadow: 0 24px 80px rgba(107, 58, 42, 0.12), 0 4px 16px rgba(107, 58, 42, 0.06);
+    max-width: 520px;
+    width: 90%;
+    padding: 36px 32px 32px;
+    position: relative;
+    transform: translateY(8px);
+    transition: transform 0.25s;
+  }
+
+  .modal-overlay.open .modal {
+    transform: translateY(0);
+  }
+
+  .modal h2 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 400;
+    font-size: 22px;
+    color: #2C2C2C;
+    margin-bottom: 16px;
+    font-variation-settings: 'WONK' 1, 'SOFT' 100;
+  }
+
+  .modal p {
+    font-family: 'Literata', Georgia, serif;
+    font-size: 14px;
+    line-height: 1.8;
+    color: #5C5C5C;
+  }
+
+  .modal-close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    background: none;
+    border: 1px solid #E8E5DF;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    color: #C2714F;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+  }
+
+  .modal-close:hover {
+    background: rgba(194, 113, 79, 0.08);
+    border-color: #C2714F;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>The Shape Flow Editor</h1>
+  <span class="subtitle">pretext demo 21</span>
+  <div class="header-btns">
+    <button class="header-btn" id="toggle-code">code</button>
+    <button class="header-btn" id="toggle-text">text</button>
+    <button class="info-btn" id="open-info" title="Why we built this">i</button>
+  </div>
+</header>
+
+<div class="main-area">
+  <div id="canvas-wrap">
+    <canvas id="canvas"></canvas>
+  </div>
+
+  <div class="tagline">No CSS Shapes. No floats. Pure JS reflow at 60fps.</div>
+
+  <div class="shape-bar">
+    <button class="shape-btn active" data-shape="blob">blob</button>
+    <button class="shape-btn" data-shape="wave">wave</button>
+    <button class="shape-btn" data-shape="diamond">diamond</button>
+    <button class="shape-btn" data-shape="spiral">spiral</button>
+  </div>
+
+  <!-- Code panel -->
+  <div class="side-panel" id="code-panel">
+    <div class="panel-header">
+      <span class="label">Pretext Code</span>
+      <button class="panel-close" id="close-code">&times;</button>
+    </div>
+    <div class="panel-body">
+      <div class="code-block" id="code-display"></div>
+    </div>
+  </div>
+
+  <!-- Text panel -->
+  <div class="side-panel" id="text-panel">
+    <div class="panel-header">
+      <span class="label">Edit Text</span>
+      <button class="panel-close" id="close-text">&times;</button>
+    </div>
+    <div class="panel-body">
+      <textarea id="text-input"></textarea>
+    </div>
+  </div>
+</div>
+
+<!-- Info modal -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <button class="modal-close" id="close-modal">&times;</button>
+    <h2>Why We Built This</h2>
+    <p>CSS promised us text that flows around any shape. That was 2013. We're still waiting. Pretext doesn't wait for specs — it reflows text around arbitrary contours at 60fps, in pure JS, no DOM. Draw a shape, drag its edges, and watch text pour into it like water finding its level. Twelve lines of code. We built this because magazine-style layouts on the web shouldn't require a magazine's budget.</p>
+  </div>
+</div>
+
+<script type="module">
+import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
+
+// --- Brand tokens ---
+const CREAM = '#FAF9F6'
+const TEXT_COLOR = '#2C2C2C'
+const TERRACOTTA = '#C2714F'
+const FOG = '#E8E5DF'
+const BARK = '#6B3A2A'
+const DUSK = '#5C5C5C'
+const SAGE = '#8B9E7E'
+const OCHRE = '#C49A3C'
+
+const FONT_SIZE = 16
+const FONT = `${FONT_SIZE}px Literata, Georgia, serif`
+const LINE_HEIGHT = FONT_SIZE * 1.55
+
+const DEFAULT_TEXT = `Water finds its way. It does not force a path through stone but follows the grain of the earth, pooling in hollows, threading through fractures, always moving toward the lowest point with a patience that reshapes continents. A river does not argue with the mountain. It goes around, or it goes through, but it never stops. Given enough time, water will carve a canyon. Given enough patience, it will dissolve the hardest rock into sand. The ocean remembers every river that feeds it. Each tributary carries its own story — minerals from distant peaks, sediment from ancient forests, warmth from sunlit meadows. They merge without losing themselves, the way conversations layer into understanding. Rain falls where it will. It does not choose the fertile valley over the barren ridge. It arrives everywhere with the same quiet insistence, and the earth decides what to do with it. Some soaks in. Some runs off. Some freezes and waits. But none of it is wasted. Even the water that evaporates is just beginning another journey, rising to become clouds, drifting over new terrain, falling again somewhere unexpected. The cycle has no beginning and no end. It is not a circle but a spiral — each pass slightly different, each iteration carrying forward what came before. This is how meaning moves through language, how ideas find their shape. Not forced, not rushed. Flowing.`
+
+// --- Canvas setup ---
+const canvas = document.getElementById('canvas')
+const ctx = canvas.getContext('2d')
+const wrap = document.getElementById('canvas-wrap')
+let W, H, dpr
+
+function resize() {
+  dpr = window.devicePixelRatio || 1
+  W = wrap.clientWidth
+  H = wrap.clientHeight
+  canvas.width = W * dpr
+  canvas.height = H * dpr
+  canvas.style.width = W + 'px'
+  canvas.style.height = H + 'px'
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+}
+resize()
+window.addEventListener('resize', () => { resize(); rebuildShape() })
+
+// --- Shape system ---
+let controlPoints = []
+let activeShape = 'blob'
+let draggingPoint = -1
+let hoverPoint = -1
+
+const POINT_RADIUS = 8
+const POINT_HIT_RADIUS = 16
+
+function makeBlob(cx, cy, rx, ry) {
+  // Asymmetric kidney shape, 6 points
+  return [
+    { x: cx - rx * 0.3, y: cy - ry * 0.95 },
+    { x: cx + rx * 0.7, y: cy - ry * 0.6 },
+    { x: cx + rx * 0.95, y: cy + ry * 0.1 },
+    { x: cx + rx * 0.5, y: cy + ry * 0.85 },
+    { x: cx - rx * 0.4, y: cy + ry * 0.9 },
+    { x: cx - rx * 0.9, y: cy + ry * 0.05 },
+  ]
+}
+
+function makeWave(cx, cy, rx, ry) {
+  return [
+    { x: cx - rx * 0.9, y: cy - ry * 0.6 },
+    { x: cx - rx * 0.3, y: cy - ry * 0.9 },
+    { x: cx + rx * 0.4, y: cy - ry * 0.5 },
+    { x: cx + rx * 0.9, y: cy - ry * 0.8 },
+    { x: cx + rx * 0.9, y: cy + ry * 0.7 },
+    { x: cx + rx * 0.2, y: cy + ry * 0.9 },
+    { x: cx - rx * 0.5, y: cy + ry * 0.5 },
+    { x: cx - rx * 0.9, y: cy + ry * 0.8 },
+  ]
+}
+
+function makeDiamond(cx, cy, rx, ry) {
+  return [
+    { x: cx, y: cy - ry },
+    { x: cx + rx * 0.85, y: cy - ry * 0.15 },
+    { x: cx + rx * 0.6, y: cy + ry * 0.4 },
+    { x: cx, y: cy + ry },
+    { x: cx - rx * 0.6, y: cy + ry * 0.4 },
+    { x: cx - rx * 0.85, y: cy - ry * 0.15 },
+  ]
+}
+
+function makeSpiral(cx, cy, rx, ry) {
+  const pts = []
+  const turns = 1.3
+  const n = 10
+  for (let i = 0; i < n; i++) {
+    const t = i / (n - 1)
+    const angle = t * turns * Math.PI * 2 - Math.PI / 2
+    const r = 0.3 + t * 0.7
+    pts.push({
+      x: cx + Math.cos(angle) * rx * r,
+      y: cy + Math.sin(angle) * ry * r,
+    })
+  }
+  return pts
+}
+
+function rebuildShape() {
+  const cx = W / 2, cy = H / 2
+  const rx = Math.min(W * 0.35, 280)
+  const ry = Math.min(H * 0.38, 260)
+  switch (activeShape) {
+    case 'blob': controlPoints = makeBlob(cx, cy, rx, ry); break
+    case 'wave': controlPoints = makeWave(cx, cy, rx, ry); break
+    case 'diamond': controlPoints = makeDiamond(cx, cy, rx, ry); break
+    case 'spiral': controlPoints = makeSpiral(cx, cy, rx, ry); break
+  }
+}
+rebuildShape()
+
+// --- Smooth closed curve through points ---
+function getSplinePath(pts) {
+  if (pts.length < 3) return null
+  const n = pts.length
+  const path = new Path2D()
+
+  // Catmull-Rom to cubic bezier, closed
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[(i - 1 + n) % n]
+    const p1 = pts[i]
+    const p2 = pts[(i + 1) % n]
+    const p3 = pts[(i + 2) % n]
+
+    const cp1x = p1.x + (p2.x - p0.x) / 6
+    const cp1y = p1.y + (p2.y - p0.y) / 6
+    const cp2x = p2.x - (p3.x - p1.x) / 6
+    const cp2y = p2.y - (p3.y - p1.y) / 6
+
+    if (i === 0) path.moveTo(p1.x, p1.y)
+    path.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y)
+  }
+  path.closePath()
+  return path
+}
+
+// --- Scanline: get horizontal span at y ---
+function getShapeSpanAtY(y, pts, samples) {
+  // Sample the spline path boundary at many points, find x range at this y
+  // Use the samples array (pre-computed boundary points)
+  const tolerance = LINE_HEIGHT * 0.6
+  let minX = Infinity, maxX = -Infinity
+  let found = false
+  for (const s of samples) {
+    if (Math.abs(s.y - y) < tolerance) {
+      if (s.x < minX) minX = s.x
+      if (s.x > maxX) maxX = s.x
+      found = true
+    }
+  }
+  if (!found) return null
+  // Add small padding
+  const pad = 12
+  return { left: minX + pad, right: maxX - pad }
+}
+
+function sampleSplineBoundary(pts, count) {
+  const n = pts.length
+  const samples = []
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[(i - 1 + n) % n]
+    const p1 = pts[i]
+    const p2 = pts[(i + 1) % n]
+    const p3 = pts[(i + 2) % n]
+
+    const cp1x = p1.x + (p2.x - p0.x) / 6
+    const cp1y = p1.y + (p2.y - p0.y) / 6
+    const cp2x = p2.x - (p3.x - p1.x) / 6
+    const cp2y = p2.y - (p3.y - p1.y) / 6
+
+    const steps = Math.ceil(count / n)
+    for (let s = 0; s <= steps; s++) {
+      const t = s / steps
+      const t2 = t * t, t3 = t2 * t
+      const u = 1 - t, u2 = u * u, u3 = u2 * u
+      const x = u3 * p1.x + 3 * u2 * t * cp1x + 3 * u * t2 * cp2x + t3 * p2.x
+      const y = u3 * p1.y + 3 * u2 * t * cp1y + 3 * u * t2 * cp2y + t3 * p2.y
+      samples.push({ x, y })
+    }
+  }
+  return samples
+}
+
+// --- Get bounding box of shape ---
+function getShapeBounds(samples) {
+  let minY = Infinity, maxY = -Infinity
+  for (const s of samples) {
+    if (s.y < minY) minY = s.y
+    if (s.y > maxY) maxY = s.y
+  }
+  return { minY, maxY }
+}
+
+// --- Text state ---
+let userText = DEFAULT_TEXT
+const textInput = document.getElementById('text-input')
+textInput.value = userText
+textInput.addEventListener('input', () => { userText = textInput.value })
+
+// --- Code display ---
+const codeLines = [
+  { text: '// prepare text for layout', cls: 'comment' },
+  { text: 'const prepared = prepareWithSegments(text, font)', cls: '' },
+  { text: 'let cursor = { segmentIndex: 0, graphemeIndex: 0 }', cls: '' },
+  { text: '', cls: '' },
+  { text: '// flow text into shape, line by line', cls: 'comment' },
+  { text: 'let y = shapeBounds.minY', cls: '' },
+  { text: 'while (y < shapeBounds.maxY) {', cls: '' },
+  { text: '  const span = getShapeSpanAtY(y)', cls: '' },
+  { text: '  if (!span) { y += lineHeight; continue }', cls: '' },
+  { text: '  const width = span.right - span.left', cls: '' },
+  { text: '  const line = layoutNextLine(prepared, cursor, width)', cls: '' },
+  { text: '  if (!line) break', cls: '' },
+  { text: '  drawLine(line, span.left, y)', cls: '' },
+  { text: '  cursor = line.end', cls: '' },
+  { text: '  y += lineHeight', cls: '' },
+  { text: '}', cls: '' },
+]
+
+const codeDisplay = document.getElementById('code-display')
+codeLines.forEach((cl, i) => {
+  const div = document.createElement('div')
+  div.className = 'line'
+  div.dataset.idx = i
+  if (cl.cls === 'comment') {
+    div.innerHTML = `<span class="comment">${cl.text}</span>`
+  } else {
+    // Simple syntax highlighting
+    let html = cl.text
+      .replace(/\b(const|let|while|if|break|continue)\b/g, '<span class="keyword">$1</span>')
+      .replace(/\b(prepareWithSegments|layoutNextLine|getShapeSpanAtY|drawLine)\b/g, '<span class="fn">$1</span>')
+      .replace(/(\/\/.*)/g, '<span class="comment">$1</span>')
+    div.innerHTML = html || '&nbsp;'
+  }
+  codeDisplay.appendChild(div)
+})
+
+let activeCodeLine = -1
+function highlightCodeLine(idx) {
+  if (idx === activeCodeLine) return
+  activeCodeLine = idx
+  const lines = codeDisplay.querySelectorAll('.line')
+  lines.forEach((l, i) => l.classList.toggle('active', i === idx))
+}
+
+// --- Panel toggles ---
+const codePanel = document.getElementById('code-panel')
+const textPanel = document.getElementById('text-panel')
+const toggleCode = document.getElementById('toggle-code')
+const toggleText = document.getElementById('toggle-text')
+
+toggleCode.addEventListener('click', () => {
+  const opening = !codePanel.classList.contains('open')
+  codePanel.classList.toggle('open')
+  textPanel.classList.remove('open')
+  toggleCode.classList.toggle('active', opening)
+  toggleText.classList.remove('active')
+})
+
+toggleText.addEventListener('click', () => {
+  const opening = !textPanel.classList.contains('open')
+  textPanel.classList.toggle('open')
+  codePanel.classList.remove('open')
+  toggleText.classList.toggle('active', opening)
+  toggleCode.classList.remove('active')
+})
+
+document.getElementById('close-code').addEventListener('click', () => {
+  codePanel.classList.remove('open')
+  toggleCode.classList.remove('active')
+})
+
+document.getElementById('close-text').addEventListener('click', () => {
+  textPanel.classList.remove('open')
+  toggleText.classList.remove('active')
+})
+
+// --- Modal ---
+const modalOverlay = document.getElementById('modal-overlay')
+document.getElementById('open-info').addEventListener('click', () => modalOverlay.classList.add('open'))
+document.getElementById('close-modal').addEventListener('click', () => modalOverlay.classList.remove('open'))
+modalOverlay.addEventListener('click', (e) => {
+  if (e.target === modalOverlay) modalOverlay.classList.remove('open')
+})
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') modalOverlay.classList.remove('open')
+})
+
+// --- Shape buttons ---
+document.querySelectorAll('.shape-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.shape-btn').forEach(b => b.classList.remove('active'))
+    btn.classList.add('active')
+    activeShape = btn.dataset.shape
+    rebuildShape()
+  })
+})
+
+// --- Drag handling ---
+function getMousePos(e) {
+  const rect = canvas.getBoundingClientRect()
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top }
+}
+
+function findNearestPoint(pos) {
+  let best = -1, bestDist = POINT_HIT_RADIUS * POINT_HIT_RADIUS
+  for (let i = 0; i < controlPoints.length; i++) {
+    const dx = pos.x - controlPoints[i].x
+    const dy = pos.y - controlPoints[i].y
+    const d2 = dx * dx + dy * dy
+    if (d2 < bestDist) { bestDist = d2; best = i }
+  }
+  return best
+}
+
+canvas.addEventListener('mousedown', (e) => {
+  const pos = getMousePos(e)
+  draggingPoint = findNearestPoint(pos)
+  if (draggingPoint >= 0) canvas.style.cursor = 'grabbing'
+})
+
+canvas.addEventListener('mousemove', (e) => {
+  const pos = getMousePos(e)
+  if (draggingPoint >= 0) {
+    controlPoints[draggingPoint].x = pos.x
+    controlPoints[draggingPoint].y = pos.y
+  } else {
+    const hp = findNearestPoint(pos)
+    hoverPoint = hp
+    canvas.style.cursor = hp >= 0 ? 'grab' : 'default'
+  }
+})
+
+canvas.addEventListener('mouseup', () => {
+  draggingPoint = -1
+  canvas.style.cursor = hoverPoint >= 0 ? 'grab' : 'default'
+})
+
+canvas.addEventListener('mouseleave', () => {
+  if (draggingPoint < 0) {
+    hoverPoint = -1
+    canvas.style.cursor = 'default'
+  }
+})
+
+// Touch support
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault()
+  const touch = e.touches[0]
+  const pos = getMousePos(touch)
+  draggingPoint = findNearestPoint(pos)
+}, { passive: false })
+
+canvas.addEventListener('touchmove', (e) => {
+  e.preventDefault()
+  if (draggingPoint >= 0) {
+    const touch = e.touches[0]
+    const pos = getMousePos(touch)
+    controlPoints[draggingPoint].x = pos.x
+    controlPoints[draggingPoint].y = pos.y
+  }
+}, { passive: false })
+
+canvas.addEventListener('touchend', () => { draggingPoint = -1 })
+
+// --- Render loop ---
+let lastPreparedText = ''
+let prepared = null
+let frameCount = 0
+
+function render() {
+  requestAnimationFrame(render)
+  frameCount++
+
+  ctx.clearRect(0, 0, W, H)
+
+  // Background
+  ctx.fillStyle = CREAM
+  ctx.fillRect(0, 0, W, H)
+
+  const path = getSplinePath(controlPoints)
+  if (!path) return
+
+  // Draw shape fill — very subtle
+  ctx.save()
+  ctx.fillStyle = 'rgba(194, 113, 79, 0.03)'
+  ctx.fill(path)
+  ctx.restore()
+
+  // Draw shape stroke
+  ctx.save()
+  ctx.strokeStyle = FOG
+  ctx.lineWidth = 1.5
+  ctx.setLineDash([4, 4])
+  ctx.lineDashOffset = -frameCount * 0.3
+  ctx.stroke(path)
+  ctx.restore()
+
+  // Prepare text
+  if (userText !== lastPreparedText) {
+    prepared = prepareWithSegments(userText, FONT)
+    lastPreparedText = userText
+  }
+  if (!prepared) return
+
+  // Sample boundary
+  const samples = sampleSplineBoundary(controlPoints, 400)
+  const bounds = getShapeBounds(samples)
+
+  // Flow text into shape
+  highlightCodeLine(1) // "preparing"
+  let cursor = { segmentIndex: 0, graphemeIndex: 0 }
+  let y = bounds.minY + FONT_SIZE + 4
+  let linesDrawn = 0
+  let safety = 0
+  let currentCodeLine = 6
+
+  ctx.save()
+  ctx.font = FONT
+  ctx.fillStyle = TEXT_COLOR
+  ctx.textBaseline = 'alphabetic'
+
+  while (y < bounds.maxY - 4 && safety++ < 200) {
+    const span = getShapeSpanAtY(y, controlPoints, samples)
+    currentCodeLine = 7
+    if (!span || span.right - span.left < 30) {
+      y += LINE_HEIGHT
+      currentCodeLine = 8
+      continue
+    }
+
+    const width = span.right - span.left
+    currentCodeLine = 10
+
+    const line = layoutNextLine(prepared, cursor, width)
+    currentCodeLine = 11
+    if (!line) { currentCodeLine = 11; break }
+
+    // Center the line within the span
+    const lineX = span.left
+    ctx.fillText(line.text, lineX, y)
+
+    cursor = line.end
+    y += LINE_HEIGHT
+    linesDrawn++
+    currentCodeLine = 14
+  }
+
+  ctx.restore()
+
+  // Update code highlighting based on activity
+  if (draggingPoint >= 0) {
+    // While dragging, cycle through code lines to show activity
+    highlightCodeLine(6 + (Math.floor(frameCount / 4) % 10))
+  } else if (linesDrawn > 0) {
+    highlightCodeLine(10) // layoutNextLine
+  }
+
+  // Draw control points
+  for (let i = 0; i < controlPoints.length; i++) {
+    const p = controlPoints[i]
+    const isActive = i === draggingPoint
+    const isHover = i === hoverPoint
+
+    ctx.beginPath()
+    ctx.arc(p.x, p.y, isActive ? POINT_RADIUS + 2 : (isHover ? POINT_RADIUS + 1 : POINT_RADIUS), 0, Math.PI * 2)
+
+    if (isActive) {
+      ctx.fillStyle = TERRACOTTA
+      ctx.shadowColor = 'rgba(194, 113, 79, 0.3)'
+      ctx.shadowBlur = 12
+    } else if (isHover) {
+      ctx.fillStyle = TERRACOTTA
+      ctx.shadowColor = 'rgba(194, 113, 79, 0.15)'
+      ctx.shadowBlur = 8
+    } else {
+      ctx.fillStyle = '#FAF9F6'
+      ctx.strokeStyle = TERRACOTTA
+      ctx.lineWidth = 1.5
+      ctx.shadowColor = 'rgba(107, 58, 42, 0.08)'
+      ctx.shadowBlur = 4
+    }
+    ctx.fill()
+    if (!isActive && !isHover) ctx.stroke()
+
+    ctx.shadowColor = 'transparent'
+    ctx.shadowBlur = 0
+
+    // Point index label
+    ctx.font = '9px JetBrains Mono, monospace'
+    ctx.fillStyle = isActive || isHover ? '#FAF9F6' : BARK
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(i + 1, p.x, p.y)
+    ctx.textAlign = 'start'
+    ctx.textBaseline = 'alphabetic'
+  }
+}
+
+requestAnimationFrame(render)
+</script>
+</body>
+</html>

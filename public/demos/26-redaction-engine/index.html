@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Redaction Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,400&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;1,7..72,400&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%; min-height: 100vh;
+    background: #FAF9F6;
+    color: #2C2C2C;
+    font-family: 'Literata', Georgia, serif;
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Paper grain overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.03;
+    background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 200px 200px;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    padding: 2.5rem 1.5rem 1rem;
+    border-bottom: 1px solid #E8E5DF;
+  }
+  .header h1 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 300;
+    font-size: 1.75rem;
+    font-variation-settings: 'WONK' 1, 'SOFT' 100;
+    color: #2C2C2C;
+    margin-bottom: 0.25rem;
+  }
+  .header p {
+    color: #5C5C5C;
+    font-size: 0.85rem;
+    max-width: 52ch;
+    margin: 0 auto;
+  }
+
+  /* Info button */
+  .info-btn {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 100;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    border: 1px solid #E8E5DF;
+    background: #fff;
+    color: #6B3A2A;
+    font-family: 'Literata', Georgia, serif;
+    font-size: 0.9rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+  }
+  .info-btn:hover {
+    border-color: #C2714F;
+    color: #C2714F;
+  }
+
+  /* Classification control bar */
+  .classification-bar {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: rgba(250, 249, 246, 0.95);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid #E8E5DF;
+    padding: 1rem 1.5rem;
+  }
+  .classification-inner {
+    max-width: 700px;
+    margin: 0 auto;
+  }
+  .classification-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #5C5C5C;
+    margin-bottom: 0.6rem;
+  }
+  .slider-container {
+    position: relative;
+    padding: 0 0 1.6rem;
+  }
+  .slider-track {
+    position: relative;
+    height: 4px;
+    background: #E8E5DF;
+    border-radius: 2px;
+    margin: 0.5rem 0;
+  }
+  .slider-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background: #C2714F;
+    border-radius: 2px;
+    transition: width 0.2s ease;
+  }
+  .slider-input {
+    position: absolute;
+    top: -6px;
+    left: 0;
+    width: 100%;
+    height: 16px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    cursor: pointer;
+    margin: 0;
+  }
+  .slider-input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #C2714F;
+    border: 3px solid #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    cursor: pointer;
+  }
+  .slider-input::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #C2714F;
+    border: 3px solid #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    cursor: pointer;
+  }
+  .slider-stops {
+    display: flex;
+    justify-content: space-between;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+  }
+  .slider-stop {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #8C8C8C;
+    cursor: pointer;
+    transition: color 0.15s;
+    position: relative;
+    text-align: center;
+  }
+  .slider-stop::before {
+    content: '';
+    display: block;
+    width: 2px;
+    height: 8px;
+    background: #D0CEC9;
+    margin: 0 auto 0.3rem;
+    border-radius: 1px;
+    transition: background 0.15s;
+  }
+  .slider-stop.active {
+    color: #C2714F;
+  }
+  .slider-stop.active::before {
+    background: #C2714F;
+  }
+
+  /* Document area */
+  .document-area {
+    max-width: 780px;
+    margin: 2rem auto;
+    padding: 0 1.5rem 4rem;
+  }
+  .document-card {
+    background: #FFFFFF;
+    border: 1px solid #E8E5DF;
+    border-radius: 4px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
+    padding: 3rem;
+    position: relative;
+  }
+  /* Cleaner paper texture on card */
+  .document-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: 4px;
+    opacity: 0.018;
+    background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.2' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 180px 180px;
+  }
+
+  /* Classification stamp on document */
+  .classification-stamp {
+    position: absolute;
+    top: 1.5rem;
+    right: 2rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #C2714F;
+    border: 2px solid #C2714F;
+    padding: 0.2rem 0.6rem;
+    border-radius: 2px;
+    transform: rotate(2deg);
+    opacity: 0.85;
+  }
+
+  /* Canvas */
+  .document-canvas {
+    display: block;
+    width: 100%;
+  }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(44, 44, 44, 0.4);
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  .modal-overlay.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .modal {
+    background: #fff;
+    border: 1px solid #E8E5DF;
+    border-radius: 8px;
+    max-width: 520px;
+    width: 90%;
+    padding: 2rem;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+    position: relative;
+  }
+  .modal h2 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 400;
+    font-size: 1.2rem;
+    font-variation-settings: 'WONK' 1, 'SOFT' 100;
+    margin-bottom: 1rem;
+    color: #6B3A2A;
+  }
+  .modal p {
+    font-size: 0.9rem;
+    line-height: 1.7;
+    color: #3C3C3C;
+    margin-bottom: 0.8rem;
+  }
+  .modal-close {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    border: none;
+    background: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: #8C8C8C;
+    line-height: 1;
+  }
+  .modal-close:hover { color: #2C2C2C; }
+
+  @media (max-width: 640px) {
+    .document-card { padding: 1.5rem; }
+    .classification-stamp { top: 1rem; right: 1rem; font-size: 0.6rem; }
+    .header h1 { font-size: 1.35rem; }
+  }
+</style>
+</head>
+<body>
+
+<button class="info-btn" id="infoBtn" aria-label="About this demo">i</button>
+
+<div class="header">
+  <h1>The Redaction Engine</h1>
+  <p>A living document at every classification level. Slide to declassify.</p>
+</div>
+
+<div class="classification-bar">
+  <div class="classification-inner">
+    <div class="classification-label">Classification Level</div>
+    <div class="slider-container">
+      <div class="slider-track">
+        <div class="slider-fill" id="sliderFill"></div>
+      </div>
+      <input type="range" class="slider-input" id="levelSlider" min="0" max="3" step="1" value="0">
+      <div class="slider-stops">
+        <span class="slider-stop active" data-level="0">Public</span>
+        <span class="slider-stop" data-level="1">Internal</span>
+        <span class="slider-stop" data-level="2">Confidential</span>
+        <span class="slider-stop" data-level="3">Top Secret</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="document-area">
+  <div class="document-card">
+    <div class="classification-stamp" id="classStamp">PUBLIC</div>
+    <canvas class="document-canvas" id="docCanvas"></canvas>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <button class="modal-close" id="modalClose" aria-label="Close">&times;</button>
+    <h2>Why We Built This</h2>
+    <p>Redaction tools produce dead documents. Static PDFs with black bars pasted over text, broken layouts, ugly gaps where information used to be.</p>
+    <p>We wanted a document that stays alive at every classification level &mdash; reflowing in real time, always looking typeset, always readable. Pretext makes that possible at 60fps in a browser, with no DOM.</p>
+    <p>Every word you see on this page is rendered character-by-character onto a canvas. When redacted content reveals, the paragraph line-wrapping visibly changes. The layout engine recomputes the entire document on every frame.</p>
+  </div>
+</div>
+
+<script type="module">
+import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
+
+// --- Classification levels ---
+const LEVELS = ['PUBLIC', 'INTERNAL', 'CONFIDENTIAL', 'TOP SECRET']
+
+// --- Font config ---
+const HEADER_FONT_SIZE = 13
+const BODY_FONT_SIZE = 13.5
+const SMALL_FONT_SIZE = 11.5
+const HEADER_FONT = `700 ${HEADER_FONT_SIZE}px 'JetBrains Mono', monospace`
+const BODY_FONT = `${BODY_FONT_SIZE}px 'Literata', Georgia, serif`
+const BODY_FONT_BOLD = `500 ${BODY_FONT_SIZE}px 'Literata', Georgia, serif`
+const SMALL_FONT = `${SMALL_FONT_SIZE}px 'JetBrains Mono', monospace`
+const LABEL_FONT = `500 ${SMALL_FONT_SIZE}px 'JetBrains Mono', monospace`
+
+const TEXT_COLOR = '#2C2C2C'
+const HEADER_COLOR = '#6B3A2A'
+const MUTED_COLOR = '#7C7C7C'
+const REDACT_COLOR = '#2C2C2C'
+const DIVIDER_COLOR = '#E8E5DF'
+
+// --- Redaction marker ---
+const REDACT = '\u2588' // block character placeholder for measurement
+
+// --- Document builder: returns structured blocks ---
+function buildDocument(level) {
+  // level: 0=public, 1=internal, 2=confidential, 3=top secret
+  const blocks = []
+
+  function r(publicText, revealText, minLevel) {
+    // Returns revealed text if level >= minLevel, else redaction marker
+    return level >= minLevel ? revealText : publicText
+  }
+
+  function redact(text, minLevel) {
+    // Replace text with a redaction marker of proportional length at lower levels
+    if (level >= minLevel) return text
+    // Use block chars proportional to text length
+    const barLen = Math.max(2, Math.ceil(text.length * 0.7))
+    return '\u2588'.repeat(barLen)
+  }
+
+  // Agency header
+  blocks.push({ type: 'header-agency', text: 'CALIFORNIA DEPARTMENT OF WATER RESOURCES' })
+  blocks.push({ type: 'header-sub', text: 'OFFICE OF INFRASTRUCTURE PLANNING' })
+  blocks.push({ type: 'divider' })
+  blocks.push({ type: 'header-memo', text: 'MEMORANDUM \u2014 PROJECT SOLANO' })
+  blocks.push({ type: 'spacer', height: 8 })
+
+  // Metadata fields
+  blocks.push({ type: 'meta', label: 'CLASSIFICATION:', value: LEVELS[level] })
+  blocks.push({ type: 'meta', label: 'DATE:', value: 'March 15, 2026' })
+  blocks.push({ type: 'meta', label: 'FROM:', value: level >= 1 ? 'Dr. Elena Vasquez, Director of Infrastructure Planning' : redact('Dr. Elena Vasquez, Director of Infrastructure Planning', 1) })
+  blocks.push({ type: 'meta', label: 'TO:', value: level >= 1 ? 'Central Valley Regional Board, Attn: Commissioner Liu' : redact('Central Valley Regional Board, Attn: Commissioner Liu', 1) })
+  blocks.push({ type: 'meta', label: 'RE:', value: 'Environmental Impact Assessment \u2014 North Fork Diversion Channel' })
+
+  blocks.push({ type: 'divider' })
+  blocks.push({ type: 'spacer', height: 6 })
+
+  // 1. Executive Summary
+  blocks.push({ type: 'section-header', text: '1. EXECUTIVE SUMMARY' })
+  blocks.push({ type: 'spacer', height: 4 })
+
+  if (level === 0) {
+    blocks.push({ type: 'body', text: `The proposed North Fork diversion channel will redirect approximately ${redact('2.4 million', 1)} acre-feet annually from the ${redact('Sacramento River tributary system', 1)} to the Central Valley aquifer recharge basins. Initial environmental review indicates ${redact('moderate-to-significant impact on downstream riparian ecosystems, with particular concern for winter-run Chinook salmon spawning habitat and associated wetland systems', 2)}.` })
+    blocks.push({ type: 'spacer', height: 6 })
+    blocks.push({ type: 'body', text: `This project was authorized under Executive Order ${redact('WR-2025-0147', 1)} and is managed jointly by the Department of Water Resources and ${redact('the Bureau of Reclamation under a federal-state compact agreement signed in November 2025', 2)}.` })
+  } else if (level === 1) {
+    blocks.push({ type: 'body', text: `The proposed North Fork diversion channel will redirect approximately 2.4 million acre-feet annually from the Sacramento River tributary system to the Central Valley aquifer recharge basins. Initial environmental review indicates ${redact('moderate-to-significant impact on downstream riparian ecosystems, with particular concern for winter-run Chinook salmon spawning habitat and associated wetland systems', 2)}.` })
+    blocks.push({ type: 'spacer', height: 6 })
+    blocks.push({ type: 'body', text: `This project was authorized under Executive Order WR-2025-0147 and is managed jointly by the Department of Water Resources and ${redact('the Bureau of Reclamation under a federal-state compact agreement signed in November 2025', 2)}.` })
+    blocks.push({ type: 'spacer', height: 6 })
+    blocks.push({ type: 'body', text: `Preliminary cost estimates range from $50M to $75M across three phases. A detailed budget breakdown is available at ${redact('Confidential', 2)} classification and above.` })
+  } else {
+    blocks.push({ type: 'body', text: 'The proposed North Fork diversion channel will redirect approximately 2.4 million acre-feet annually from the Sacramento River tributary system to the Central Valley aquifer recharge basins. Initial environmental review indicates moderate-to-significant impact on downstream riparian ecosystems, with particular concern for winter-run Chinook salmon spawning habitat and associated wetland systems.' })
+    blocks.push({ type: 'spacer', height: 6 })
+    blocks.push({ type: 'body', text: 'This project was authorized under Executive Order WR-2025-0147 and is managed jointly by the Department of Water Resources and the Bureau of Reclamation under a federal-state compact agreement signed in November 2025.' })
+    blocks.push({ type: 'spacer', height: 6 })
+    blocks.push({ type: 'body', text: 'Total project cost is estimated at $68.2 million, distributed across three construction phases commencing Q2 2026. The Governor\'s office has approved expedited permitting under drought emergency provisions.' })
+  }
+
+  blocks.push({ type: 'spacer', height: 14 })
+
+  // 2. Budget Overview
+  blocks.push({ type: 'section-header', text: '2. BUDGET OVERVIEW' })
+  blocks.push({ type: 'spacer', height: 4 })
+
+  if (level === 0) {
+    blocks.push({ type: 'body', text: 'Budget details are classified. Contact the Office of Infrastructure Planning for access at the appropriate clearance level.' })
+  } else {
+    if (level === 1) {
+      blocks.push({ type: 'body', text: 'Total estimated project budget: $50M \u2013 $75M (range pending final contractor negotiations).' })
+      blocks.push({ type: 'spacer', height: 6 })
+    } else {
+      blocks.push({ type: 'body', text: 'Total estimated project budget: $68.2M (firm, approved by Infrastructure Budget Committee on Feb 28, 2026).' })
+      blocks.push({ type: 'spacer', height: 6 })
+    }
+
+    // Budget table
+    blocks.push({ type: 'table-row', cols: ['Phase', 'Description', 'Cost', 'Contractor'] })
+    blocks.push({ type: 'table-divider' })
+    blocks.push({ type: 'table-row', cols: [
+      '1',
+      'Site Assessment',
+      level >= 2 ? '$12.3M' : '$10M\u2013$15M',
+      level >= 2 ? 'Meridian Engineering Corp.' : redact('Meridian Engineering Corp.', 2)
+    ]})
+    blocks.push({ type: 'table-row', cols: [
+      '2',
+      'Channel Construction',
+      level >= 2 ? '$47.8M' : '$35M\u2013$55M',
+      level >= 2 ? 'Pacific Watershed Partners' : redact('Pacific Watershed Partners', 2)
+    ]})
+    blocks.push({ type: 'table-row', cols: [
+      '3',
+      'Monitoring & Compliance',
+      level >= 2 ? '$8.1M' : '$5M\u2013$10M',
+      level >= 2 ? 'UC Davis Env. Sciences' : redact('UC Davis Env. Sciences', 2)
+    ]})
+  }
+
+  blocks.push({ type: 'spacer', height: 14 })
+
+  // 3. Environmental Concerns
+  blocks.push({ type: 'section-header', text: '3. ENVIRONMENTAL CONCERNS' })
+  blocks.push({ type: 'spacer', height: 4 })
+
+  if (level === 0) {
+    blocks.push({ type: 'body', text: `Environmental review is ongoing. Key concerns include impacts to ${redact('winter-run Chinook salmon', 1)} migration patterns, ${redact('riparian cottonwood and willow gallery forest', 1)} habitat, and ${redact('groundwater table stability in the eastern Yolo Basin', 2)}.` })
+  } else if (level === 1) {
+    blocks.push({ type: 'body', text: `Environmental review is ongoing. Key concerns include impacts to winter-run Chinook salmon migration patterns, riparian cottonwood and willow gallery forest habitat, and ${redact('groundwater table stability in the eastern Yolo Basin', 2)}.` })
+    blocks.push({ type: 'spacer', height: 6 })
+    blocks.push({ type: 'body', text: `CDFW has flagged potential take of listed species under CESA. Formal consultation with USFWS initiated ${redact('January 12, 2026, under file number FWS-2026-0034', 2)}.` })
+  } else if (level === 2) {
+    blocks.push({ type: 'body', text: 'Environmental review is ongoing. Key concerns include impacts to winter-run Chinook salmon migration patterns, riparian cottonwood and willow gallery forest habitat, and groundwater table stability in the eastern Yolo Basin.' })
+    blocks.push({ type: 'spacer', height: 6 })
+    blocks.push({ type: 'body', text: 'CDFW has flagged potential take of listed species under CESA. Formal consultation with USFWS initiated January 12, 2026, under file number FWS-2026-0034. Biological opinion expected by Q3 2026.' })
+    blocks.push({ type: 'spacer', height: 6 })
+    blocks.push({ type: 'body', text: `Groundwater modeling by ${redact('Dr. Anya Patel, UC Davis Hydrogeology', 3)} suggests a 2.3-meter decline in water table elevation within a 15-kilometer radius of the primary intake structure over a 10-year projection period. ${redact('Mitigation: managed aquifer recharge via injection wells at coordinates specified in Appendix D (TS clearance required).', 3)}` })
+  } else {
+    blocks.push({ type: 'body', text: 'Environmental review is ongoing. Key concerns include impacts to winter-run Chinook salmon migration patterns, riparian cottonwood and willow gallery forest habitat, and groundwater table stability in the eastern Yolo Basin.' })
+    blocks.push({ type: 'spacer', height: 6 })
+    blocks.push({ type: 'body', text: 'CDFW has flagged potential take of listed species under CESA. Formal consultation with USFWS initiated January 12, 2026, under file number FWS-2026-0034. Biological opinion expected by Q3 2026.' })
+    blocks.push({ type: 'spacer', height: 6 })
+    blocks.push({ type: 'body', text: 'Groundwater modeling by Dr. Anya Patel, UC Davis Hydrogeology, suggests a 2.3-meter decline in water table elevation within a 15-kilometer radius of the primary intake structure over a 10-year projection period. Mitigation: managed aquifer recharge via injection wells at coordinates specified in Appendix D.' })
+    blocks.push({ type: 'spacer', height: 6 })
+    blocks.push({ type: 'body', text: 'NOTE: Supplemental modeling by the Army Corps of Engineers (Sacramento District) indicates potential levee stability concerns along Reach 7 of the North Fork channel alignment. Engineering review underway; preliminary results suggest sheet pile reinforcement at three locations (see Appendix E, TS clearance confirmed).' })
+  }
+
+  blocks.push({ type: 'spacer', height: 14 })
+
+  // 4. Site Coordinates
+  blocks.push({ type: 'section-header', text: '4. SITE COORDINATES & ENGINEERING REFERENCES' })
+  blocks.push({ type: 'spacer', height: 4 })
+
+  if (level < 3) {
+    blocks.push({ type: 'body-redacted-full', text: 'This section is classified TOP SECRET. Access restricted to personnel with TS/SCI clearance and need-to-know authorization from the Director of Infrastructure Planning.' })
+  } else {
+    blocks.push({ type: 'body', text: 'Primary Intake Structure: 38\u00b042\'17.3"N, 121\u00b033\'45.8"W (NAD83)' })
+    blocks.push({ type: 'body', text: 'Diversion Channel Origin: 38\u00b041\'52.1"N, 121\u00b034\'02.6"W' })
+    blocks.push({ type: 'body', text: 'Recharge Basin Alpha: 38\u00b038\'11.4"N, 121\u00b040\'28.9"W' })
+    blocks.push({ type: 'body', text: 'Recharge Basin Beta: 38\u00b036\'44.7"N, 121\u00b042\'15.3"W' })
+    blocks.push({ type: 'spacer', height: 6 })
+    blocks.push({ type: 'body', text: 'Engineering schematics: DWR-SOL-2026-ENG-001 through ENG-047. Geotechnical survey: USACE-SAC-GEO-2025-114. Hydrological model: UCD-HYDRO-NF-2026-03 (rev. 4).' })
+    blocks.push({ type: 'spacer', height: 6 })
+    blocks.push({ type: 'body', text: 'Security perimeter established 500m radius from primary intake structure. Drone surveillance zone active. Access requires escort by DWR Security Division personnel with advance 48-hour notice.' })
+  }
+
+  blocks.push({ type: 'spacer', height: 14 })
+
+  // 5. Timeline
+  blocks.push({ type: 'section-header', text: '5. PROJECT TIMELINE' })
+  blocks.push({ type: 'spacer', height: 4 })
+  blocks.push({ type: 'body', text: `Phase 1 (Site Assessment): ${level >= 1 ? 'April \u2013 September 2026' : redact('April \u2013 September 2026', 1)}` })
+  blocks.push({ type: 'body', text: `Phase 2 (Construction): ${level >= 1 ? 'October 2026 \u2013 March 2028' : redact('October 2026 \u2013 March 2028', 1)}` })
+  blocks.push({ type: 'body', text: `Phase 3 (Monitoring): ${level >= 1 ? 'April 2028 \u2013 ongoing (minimum 5-year commitment)' : redact('April 2028 \u2013 ongoing (minimum 5-year commitment)', 1)}` })
+
+  if (level >= 2) {
+    blocks.push({ type: 'spacer', height: 6 })
+    blocks.push({ type: 'body', text: 'Critical path items: CEQA certification (expected June 2026), USACE Section 404 permit (expected August 2026), SWRCB water rights amendment (pending hearing, July 2026).' })
+  }
+
+  blocks.push({ type: 'spacer', height: 14 })
+  blocks.push({ type: 'divider' })
+  blocks.push({ type: 'spacer', height: 8 })
+
+  // Distribution
+  blocks.push({ type: 'meta', label: 'DISTRIBUTION:', value: level >= 1 ? 'Limited \u2014 Infrastructure Division, Legal Affairs, Governor\'s Water Policy Office, SWRCB Liaison' : redact('Limited \u2014 Infrastructure Division, Legal Affairs, Governor\'s Water Policy Office, SWRCB Liaison', 1) })
+
+  if (level >= 2) {
+    blocks.push({ type: 'meta', label: 'CC:', value: level >= 2 ? 'Meridian Engineering Corp. (Project Lead), Pacific Watershed Partners (VP Operations)' : redact('Meridian Engineering Corp. (Project Lead), Pacific Watershed Partners (VP Operations)', 2) })
+  }
+
+  blocks.push({ type: 'spacer', height: 8 })
+  blocks.push({ type: 'meta', label: 'DOCUMENT ID:', value: 'DWR-SOL-2026-MEMO-003' })
+  blocks.push({ type: 'meta', label: 'PAGE:', value: '1 of 1' })
+
+  return blocks
+}
+
+// --- Canvas rendering ---
+const canvas = document.getElementById('docCanvas')
+const ctx = canvas.getContext('2d')
+const dpr = window.devicePixelRatio || 1
+
+const slider = document.getElementById('levelSlider')
+const sliderFill = document.getElementById('sliderFill')
+const classStamp = document.getElementById('classStamp')
+const stops = document.querySelectorAll('.slider-stop')
+const infoBtn = document.getElementById('infoBtn')
+const modalOverlay = document.getElementById('modalOverlay')
+const modalClose = document.getElementById('modalClose')
+
+// Modal
+infoBtn.addEventListener('click', () => modalOverlay.classList.add('open'))
+modalClose.addEventListener('click', () => modalOverlay.classList.remove('open'))
+modalOverlay.addEventListener('click', (e) => {
+  if (e.target === modalOverlay) modalOverlay.classList.remove('open')
+})
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') modalOverlay.classList.remove('open')
+})
+
+// Slider
+function updateSliderUI(level) {
+  const pct = (level / 3) * 100
+  sliderFill.style.width = pct + '%'
+  classStamp.textContent = LEVELS[level]
+  stops.forEach((s, i) => {
+    s.classList.toggle('active', i <= level)
+  })
+}
+
+stops.forEach(s => {
+  s.addEventListener('click', () => {
+    const lv = parseInt(s.dataset.level)
+    slider.value = lv
+    updateSliderUI(lv)
+    renderDocument(lv)
+  })
+})
+
+slider.addEventListener('input', () => {
+  const lv = parseInt(slider.value)
+  updateSliderUI(lv)
+  renderDocument(lv)
+})
+
+// --- Layout + render ---
+function resizeCanvas(height) {
+  const card = canvas.parentElement
+  const w = card.clientWidth - 96 // 3rem padding * 2 = 96px? We'll measure
+  const style = getComputedStyle(card)
+  const padL = parseFloat(style.paddingLeft)
+  const padR = parseFloat(style.paddingRight)
+  const containerWidth = card.clientWidth - padL - padR
+  canvas.style.width = containerWidth + 'px'
+  canvas.style.height = height + 'px'
+  canvas.width = Math.round(containerWidth * dpr)
+  canvas.height = Math.round(height * dpr)
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  return containerWidth
+}
+
+// Check if text contains redaction blocks
+function containsRedaction(text) {
+  return text.includes('\u2588')
+}
+
+// Render a line of text, drawing redaction bars for block chars
+function renderLineSegments(segments, baseline, lineAscent, lineDescent, font) {
+  ctx.font = font
+  ctx.textBaseline = 'alphabetic'
+
+  for (const seg of segments) {
+    const val = seg.value
+    // Check if this segment contains redaction blocks
+    if (val.includes('\u2588')) {
+      // Draw a redaction bar
+      const barHeight = lineAscent * 0.9 + lineDescent * 0.3
+      const barY = baseline - lineAscent * 0.85
+      ctx.fillStyle = REDACT_COLOR
+      // Round corners via path
+      const r = 2
+      const x = seg.x
+      const w = seg.width
+      ctx.beginPath()
+      ctx.moveTo(x + r, barY)
+      ctx.lineTo(x + w - r, barY)
+      ctx.quadraticCurveTo(x + w, barY, x + w, barY + r)
+      ctx.lineTo(x + w, barY + barHeight - r)
+      ctx.quadraticCurveTo(x + w, barY + barHeight, x + w - r, barY + barHeight)
+      ctx.lineTo(x + r, barY + barHeight)
+      ctx.quadraticCurveTo(x, barY + barHeight, x, barY + barHeight - r)
+      ctx.lineTo(x, barY + r)
+      ctx.quadraticCurveTo(x, barY, x + r, barY)
+      ctx.closePath()
+      ctx.fill()
+    } else {
+      ctx.fillStyle = TEXT_COLOR
+      ctx.fillText(val, seg.x, baseline)
+    }
+  }
+}
+
+function layoutText(text, font, maxWidth, startY) {
+  if (!text.trim()) return { lines: [], endY: startY }
+  const prepared = prepareWithSegments(text, font)
+  const lines = []
+  let y = startY
+  let cursor = 0
+  while (true) {
+    const line = layoutNextLine(prepared, cursor, maxWidth)
+    if (!line) break
+    cursor = line.end
+    lines.push({ ...line, y })
+    y += line.ascent + line.descent
+  }
+  return { lines, endY: y }
+}
+
+function renderDocument(level) {
+  const blocks = buildDocument(level)
+  const card = canvas.parentElement
+  const style = getComputedStyle(card)
+  const padL = parseFloat(style.paddingLeft)
+  const padR = parseFloat(style.paddingRight)
+  const contentWidth = card.clientWidth - padL - padR
+
+  // First pass: compute total height
+  let y = 0
+  const rendered = []
+
+  for (const block of blocks) {
+    switch (block.type) {
+      case 'header-agency': {
+        const r = layoutText(block.text, HEADER_FONT, contentWidth, y)
+        rendered.push({ block, lines: r.lines, font: HEADER_FONT, color: HEADER_COLOR, align: 'center' })
+        y = r.endY + 2
+        break
+      }
+      case 'header-sub': {
+        const font = `500 ${SMALL_FONT_SIZE}px 'JetBrains Mono', monospace`
+        const r = layoutText(block.text, font, contentWidth, y)
+        rendered.push({ block, lines: r.lines, font, color: MUTED_COLOR, align: 'center' })
+        y = r.endY + 6
+        break
+      }
+      case 'header-memo': {
+        const font = `700 16px 'JetBrains Mono', monospace`
+        const r = layoutText(block.text, font, contentWidth, y)
+        rendered.push({ block, lines: r.lines, font, color: HEADER_COLOR, align: 'center' })
+        y = r.endY + 4
+        break
+      }
+      case 'divider': {
+        rendered.push({ block, y })
+        y += 8
+        break
+      }
+      case 'spacer': {
+        y += block.height
+        break
+      }
+      case 'meta': {
+        // Label + value on one line (laid out as single text)
+        const combined = block.label + ' ' + block.value
+        const r = layoutText(combined, SMALL_FONT, contentWidth, y)
+        rendered.push({ block, lines: r.lines, font: SMALL_FONT, labelLen: block.label.length + 1 })
+        y = r.endY + 2
+        break
+      }
+      case 'section-header': {
+        const font = `700 ${HEADER_FONT_SIZE}px 'JetBrains Mono', monospace`
+        const r = layoutText(block.text, font, contentWidth, y)
+        rendered.push({ block, lines: r.lines, font, color: HEADER_COLOR })
+        y = r.endY + 2
+        break
+      }
+      case 'body':
+      case 'body-redacted-full': {
+        const r = layoutText(block.text, BODY_FONT, contentWidth, y)
+        rendered.push({ block, lines: r.lines, font: BODY_FONT, color: block.type === 'body-redacted-full' ? MUTED_COLOR : TEXT_COLOR })
+        y = r.endY + 2
+        break
+      }
+      case 'table-row': {
+        // Simple table: we lay out as tab-separated text with fixed columns
+        const colWidths = [0.06, 0.30, 0.22, 0.42] // proportions
+        let maxEndY = y
+        const colData = []
+        for (let i = 0; i < block.cols.length; i++) {
+          const colX = colWidths.slice(0, i).reduce((a, b) => a + b, 0) * contentWidth
+          const colW = colWidths[i] * contentWidth - 8
+          const r = layoutText(block.cols[i], SMALL_FONT, colW, y)
+          colData.push({ lines: r.lines, offsetX: colX })
+          if (r.endY > maxEndY) maxEndY = r.endY
+        }
+        rendered.push({ block, colData, font: SMALL_FONT })
+        y = maxEndY + 3
+        break
+      }
+      case 'table-divider': {
+        rendered.push({ block, y })
+        y += 4
+        break
+      }
+    }
+  }
+
+  const totalHeight = y + 10
+  const w = resizeCanvas(totalHeight)
+
+  // Second pass: render
+  ctx.clearRect(0, 0, w, totalHeight)
+
+  for (const item of rendered) {
+    const { block } = item
+
+    if (block.type === 'divider') {
+      ctx.strokeStyle = DIVIDER_COLOR
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(0, item.y + 4)
+      ctx.lineTo(w, item.y + 4)
+      ctx.stroke()
+      continue
+    }
+
+    if (block.type === 'table-divider') {
+      ctx.strokeStyle = DIVIDER_COLOR
+      ctx.lineWidth = 0.5
+      ctx.beginPath()
+      ctx.moveTo(0, item.y + 2)
+      ctx.lineTo(w, item.y + 2)
+      ctx.stroke()
+      continue
+    }
+
+    if (block.type === 'table-row') {
+      for (const col of item.colData) {
+        for (const line of col.lines) {
+          const baseline = line.y + line.ascent
+          // Offset segments by column position
+          const shifted = line.segments.map(s => ({ ...s, x: s.x + col.offsetX }))
+          // First row is header
+          if (block.cols[0] === 'Phase') {
+            ctx.fillStyle = HEADER_COLOR
+            ctx.font = LABEL_FONT
+            for (const seg of shifted) {
+              if (seg.value.includes('\u2588')) {
+                renderLineSegments([{ ...seg }], baseline, line.ascent, line.descent, LABEL_FONT)
+              } else {
+                ctx.fillText(seg.value, seg.x, baseline)
+              }
+            }
+          } else {
+            renderLineSegments(shifted, baseline, line.ascent, line.descent, SMALL_FONT)
+          }
+        }
+      }
+      continue
+    }
+
+    if (!item.lines) continue
+
+    for (const line of item.lines) {
+      const baseline = line.y + line.ascent
+
+      if (item.align === 'center') {
+        // Center: offset all segments
+        const offset = (w - line.width) / 2
+        const shifted = line.segments.map(s => ({ ...s, x: s.x + offset }))
+        ctx.fillStyle = item.color || TEXT_COLOR
+        ctx.font = item.font
+        renderLineSegments(shifted, baseline, line.ascent, line.descent, item.font)
+      } else if (block.type === 'meta') {
+        // Render label portion bold, rest normal
+        ctx.textBaseline = 'alphabetic'
+        for (const seg of line.segments) {
+          if (seg.value.includes('\u2588')) {
+            renderLineSegments([seg], baseline, line.ascent, line.descent, SMALL_FONT)
+          } else {
+            // Crude heuristic: chars before labelLen are the label
+            ctx.font = LABEL_FONT
+            ctx.fillStyle = MUTED_COLOR
+            ctx.fillText(seg.value, seg.x, baseline)
+          }
+        }
+      } else {
+        ctx.fillStyle = item.color || TEXT_COLOR
+        renderLineSegments(line.segments, baseline, line.ascent, line.descent, item.font)
+      }
+    }
+  }
+}
+
+// --- Init ---
+function init() {
+  updateSliderUI(0)
+  renderDocument(0)
+}
+
+// Wait for fonts
+document.fonts.ready.then(init)
+
+// Resize handling
+let resizeRaf = null
+window.addEventListener('resize', () => {
+  if (resizeRaf) cancelAnimationFrame(resizeRaf)
+  resizeRaf = requestAnimationFrame(() => {
+    renderDocument(parseInt(slider.value))
+  })
+})
+</script>
+</body>
+</html>

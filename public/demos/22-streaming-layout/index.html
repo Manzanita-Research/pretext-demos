@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Streaming Layout</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,400&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;1,7..72,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%; min-height: 100vh;
+    background: #FAF9F6;
+    color: #2C2C2C;
+    font-family: 'Literata', Georgia, serif;
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Paper grain overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.03;
+    background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 200px 200px;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    padding: 2.5rem 1.5rem 1rem;
+    border-bottom: 1px solid #E8E5DF;
+  }
+  .header h1 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 300;
+    font-size: 1.75rem;
+    font-variation-settings: 'WONK' 1, 'SOFT' 100;
+    color: #2C2C2C;
+    margin-bottom: 0.25rem;
+  }
+  .header p {
+    color: #5C5C5C;
+    font-size: 0.85rem;
+    max-width: 44ch;
+    margin: 0 auto;
+  }
+
+  /* Controls bar */
+  .controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid #E8E5DF;
+    flex-wrap: wrap;
+  }
+  .controls button {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    font-weight: 500;
+    padding: 0.45rem 1.1rem;
+    border: 1px solid #E8E5DF;
+    border-radius: 6px;
+    background: #fff;
+    color: #2C2C2C;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .controls button:hover {
+    border-color: #C2714F;
+    color: #C2714F;
+  }
+  .controls button.primary {
+    background: #C2714F;
+    color: #fff;
+    border-color: #C2714F;
+  }
+  .controls button.primary:hover {
+    background: #a85f42;
+    border-color: #a85f42;
+  }
+  .controls button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .speed-control {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .speed-control label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: #5C5C5C;
+  }
+  .speed-control input[type="range"] {
+    width: 100px;
+    accent-color: #C2714F;
+  }
+  .speed-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: #6B3A2A;
+    min-width: 4ch;
+  }
+
+  /* Main split */
+  .split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    min-height: calc(100vh - 160px);
+  }
+  .panel {
+    padding: 1.25rem;
+    position: relative;
+  }
+  .panel:first-child {
+    border-right: 1px solid #E8E5DF;
+  }
+
+  /* Panel labels */
+  .panel-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 1rem;
+    padding: 0.3rem 0.65rem;
+    border-radius: 4px;
+  }
+  .panel-label.dom {
+    background: rgba(196, 154, 60, 0.1);
+    color: #C49A3C;
+    border: 1px solid rgba(196, 154, 60, 0.2);
+  }
+  .panel-label.pretext {
+    background: rgba(139, 158, 126, 0.1);
+    color: #6B8F5E;
+    border: 1px solid rgba(139, 158, 126, 0.2);
+  }
+  .label-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+  .dom .label-dot { background: #C49A3C; }
+  .pretext .label-dot { background: #8B9E7E; }
+
+  /* Chat area */
+  .chat-area {
+    background: #fff;
+    border: 1px solid #E8E5DF;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(44, 44, 44, 0.04), 0 4px 12px rgba(44, 44, 44, 0.02);
+    overflow: hidden;
+  }
+  .chat-header {
+    padding: 0.6rem 0.9rem;
+    border-bottom: 1px solid #E8E5DF;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .chat-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #C2714F, #d4956e);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.65rem;
+    color: #fff;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 500;
+  }
+  .chat-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #2C2C2C;
+  }
+  .chat-body {
+    padding: 0.9rem;
+    overflow-anchor: auto;
+  }
+  .chat-text {
+    font-family: 'Literata', Georgia, serif;
+    font-size: 0.9rem;
+    line-height: 1.65;
+    color: #2C2C2C;
+  }
+  .chat-cursor {
+    display: inline-block;
+    width: 2px;
+    height: 1em;
+    background: #C2714F;
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    animation: blink 0.8s step-end infinite;
+  }
+  @keyframes blink {
+    50% { opacity: 0; }
+  }
+
+  /* Below-chat interactive element — the key demo */
+  .below-chat {
+    margin-top: 1rem;
+    padding: 0.9rem;
+    background: #fff;
+    border: 1px solid #E8E5DF;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(44, 44, 44, 0.04);
+  }
+  .below-chat-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #5C5C5C;
+    margin-bottom: 0.5rem;
+  }
+  .message-input-row {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .message-input {
+    flex: 1;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #E8E5DF;
+    border-radius: 6px;
+    font-family: 'Literata', Georgia, serif;
+    font-size: 0.82rem;
+    color: #2C2C2C;
+    background: #FAF9F6;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .message-input:focus {
+    border-color: #C2714F;
+  }
+  .message-input::placeholder {
+    color: #b0ada8;
+  }
+  .send-btn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 0.5rem 0.9rem;
+    border: 1px solid #E8E5DF;
+    border-radius: 6px;
+    background: #fff;
+    color: #2C2C2C;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .send-btn:hover {
+    border-color: #C2714F;
+    color: #C2714F;
+  }
+
+  /* Shift counter */
+  .shift-counter {
+    margin-top: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+  }
+  .shift-counter-label {
+    color: #5C5C5C;
+  }
+  .shift-counter-value {
+    font-weight: 500;
+    transition: color 0.3s;
+  }
+  .shift-counter-value.warning { color: #C49A3C; }
+  .shift-counter-value.good { color: #8B9E7E; }
+
+  /* Info button */
+  .info-btn {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1px solid #E8E5DF;
+    background: #fff;
+    color: #6B3A2A;
+    font-family: 'Literata', Georgia, serif;
+    font-size: 0.85rem;
+    font-style: italic;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    transition: all 0.15s;
+    box-shadow: 0 1px 3px rgba(44, 44, 44, 0.06);
+  }
+  .info-btn:hover {
+    border-color: #C2714F;
+    color: #C2714F;
+  }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(44, 44, 44, 0.3);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s;
+  }
+  .modal-overlay.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .modal {
+    background: #FAF9F6;
+    border: 1px solid #E8E5DF;
+    border-radius: 14px;
+    padding: 2.25rem;
+    max-width: 520px;
+    width: 90%;
+    box-shadow: 0 8px 32px rgba(44, 44, 44, 0.12);
+    transform: translateY(10px);
+    transition: transform 0.25s;
+  }
+  .modal-overlay.open .modal {
+    transform: translateY(0);
+  }
+  .modal h2 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 400;
+    font-size: 1.35rem;
+    font-variation-settings: 'WONK' 1, 'SOFT' 100;
+    color: #2C2C2C;
+    margin-bottom: 1rem;
+  }
+  .modal p {
+    font-family: 'Literata', Georgia, serif;
+    font-size: 0.88rem;
+    line-height: 1.7;
+    color: #2C2C2C;
+    margin-bottom: 0.85rem;
+  }
+  .modal p:last-of-type {
+    margin-bottom: 0;
+  }
+  .modal-close {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: none;
+    color: #5C5C5C;
+    font-size: 1.1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+  }
+  .modal-close:hover { color: #2C2C2C; }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .split {
+      grid-template-columns: 1fr;
+    }
+    .panel:first-child {
+      border-right: none;
+      border-bottom: 1px solid #E8E5DF;
+    }
+    .header h1 { font-size: 1.35rem; }
+  }
+
+  /* Pretext canvas container */
+  .pretext-chat-body {
+    padding: 0.9rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .pretext-chat-body canvas {
+    display: block;
+  }
+</style>
+</head>
+<body>
+
+<!-- Info button -->
+<button class="info-btn" id="infoBtn">i</button>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal" style="position:relative;">
+    <button class="modal-close" id="modalClose">&times;</button>
+    <h2>Why We Built This</h2>
+    <p>Every AI chat interface in 2026 has the same problem: streaming text pushes the page around. The content below the response jumps. Your scroll position fights you. CSS overflow-anchor mostly works until it doesn't — and in virtualized lists, it doesn't.</p>
+    <p>We built this because pretext knows how tall text will be before it renders. So the container grows to its final height on the first token, and nothing below it ever moves. No hacks, no anchoring tricks. The layout is just correct.</p>
+  </div>
+</div>
+
+<!-- Header -->
+<div class="header">
+  <h1>The Streaming Layout</h1>
+  <p>Side-by-side: standard DOM streaming vs. pretext with zero layout shift.</p>
+</div>
+
+<!-- Controls -->
+<div class="controls">
+  <button class="primary" id="streamBtn">Stream</button>
+  <button id="resetBtn" disabled>Reset</button>
+  <div class="speed-control">
+    <label for="speedSlider">speed</label>
+    <input type="range" id="speedSlider" min="1" max="80" value="16">
+    <span class="speed-value" id="speedValue">16/s</span>
+  </div>
+</div>
+
+<!-- Split panels -->
+<div class="split">
+  <!-- DOM panel -->
+  <div class="panel">
+    <div class="panel-label dom">
+      <span class="label-dot"></span>
+      Standard DOM
+    </div>
+    <div class="chat-area">
+      <div class="chat-header">
+        <div class="chat-avatar">AI</div>
+        <span class="chat-name">Assistant</span>
+      </div>
+      <div class="chat-body" id="domChatBody">
+        <div class="chat-text" id="domText"><span class="chat-cursor" id="domCursor" style="display:none;"></span></div>
+      </div>
+    </div>
+    <div class="below-chat" id="domBelowChat">
+      <div class="below-chat-label">Reply</div>
+      <div class="message-input-row">
+        <input class="message-input" type="text" placeholder="Send another message..." readonly>
+        <button class="send-btn">Send</button>
+      </div>
+    </div>
+    <div class="shift-counter">
+      <span class="shift-counter-label">Layout shift:</span>
+      <span class="shift-counter-value warning" id="domShiftValue">0.0px</span>
+    </div>
+  </div>
+
+  <!-- Pretext panel -->
+  <div class="panel">
+    <div class="panel-label pretext">
+      <span class="label-dot"></span>
+      Pretext
+    </div>
+    <div class="chat-area">
+      <div class="chat-header">
+        <div class="chat-avatar">AI</div>
+        <span class="chat-name">Assistant</span>
+      </div>
+      <div class="pretext-chat-body" id="pretextChatBody">
+        <canvas id="pretextCanvas"></canvas>
+      </div>
+    </div>
+    <div class="below-chat" id="pretextBelowChat">
+      <div class="below-chat-label">Reply</div>
+      <div class="message-input-row">
+        <input class="message-input" type="text" placeholder="Send another message..." readonly>
+        <button class="send-btn">Send</button>
+      </div>
+    </div>
+    <div class="shift-counter">
+      <span class="shift-counter-label">Layout shift:</span>
+      <span class="shift-counter-value good" id="pretextShiftValue">0.0px</span>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
+
+// --- Streaming text ---
+const STREAM_TEXT = `Right now, this text is streaming into both panels. Each word arrives one at a time, like every AI chat you've used. But look at the content below this response — on the right side, it isn't moving. The container already knows how tall I'll be. On the left, watch the paragraph below. See it jump? That's layout shift. Every chat interface you've ever used does that. This one doesn't. The difference is that pretext predicts the height of text before it renders. So the container grows to its final size on the first token. Nothing below ever moves. No scroll anchoring hacks. No overflow tricks. Just correct layout, computed in pure arithmetic, sixty times a second.`
+
+const TOKENS = STREAM_TEXT.split(/(\s+)/).filter(Boolean)
+
+// --- Config ---
+const FONT_SIZE = 14.4
+const LINE_HEIGHT_MULT = 1.65
+const FONT_FAMILY = "'Literata', Georgia, serif"
+const FONT_STR = `${FONT_SIZE}px ${FONT_FAMILY}`
+const TEXT_COLOR = '#2C2C2C'
+const CURSOR_COLOR = '#C2714F'
+
+// --- DOM refs ---
+const streamBtn = document.getElementById('streamBtn')
+const resetBtn = document.getElementById('resetBtn')
+const speedSlider = document.getElementById('speedSlider')
+const speedValue = document.getElementById('speedValue')
+const domText = document.getElementById('domText')
+const domCursor = document.getElementById('domCursor')
+const domChatBody = document.getElementById('domChatBody')
+const domBelowChat = document.getElementById('domBelowChat')
+const domShiftValue = document.getElementById('domShiftValue')
+const pretextChatBody = document.getElementById('pretextChatBody')
+const pretextCanvas = document.getElementById('pretextCanvas')
+const pretextBelowChat = document.getElementById('pretextBelowChat')
+const pretextShiftValue = document.getElementById('pretextShiftValue')
+const infoBtn = document.getElementById('infoBtn')
+const modalOverlay = document.getElementById('modalOverlay')
+const modalClose = document.getElementById('modalClose')
+
+// --- Modal ---
+infoBtn.addEventListener('click', () => modalOverlay.classList.add('open'))
+modalClose.addEventListener('click', () => modalOverlay.classList.remove('open'))
+modalOverlay.addEventListener('click', (e) => {
+  if (e.target === modalOverlay) modalOverlay.classList.remove('open')
+})
+
+// --- Speed ---
+let tokensPerSecond = 16
+speedSlider.addEventListener('input', () => {
+  tokensPerSecond = parseInt(speedSlider.value)
+  speedValue.textContent = `${tokensPerSecond}/s`
+})
+
+// --- State ---
+let streaming = false
+let tokenIndex = 0
+let domTextContent = ''
+let lastDomBelowY = null
+let lastPretextBelowY = null
+let domShiftTotal = 0
+let pretextShiftTotal = 0
+let streamTimer = null
+let pretextFinalHeight = 0
+let cursorVisible = false
+
+// --- Canvas setup ---
+const ctx = pretextCanvas.getContext('2d')
+const dpr = window.devicePixelRatio || 1
+
+function resizeCanvas(height) {
+  const containerWidth = pretextChatBody.clientWidth
+  pretextCanvas.style.width = containerWidth + 'px'
+  pretextCanvas.style.height = height + 'px'
+  pretextCanvas.width = Math.round(containerWidth * dpr)
+  pretextCanvas.height = Math.round(height * dpr)
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+}
+
+// --- Pretext: compute full layout height for the complete text ---
+function computePretextHeight(text, width) {
+  if (!text.trim()) return 0
+  const prepared = prepareWithSegments(text, FONT_STR)
+  let cursor = 0
+  let y = 0
+  while (true) {
+    const line = layoutNextLine(prepared, cursor, width)
+    if (!line) break
+    y += line.ascent + line.descent
+    cursor = line.end
+  }
+  return y
+}
+
+// --- Pretext: render current partial text onto canvas ---
+function renderPretextText(text, width) {
+  if (!text.trim()) return
+  const prepared = prepareWithSegments(text, FONT_STR)
+  ctx.clearRect(0, 0, pretextCanvas.width / dpr, pretextCanvas.height / dpr)
+  ctx.font = FONT_STR
+  ctx.fillStyle = TEXT_COLOR
+  ctx.textBaseline = 'alphabetic'
+
+  let y = 0
+  let cursor = 0
+  let lastLine = null
+  while (true) {
+    const line = layoutNextLine(prepared, cursor, width)
+    if (!line) break
+    lastLine = line
+    const baseline = y + line.ascent
+    for (const seg of line.segments) {
+      ctx.fillText(seg.value, seg.x, baseline)
+    }
+    y += line.ascent + line.descent
+    cursor = line.end
+  }
+
+  // Draw cursor after last segment
+  if (lastLine && cursorVisible) {
+    const lastSeg = lastLine.segments[lastLine.segments.length - 1]
+    if (lastSeg) {
+      const cursorX = lastSeg.x + lastSeg.width + 2
+      const baseline = (y - lastLine.ascent - lastLine.descent) + lastLine.ascent
+      ctx.fillStyle = CURSOR_COLOR
+      ctx.fillRect(cursorX, baseline - FONT_SIZE * 0.85, 2, FONT_SIZE)
+      ctx.fillStyle = TEXT_COLOR
+    }
+  }
+}
+
+// --- Set pretext container to predicted final height ---
+function setFinalHeight() {
+  const padW = pretextChatBody.clientWidth
+  pretextFinalHeight = computePretextHeight(STREAM_TEXT, padW)
+  resizeCanvas(pretextFinalHeight)
+}
+
+// --- Track layout shift ---
+function measureShift() {
+  const domRect = domBelowChat.getBoundingClientRect()
+  const pretextRect = pretextBelowChat.getBoundingClientRect()
+
+  if (lastDomBelowY !== null) {
+    const domDelta = Math.abs(domRect.top - lastDomBelowY)
+    if (domDelta > 0.5) {
+      domShiftTotal += domDelta
+      domShiftValue.textContent = domShiftTotal.toFixed(1) + 'px'
+    }
+  }
+  lastDomBelowY = domRect.top
+
+  if (lastPretextBelowY !== null) {
+    const pretextDelta = Math.abs(pretextRect.top - lastPretextBelowY)
+    if (pretextDelta > 0.5) {
+      pretextShiftTotal += pretextDelta
+      pretextShiftValue.textContent = pretextShiftTotal.toFixed(1) + 'px'
+    }
+  }
+  lastPretextBelowY = pretextRect.top
+}
+
+// --- Cursor blink ---
+let cursorBlinkInterval = null
+function startCursorBlink() {
+  cursorVisible = true
+  domCursor.style.display = 'inline-block'
+  cursorBlinkInterval = setInterval(() => {
+    cursorVisible = !cursorVisible
+  }, 400)
+}
+function stopCursorBlink() {
+  clearInterval(cursorBlinkInterval)
+  cursorVisible = false
+  domCursor.style.display = 'none'
+}
+
+// --- Emit one token ---
+function emitToken() {
+  if (tokenIndex >= TOKENS.length) {
+    stopStreaming()
+    return
+  }
+  const token = TOKENS[tokenIndex]
+  tokenIndex++
+
+  // DOM side: just append text node before cursor
+  domTextContent += token
+  domText.insertBefore(document.createTextNode(token), domCursor)
+
+  // Pretext side: re-render with full text so far
+  const currentText = TOKENS.slice(0, tokenIndex).join('')
+  const padW = pretextChatBody.clientWidth
+  renderPretextText(currentText, padW)
+
+  // Track shift
+  measureShift()
+}
+
+// --- Stream loop ---
+let lastEmitTime = 0
+let animFrame = null
+
+function streamLoop(timestamp) {
+  if (!streaming) return
+
+  if (!lastEmitTime) lastEmitTime = timestamp
+  const elapsed = timestamp - lastEmitTime
+  const interval = 1000 / tokensPerSecond
+  const tokensToEmit = Math.floor(elapsed / interval)
+
+  for (let i = 0; i < tokensToEmit && tokenIndex < TOKENS.length; i++) {
+    emitToken()
+    lastEmitTime += interval
+  }
+
+  if (tokenIndex >= TOKENS.length) {
+    stopStreaming()
+    return
+  }
+
+  animFrame = requestAnimationFrame(streamLoop)
+}
+
+// --- Start / Stop ---
+function startStreaming() {
+  if (streaming) return
+  streaming = true
+  streamBtn.disabled = true
+  resetBtn.disabled = false
+  lastEmitTime = 0
+
+  // Record initial positions BEFORE any change
+  lastDomBelowY = domBelowChat.getBoundingClientRect().top
+  lastPretextBelowY = pretextBelowChat.getBoundingClientRect().top
+
+  // Set pretext final height immediately
+  setFinalHeight()
+
+  // Re-record pretext below position AFTER height is set
+  // This is the key: the pretext side sets its height once, so the
+  // below-chat element shifts once, and then never again
+  requestAnimationFrame(() => {
+    lastPretextBelowY = pretextBelowChat.getBoundingClientRect().top
+    startCursorBlink()
+    animFrame = requestAnimationFrame(streamLoop)
+  })
+}
+
+function stopStreaming() {
+  streaming = false
+  streamBtn.disabled = false
+  stopCursorBlink()
+  cancelAnimationFrame(animFrame)
+
+  // Final render without cursor
+  const currentText = TOKENS.slice(0, tokenIndex).join('')
+  const padW = pretextChatBody.clientWidth
+  renderPretextText(currentText, padW)
+}
+
+function resetDemo() {
+  stopStreaming()
+  tokenIndex = 0
+  domTextContent = ''
+  domText.textContent = ''
+  domText.appendChild(domCursor)
+  domCursor.style.display = 'none'
+  domShiftTotal = 0
+  pretextShiftTotal = 0
+  domShiftValue.textContent = '0.0px'
+  pretextShiftValue.textContent = '0.0px'
+  lastDomBelowY = null
+  lastPretextBelowY = null
+  resizeCanvas(0)
+  ctx.clearRect(0, 0, pretextCanvas.width, pretextCanvas.height)
+  resetBtn.disabled = true
+  streamBtn.disabled = false
+}
+
+// --- Events ---
+streamBtn.addEventListener('click', startStreaming)
+resetBtn.addEventListener('click', resetDemo)
+
+// --- Initial canvas size ---
+resizeCanvas(0)
+
+// Handle window resize
+window.addEventListener('resize', () => {
+  if (streaming || tokenIndex > 0) {
+    const padW = pretextChatBody.clientWidth
+    const currentText = TOKENS.slice(0, tokenIndex).join('')
+    if (tokenIndex > 0) {
+      pretextFinalHeight = computePretextHeight(STREAM_TEXT, padW)
+      resizeCanvas(pretextFinalHeight)
+      renderPretextText(currentText, padW)
+    }
+  }
+})
+</script>
+</body>
+</html>

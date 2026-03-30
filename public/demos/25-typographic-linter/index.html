@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Typographic Linter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,400&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;1,7..72,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%; height: 100vh;
+    background: #FAF9F6;
+    color: #2C2C2C;
+    font-family: 'Literata', Georgia, serif;
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.03;
+    background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 200px 200px;
+  }
+
+  .app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  .header {
+    text-align: center;
+    padding: 1.5rem 1.5rem 0.75rem;
+    border-bottom: 1px solid #E8E5DF;
+    flex-shrink: 0;
+  }
+  .header h1 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 300;
+    font-size: 1.6rem;
+    font-variation-settings: 'WONK' 1, 'SOFT' 100;
+    color: #2C2C2C;
+    margin-bottom: 0.2rem;
+  }
+  .header p {
+    color: #5C5C5C;
+    font-size: 0.82rem;
+    max-width: 52ch;
+    margin: 0 auto;
+  }
+
+  .main {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .canvas-area {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    padding: 1.5rem 1rem 1rem 1.5rem;
+    overflow-y: auto;
+    position: relative;
+  }
+
+  .canvas-container {
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .drag-handle {
+    position: absolute;
+    right: -14px;
+    top: 0;
+    bottom: 0;
+    width: 28px;
+    cursor: col-resize;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    user-select: none;
+  }
+  .drag-handle::before {
+    content: '';
+    width: 4px;
+    height: 48px;
+    border-radius: 2px;
+    background: #E8E5DF;
+    transition: background 0.15s, height 0.15s;
+  }
+  .drag-handle:hover::before,
+  .drag-handle.active::before {
+    background: #C2714F;
+    height: 64px;
+  }
+  .drag-hint {
+    position: absolute;
+    right: -14px;
+    bottom: -24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: #5C5C5C;
+    white-space: nowrap;
+    opacity: 0.7;
+    pointer-events: none;
+  }
+
+  canvas {
+    display: block;
+    border: 1px solid #E8E5DF;
+    border-radius: 4px;
+    background: #fff;
+  }
+
+  .sidebar {
+    width: 260px;
+    flex-shrink: 0;
+    border-left: 1px solid #E8E5DF;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    overflow-y: auto;
+    background: #FAF9F6;
+  }
+
+  .sidebar h2 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 400;
+    font-size: 0.95rem;
+    font-variation-settings: 'WONK' 1, 'SOFT' 100;
+    color: #6B3A2A;
+    margin-bottom: 0.25rem;
+  }
+
+  .summary-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .summary-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: #2C2C2C;
+  }
+  .summary-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .summary-count {
+    font-weight: 500;
+    min-width: 1.2em;
+  }
+  .summary-label {
+    color: #5C5C5C;
+  }
+
+  .legend {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    margin-top: 0.25rem;
+  }
+  .legend-item {
+    cursor: pointer;
+    padding: 0.4rem 0.5rem;
+    border-radius: 4px;
+    transition: background 0.12s;
+  }
+  .legend-item:hover {
+    background: rgba(0,0,0,0.03);
+  }
+  .legend-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .legend-desc {
+    font-size: 0.75rem;
+    color: #5C5C5C;
+    margin-top: 0.15rem;
+    line-height: 1.45;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease, opacity 0.2s;
+    opacity: 0;
+  }
+  .legend-item.open .legend-desc {
+    max-height: 80px;
+    opacity: 1;
+  }
+
+  .textarea-section {
+    margin-top: auto;
+    padding-top: 0.75rem;
+    border-top: 1px solid #E8E5DF;
+  }
+  .textarea-section label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: #5C5C5C;
+    display: block;
+    margin-bottom: 0.35rem;
+  }
+  .textarea-section textarea {
+    width: 100%;
+    height: 120px;
+    font-family: 'Literata', Georgia, serif;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: #2C2C2C;
+    background: #fff;
+    border: 1px solid #E8E5DF;
+    border-radius: 4px;
+    padding: 0.5rem;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .textarea-section textarea:focus {
+    border-color: #C2714F;
+  }
+
+  .perf-counter {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: #5C5C5C;
+    text-align: right;
+    padding: 0.15rem 0;
+  }
+
+  .why-link {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: #C2714F;
+    cursor: pointer;
+    border: none;
+    background: none;
+    padding: 0;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .why-link:hover {
+    color: #6B3A2A;
+  }
+
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(44,44,44,0.3);
+    backdrop-filter: blur(4px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  .modal-overlay.open {
+    display: flex;
+  }
+  .modal {
+    background: #FAF9F6;
+    border: 1px solid #E8E5DF;
+    border-radius: 8px;
+    padding: 2rem;
+    max-width: 480px;
+    width: 90%;
+    position: relative;
+  }
+  .modal h3 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 400;
+    font-size: 1.15rem;
+    font-variation-settings: 'WONK' 1, 'SOFT' 100;
+    color: #6B3A2A;
+    margin-bottom: 0.75rem;
+  }
+  .modal p {
+    font-size: 0.88rem;
+    line-height: 1.65;
+    color: #2C2C2C;
+  }
+  .modal-close {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    color: #5C5C5C;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0.25rem;
+  }
+  .modal-close:hover {
+    color: #2C2C2C;
+  }
+
+  .tooltip {
+    position: fixed;
+    background: #2C2C2C;
+    color: #FAF9F6;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    padding: 0.4rem 0.65rem;
+    border-radius: 4px;
+    pointer-events: none;
+    z-index: 100;
+    max-width: 240px;
+    line-height: 1.4;
+    opacity: 0;
+    transition: opacity 0.12s;
+    white-space: normal;
+  }
+  .tooltip.visible {
+    opacity: 1;
+  }
+
+  .width-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: #5C5C5C;
+    text-align: center;
+    margin-top: 0.35rem;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <h1>The Typographic Linter</h1>
+    <p>Paste text and see every orphan, bad rag, and awkward break highlighted in real time. Resize the container and watch warnings shift.</p>
+  </div>
+
+  <div class="main">
+    <div class="canvas-area">
+      <div class="canvas-container" id="canvas-container">
+        <canvas id="canvas"></canvas>
+        <div class="drag-handle" id="drag-handle"></div>
+        <div class="drag-hint" id="drag-hint">&larr; drag to resize &rarr;</div>
+        <div class="width-label" id="width-label"></div>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <div>
+        <h2>Issues</h2>
+        <div class="summary-grid" id="summary"></div>
+      </div>
+
+      <div>
+        <h2>Legend</h2>
+        <div class="legend" id="legend"></div>
+      </div>
+
+      <div class="textarea-section">
+        <label>paste or edit text</label>
+        <textarea id="input" spellcheck="false"></textarea>
+      </div>
+
+      <div class="perf-counter" id="perf"></div>
+      <button class="why-link" id="why-btn">why we built this</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <button class="modal-close" id="modal-close">&times;</button>
+    <h3>Why We Built This</h3>
+    <p>Typography has rules that everyone feels but nobody checks. Your eye catches the lone word dangling at the end of a paragraph &mdash; you just didn't have a name for it. We pointed pretext at the problem: instead of just flowing text, analyze the flow. Every orphan, every widow, every ragged edge, flagged in real time as you type or resize. A red pen for the shapes your words make.</p>
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script type="module">
+import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
+
+// --- Config ---
+const FONT_SIZE = 17
+const LINE_HEIGHT = 1.55
+const FONT_STR = `${FONT_SIZE}px Literata, Georgia, serif`
+const TEXT_COLOR = '#2C2C2C'
+const MARGIN = 28
+const dpr = window.devicePixelRatio || 1
+
+const COLORS = {
+  orphan:       { fill: '#C2714F', label: 'terracotta' },
+  badRag:       { fill: '#C49A3C', label: 'ochre' },
+  shortLast:    { fill: '#A0522D', label: 'rust' },
+  awkwardBreak: { fill: '#9B8EA8', label: 'lavender' },
+}
+
+const DESCRIPTIONS = {
+  orphan:       'A single word stranded on the last line of a paragraph. It leaves the ending feeling incomplete.',
+  badRag:       'The right edge of a left-aligned paragraph is too uneven. Line lengths vary so much the eye stumbles.',
+  shortLast:    'A final line shorter than a quarter of the column width. The paragraph trails off instead of ending.',
+  awkwardBreak: 'A line ending with a tiny word (1\u20132 characters). It looks like something got left behind.',
+}
+
+const DEFAULT_TEXT = `She had always assumed the letters would come back. Not the physical ones \u2014 those were gone, buried somewhere in the move from the old house to the apartment on Ivy Street \u2014 but the feeling of them. The weight of a page someone had held. The pressure of a ballpoint leaving grooves you could trace with your fingertip in the right light.
+
+It was fall when she finally admitted they wouldn't. She was standing in the kitchen, reading a message on her phone, and realized that no sentence arriving on glass would ever carry that particular gravity. Not because screens are worse. Because nobody writes the way you write when you know the paper is going to outlast the feeling.
+
+The apartment had good light in the mornings. She'd give it that.`
+
+// --- DOM refs ---
+const canvas = document.getElementById('canvas')
+const ctx = canvas.getContext('2d')
+const container = document.getElementById('canvas-container')
+const handle = document.getElementById('drag-handle')
+const hint = document.getElementById('drag-hint')
+const widthLabel = document.getElementById('width-label')
+const input = document.getElementById('input')
+const summaryEl = document.getElementById('summary')
+const legendEl = document.getElementById('legend')
+const perfEl = document.getElementById('perf')
+const tooltipEl = document.getElementById('tooltip')
+const modalOverlay = document.getElementById('modal-overlay')
+const whyBtn = document.getElementById('why-btn')
+const modalClose = document.getElementById('modal-close')
+
+// --- State ---
+let containerWidth = 520
+let issues = []
+let lineData = []
+let paragraphMeta = []
+let animating = false
+let animFrame = null
+
+// --- Init ---
+input.value = DEFAULT_TEXT
+
+// Build legend
+const issueTypes = ['orphan', 'badRag', 'shortLast', 'awkwardBreak']
+const issueLabels = { orphan: 'orphan', badRag: 'bad rag', shortLast: 'short last line', awkwardBreak: 'awkward break' }
+
+legendEl.innerHTML = issueTypes.map(key => `
+  <div class="legend-item" data-type="${key}">
+    <div class="legend-name">
+      <span class="summary-dot" style="background:${COLORS[key].fill}"></span>
+      ${issueLabels[key]}
+    </div>
+    <div class="legend-desc">${DESCRIPTIONS[key]}</div>
+  </div>
+`).join('')
+
+legendEl.querySelectorAll('.legend-item').forEach(el => {
+  el.addEventListener('click', () => el.classList.toggle('open'))
+})
+
+// Modal
+whyBtn.addEventListener('click', () => modalOverlay.classList.add('open'))
+modalClose.addEventListener('click', () => modalOverlay.classList.remove('open'))
+modalOverlay.addEventListener('click', e => {
+  if (e.target === modalOverlay) modalOverlay.classList.remove('open')
+})
+
+// --- Layout + Lint ---
+function layoutAndLint() {
+  const t0 = performance.now()
+  const text = input.value
+  const width = containerWidth - MARGIN * 2
+
+  if (width < 40 || !text.trim()) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    issues = []
+    lineData = []
+    updateSummary()
+    return
+  }
+
+  // Split into paragraphs
+  const paragraphs = text.split(/\n\n+/)
+  lineData = []
+  paragraphMeta = []
+  let y = MARGIN
+
+  for (let pi = 0; pi < paragraphs.length; pi++) {
+    const paraText = paragraphs[pi].trim()
+    if (!paraText) continue
+
+    const prepared = prepareWithSegments(paraText, FONT_STR)
+    const paraLines = []
+    let cursor = 0
+
+    while (true) {
+      const line = layoutNextLine(prepared, cursor, width)
+      if (!line) break
+      cursor = line.end
+      const baseline = y + line.ascent
+      const lineInfo = {
+        x: MARGIN,
+        baseline,
+        y: y,
+        width: line.width,
+        ascent: line.ascent,
+        descent: line.descent,
+        segments: line.segments,
+        paraIndex: pi,
+        text: line.segments.map(s => s.value).join(''),
+      }
+      paraLines.push(lineInfo)
+      lineData.push(lineInfo)
+      const lineH = line.ascent + line.descent
+      y += lineH
+    }
+
+    paragraphMeta.push({ lines: paraLines, index: pi })
+    y += FONT_SIZE * 0.6 // paragraph gap
+  }
+
+  // Resize canvas
+  const totalH = y + MARGIN
+  canvas.width = containerWidth * dpr
+  canvas.height = totalH * dpr
+  canvas.style.width = containerWidth + 'px'
+  canvas.style.height = totalH + 'px'
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+
+  // Analyze issues
+  issues = []
+  for (const para of paragraphMeta) {
+    const lines = para.lines
+    if (lines.length < 2) continue
+
+    // Orphan: last line has a single word and is much shorter
+    const lastLine = lines[lines.length - 1]
+    const words = lastLine.text.trim().split(/\s+/)
+    if (words.length === 1 && lastLine.width < width * 0.5) {
+      issues.push({
+        type: 'orphan',
+        line: lastLine,
+        desc: `"${words[0]}" \u2014 a single word stranded at the end`,
+      })
+    }
+
+    // Short last line
+    if (lastLine.width < width * 0.25 && lastLine.width > 0 && words.length > 1) {
+      issues.push({
+        type: 'shortLast',
+        line: lastLine,
+        desc: `Last line is only ${Math.round(lastLine.width / width * 100)}% of column width`,
+      })
+    } else if (words.length === 1 && lastLine.width < width * 0.25 && !issues.find(i => i.line === lastLine && i.type === 'orphan')) {
+      issues.push({
+        type: 'shortLast',
+        line: lastLine,
+        desc: `Last line is only ${Math.round(lastLine.width / width * 100)}% of column width`,
+      })
+    }
+
+    // Bad rag: high variance in line lengths (exclude last line)
+    if (lines.length >= 3) {
+      const lengths = lines.slice(0, -1).map(l => l.width)
+      const mean = lengths.reduce((a, b) => a + b, 0) / lengths.length
+      const variance = lengths.reduce((a, b) => a + (b - mean) ** 2, 0) / lengths.length
+      const stdDev = Math.sqrt(variance)
+      const coeffOfVar = stdDev / mean
+      if (coeffOfVar > 0.12) {
+        issues.push({
+          type: 'badRag',
+          lines: lines.slice(0, -1),
+          paraLines: lines,
+          desc: `Line-length variation: ${Math.round(coeffOfVar * 100)}%. The right edge is uneven.`,
+        })
+      }
+    }
+
+    // Awkward break: line ending with a short word (1-2 chars)
+    for (let li = 0; li < lines.length - 1; li++) {
+      const lineText = lines[li].text.trim()
+      const lineWords = lineText.split(/\s+/)
+      const lastWord = lineWords[lineWords.length - 1]
+      if (lastWord && lastWord.length <= 2 && /^[a-zA-Z]+$/.test(lastWord)) {
+        issues.push({
+          type: 'awkwardBreak',
+          line: lines[li],
+          desc: `Line ends with "${lastWord}" \u2014 a tiny word left at the break`,
+        })
+      }
+    }
+  }
+
+  // Render
+  render()
+  updateSummary()
+
+  const elapsed = performance.now() - t0
+  perfEl.textContent = `layout + lint: ${elapsed.toFixed(1)}ms`
+}
+
+function render() {
+  ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr)
+  const width = containerWidth - MARGIN * 2
+
+  // Draw annotations first (behind text)
+  for (const issue of issues) {
+    const color = COLORS[issue.type].fill
+
+    if (issue.type === 'orphan' || issue.type === 'shortLast') {
+      const line = issue.line
+      // Underline
+      ctx.save()
+      ctx.strokeStyle = color
+      ctx.lineWidth = 2
+      ctx.globalAlpha = 0.6
+      ctx.setLineDash([3, 2])
+      const uy = line.baseline + 3
+      ctx.beginPath()
+      ctx.moveTo(line.x, uy)
+      ctx.lineTo(line.x + line.width, uy)
+      ctx.stroke()
+      ctx.restore()
+
+      // Highlight background
+      ctx.save()
+      ctx.fillStyle = color
+      ctx.globalAlpha = 0.07
+      ctx.fillRect(line.x - 2, line.y, line.width + 4, line.ascent + line.descent)
+      ctx.restore()
+
+      // Right margin marker
+      ctx.save()
+      ctx.fillStyle = color
+      ctx.globalAlpha = 0.5
+      ctx.beginPath()
+      ctx.arc(MARGIN + width + 10, line.baseline - line.ascent / 2 + line.descent, 3, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.restore()
+    }
+
+    if (issue.type === 'badRag') {
+      // Side bracket on the right margin
+      const firstLine = issue.paraLines[0]
+      const lastLine = issue.paraLines[issue.paraLines.length - 1]
+      const topY = firstLine.y
+      const botY = lastLine.y + lastLine.ascent + lastLine.descent
+      const rx = MARGIN + width + 10
+
+      ctx.save()
+      ctx.strokeStyle = color
+      ctx.lineWidth = 2
+      ctx.globalAlpha = 0.5
+      ctx.beginPath()
+      ctx.moveTo(rx - 3, topY + 2)
+      ctx.lineTo(rx + 3, topY + 2)
+      ctx.lineTo(rx + 3, botY - 2)
+      ctx.lineTo(rx - 3, botY - 2)
+      ctx.stroke()
+      ctx.restore()
+
+      // Draw small ticks at each line end
+      for (const line of issue.lines) {
+        ctx.save()
+        ctx.strokeStyle = color
+        ctx.lineWidth = 1.5
+        ctx.globalAlpha = 0.35
+        const lineEndX = line.x + line.width
+        ctx.beginPath()
+        ctx.moveTo(lineEndX, line.baseline - 3)
+        ctx.lineTo(lineEndX, line.baseline + 3)
+        ctx.stroke()
+        ctx.restore()
+      }
+    }
+
+    if (issue.type === 'awkwardBreak') {
+      const line = issue.line
+      const lastSeg = line.segments[line.segments.length - 1]
+      if (lastSeg) {
+        const sx = line.x + lastSeg.x
+        const sw = lastSeg.width
+        // Highlight the short word
+        ctx.save()
+        ctx.fillStyle = color
+        ctx.globalAlpha = 0.15
+        ctx.fillRect(sx - 1, line.y, sw + 2, line.ascent + line.descent)
+        ctx.restore()
+
+        // Underline
+        ctx.save()
+        ctx.strokeStyle = color
+        ctx.lineWidth = 1.5
+        ctx.globalAlpha = 0.6
+        ctx.setLineDash([2, 2])
+        ctx.beginPath()
+        ctx.moveTo(sx, line.baseline + 2)
+        ctx.lineTo(sx + sw, line.baseline + 2)
+        ctx.stroke()
+        ctx.restore()
+
+        // Margin dot
+        ctx.save()
+        ctx.fillStyle = color
+        ctx.globalAlpha = 0.5
+        ctx.beginPath()
+        ctx.arc(MARGIN + (containerWidth - MARGIN * 2) + 10, line.baseline - line.ascent / 2 + line.descent, 3, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.restore()
+      }
+    }
+  }
+
+  // Draw text
+  ctx.font = FONT_STR
+  ctx.fillStyle = TEXT_COLOR
+  for (const line of lineData) {
+    for (const seg of line.segments) {
+      ctx.fillText(seg.value, line.x + seg.x, line.baseline)
+    }
+  }
+}
+
+function updateSummary() {
+  const counts = {}
+  for (const t of issueTypes) counts[t] = 0
+  for (const issue of issues) counts[issue.type]++
+
+  const total = issues.length
+  summaryEl.innerHTML = issueTypes.map(key => `
+    <div class="summary-item">
+      <span class="summary-dot" style="background:${COLORS[key].fill}"></span>
+      <span class="summary-count">${counts[key]}</span>
+      <span class="summary-label">${issueLabels[key]}${counts[key] !== 1 ? 's' : ''}</span>
+    </div>
+  `).join('') + `
+    <div class="summary-item" style="margin-top:0.25rem;border-top:1px solid #E8E5DF;padding-top:0.4rem;">
+      <span class="summary-count" style="margin-left:1.6rem;">${total}</span>
+      <span class="summary-label">total issue${total !== 1 ? 's' : ''}</span>
+    </div>
+  `
+}
+
+// --- Width label ---
+function updateWidthLabel() {
+  widthLabel.textContent = `${Math.round(containerWidth)}px`
+}
+
+// --- Resize drag ---
+let dragging = false
+let dragStartX = 0
+let dragStartW = 0
+
+handle.addEventListener('pointerdown', e => {
+  dragging = true
+  dragStartX = e.clientX
+  dragStartW = containerWidth
+  handle.classList.add('active')
+  handle.setPointerCapture(e.pointerId)
+  e.preventDefault()
+})
+
+handle.addEventListener('pointermove', e => {
+  if (!dragging) return
+  const dx = e.clientX - dragStartX
+  containerWidth = Math.max(200, Math.min(900, dragStartW + dx))
+  updateWidthLabel()
+  layoutAndLint()
+})
+
+handle.addEventListener('pointerup', () => {
+  dragging = false
+  handle.classList.remove('active')
+})
+
+// --- Text input ---
+let inputDebounce = null
+input.addEventListener('input', () => {
+  clearTimeout(inputDebounce)
+  inputDebounce = setTimeout(layoutAndLint, 60)
+})
+
+// --- Tooltip on canvas hover ---
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect()
+  const mx = e.clientX - rect.left
+  const my = e.clientY - rect.top
+
+  let found = null
+  for (const issue of issues) {
+    if (issue.type === 'badRag') {
+      // Check if near the side bracket
+      const width = containerWidth - MARGIN * 2
+      const rx = MARGIN + width + 10
+      const firstLine = issue.paraLines[0]
+      const lastLine = issue.paraLines[issue.paraLines.length - 1]
+      if (mx >= rx - 12 && mx <= rx + 12 && my >= firstLine.y && my <= lastLine.y + lastLine.ascent + lastLine.descent) {
+        found = issue
+        break
+      }
+    } else {
+      const line = issue.line
+      if (my >= line.y && my <= line.y + line.ascent + line.descent) {
+        if (issue.type === 'awkwardBreak') {
+          const lastSeg = line.segments[line.segments.length - 1]
+          if (lastSeg && mx >= line.x + lastSeg.x - 4 && mx <= line.x + lastSeg.x + lastSeg.width + 4) {
+            found = issue
+            break
+          }
+        } else {
+          if (mx >= line.x - 4 && mx <= line.x + line.width + 20) {
+            found = issue
+            break
+          }
+        }
+      }
+    }
+  }
+
+  if (found) {
+    tooltipEl.textContent = `${issueLabels[found.type]} \u2014 ${found.desc}`
+    tooltipEl.classList.add('visible')
+    tooltipEl.style.left = Math.min(e.clientX + 12, window.innerWidth - 260) + 'px'
+    tooltipEl.style.top = (e.clientY - 32) + 'px'
+    canvas.style.cursor = 'help'
+  } else {
+    tooltipEl.classList.remove('visible')
+    canvas.style.cursor = 'default'
+  }
+})
+
+canvas.addEventListener('mouseleave', () => {
+  tooltipEl.classList.remove('visible')
+  canvas.style.cursor = 'default'
+})
+
+// --- Opening animation: sweep width from narrow to wide ---
+function animateSweep() {
+  animating = true
+  hint.style.opacity = '0'
+  const startW = 240
+  const endW = 520
+  const duration = 2200
+  const t0 = performance.now()
+
+  function step(now) {
+    const elapsed = now - t0
+    const t = Math.min(elapsed / duration, 1)
+    // Ease in-out cubic
+    const ease = t < 0.5
+      ? 4 * t * t * t
+      : 1 - Math.pow(-2 * t + 2, 3) / 2
+
+    containerWidth = startW + (endW - startW) * ease
+    updateWidthLabel()
+    layoutAndLint()
+
+    if (t < 1) {
+      animFrame = requestAnimationFrame(step)
+    } else {
+      animating = false
+      containerWidth = endW
+      updateWidthLabel()
+      layoutAndLint()
+      hint.style.transition = 'opacity 0.5s'
+      hint.style.opacity = '1'
+    }
+  }
+
+  containerWidth = startW
+  updateWidthLabel()
+  layoutAndLint()
+  // Brief pause before sweep
+  setTimeout(() => {
+    animFrame = requestAnimationFrame(step)
+  }, 600)
+}
+
+// --- Font load + boot ---
+document.fonts.ready.then(() => {
+  updateWidthLabel()
+  animateSweep()
+})
+</script>
+</body>
+</html>
