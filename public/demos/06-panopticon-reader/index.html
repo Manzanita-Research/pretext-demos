@@ -365,8 +365,12 @@ btnEyes.addEventListener('click', async () => {
   }
 
   try {
+    // Use ridge regression with the simpler face detector
+    // (MediaPipe face_mesh tries to load .wasm/.binarypb from relative
+    // paths which 404 on static hosts — the fallback tracker still works)
     webgazer
       .setRegression('ridge')
+      .setTracker('TFFacemesh')
       .setGazeListener((data, _timestamp) => {
         if (data == null) return
         gazeX = data.x
