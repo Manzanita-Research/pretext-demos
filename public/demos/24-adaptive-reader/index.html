@@ -583,19 +583,18 @@ function render() {
   // layoutNextLine consumes state from the prepared object)
   const prepared = prepareWithSegments(currentText, fontString)
 
-  // Layout lines using the segments API:
-  // layoutNextLine(prepared, cursor, width) returns { ascent, descent, width, segments, end }
+  // Layout lines: layoutNextLine(prepared, cursor, width) returns { text, ascent, descent, width, end }
   const marginX = (canvasW - textWidthPx) / 2
   const lineHeightPx = s.fontSize * s.lineHeight
   let y = 20
-  let cursor = 0
+  let cursor = { segmentIndex: 0, graphemeIndex: 0 }
   const lines = []
   let safetyCount = 0
 
   while (y + lineHeightPx < canvasH && safetyCount < 2000) {
     const line = layoutNextLine(prepared, cursor, textWidthPx)
     if (!line) break
-    lines.push({ segments: line.segments, ascent: line.ascent, descent: line.descent, lineY: y })
+    lines.push({ text: line.text, ascent: line.ascent, descent: line.descent, lineY: y })
     cursor = line.end
     y += lineHeightPx
     safetyCount++
@@ -612,19 +611,15 @@ function render() {
 
   for (const line of lines) {
     const baseline = line.lineY + line.ascent
-    if (line.segments) {
-      for (const seg of line.segments) {
-        // Apply letter spacing by drawing character by character
-        if (Math.abs(s.letterSpacing) > 0.001) {
-          let cx = marginX + seg.x
-          for (let i = 0; i < seg.value.length; i++) {
-            ctx.fillText(seg.value[i], cx, baseline)
-            cx += ctx.measureText(seg.value[i]).width + (s.letterSpacing * s.fontSize)
-          }
-        } else {
-          ctx.fillText(seg.value, marginX + seg.x, baseline)
-        }
+    // Apply letter spacing by drawing character by character
+    if (Math.abs(s.letterSpacing) > 0.001) {
+      let cx = marginX
+      for (let i = 0; i < line.text.length; i++) {
+        ctx.fillText(line.text[i], cx, baseline)
+        cx += ctx.measureText(line.text[i]).width + (s.letterSpacing * s.fontSize)
       }
+    } else {
+      ctx.fillText(line.text, marginX, baseline)
     }
   }
 }

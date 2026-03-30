@@ -503,7 +503,7 @@ function layoutAndLint() {
 
     const prepared = prepareWithSegments(paraText, FONT_STR)
     const paraLines = []
-    let cursor = 0
+    let cursor = { segmentIndex: 0, graphemeIndex: 0 }
 
     while (true) {
       const line = layoutNextLine(prepared, cursor, width)
@@ -517,9 +517,8 @@ function layoutAndLint() {
         width: line.width,
         ascent: line.ascent,
         descent: line.descent,
-        segments: line.segments,
         paraIndex: pi,
-        text: line.segments.map(s => s.value).join(''),
+        text: line.text,
       }
       paraLines.push(lineInfo)
       lineData.push(lineInfo)
@@ -688,10 +687,15 @@ function render() {
 
     if (issue.type === 'awkwardBreak') {
       const line = issue.line
-      const lastSeg = line.segments[line.segments.length - 1]
-      if (lastSeg) {
-        const sx = line.x + lastSeg.x
-        const sw = lastSeg.width
+      const lineText = line.text.trim()
+      const words = lineText.split(/\s+/)
+      const lastWord = words[words.length - 1]
+      if (lastWord) {
+        ctx.font = FONT_STR
+        const fullWidth = ctx.measureText(lineText).width
+        const withoutLast = lineText.slice(0, lineText.lastIndexOf(lastWord))
+        const sx = line.x + ctx.measureText(withoutLast).width
+        const sw = ctx.measureText(lastWord).width
         // Highlight the short word
         ctx.save()
         ctx.fillStyle = color
@@ -726,10 +730,9 @@ function render() {
   // Draw text
   ctx.font = FONT_STR
   ctx.fillStyle = TEXT_COLOR
+  ctx.textBaseline = 'alphabetic'
   for (const line of lineData) {
-    for (const seg of line.segments) {
-      ctx.fillText(seg.value, line.x + seg.x, line.baseline)
-    }
+    ctx.fillText(line.text, line.x, line.baseline)
   }
 }
 
@@ -814,8 +817,8 @@ canvas.addEventListener('mousemove', e => {
       const line = issue.line
       if (my >= line.y && my <= line.y + line.ascent + line.descent) {
         if (issue.type === 'awkwardBreak') {
-          const lastSeg = line.segments[line.segments.length - 1]
-          if (lastSeg && mx >= line.x + lastSeg.x - 4 && mx <= line.x + lastSeg.x + lastSeg.width + 4) {
+          // Hit test the last word area
+          if (mx >= line.x - 4 && mx <= line.x + line.width + 4) {
             found = issue
             break
           }

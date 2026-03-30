@@ -616,38 +616,50 @@ function containsRedaction(text) {
   return text.includes('\u2588')
 }
 
-// Render a line of text, drawing redaction bars for block chars
-function renderLineSegments(segments, baseline, lineAscent, lineDescent, font) {
+// Render a line of text, drawing redaction bars for █ runs and normal text otherwise
+function renderLineText(text, x, baseline, lineAscent, lineDescent, font) {
   ctx.font = font
   ctx.textBaseline = 'alphabetic'
 
-  for (const seg of segments) {
-    const val = seg.value
-    // Check if this segment contains redaction blocks
-    if (val.includes('\u2588')) {
-      // Draw a redaction bar
+  // Split text into runs of redaction chars (█) and normal text
+  const BLOCK = '\u2588'
+  let cx = x
+  let i = 0
+  while (i < text.length) {
+    if (text[i] === BLOCK) {
+      // Find run of blocks
+      let j = i
+      while (j < text.length && text[j] === BLOCK) j++
+      const run = text.slice(i, j)
+      const w = ctx.measureText(run).width
+      // Draw redaction bar
       const barHeight = lineAscent * 0.9 + lineDescent * 0.3
       const barY = baseline - lineAscent * 0.85
       ctx.fillStyle = REDACT_COLOR
-      // Round corners via path
       const r = 2
-      const x = seg.x
-      const w = seg.width
       ctx.beginPath()
-      ctx.moveTo(x + r, barY)
-      ctx.lineTo(x + w - r, barY)
-      ctx.quadraticCurveTo(x + w, barY, x + w, barY + r)
-      ctx.lineTo(x + w, barY + barHeight - r)
-      ctx.quadraticCurveTo(x + w, barY + barHeight, x + w - r, barY + barHeight)
-      ctx.lineTo(x + r, barY + barHeight)
-      ctx.quadraticCurveTo(x, barY + barHeight, x, barY + barHeight - r)
-      ctx.lineTo(x, barY + r)
-      ctx.quadraticCurveTo(x, barY, x + r, barY)
+      ctx.moveTo(cx + r, barY)
+      ctx.lineTo(cx + w - r, barY)
+      ctx.quadraticCurveTo(cx + w, barY, cx + w, barY + r)
+      ctx.lineTo(cx + w, barY + barHeight - r)
+      ctx.quadraticCurveTo(cx + w, barY + barHeight, cx + w - r, barY + barHeight)
+      ctx.lineTo(cx + r, barY + barHeight)
+      ctx.quadraticCurveTo(cx, barY + barHeight, cx, barY + barHeight - r)
+      ctx.lineTo(cx, barY + r)
+      ctx.quadraticCurveTo(cx, barY, cx + r, barY)
       ctx.closePath()
       ctx.fill()
+      cx += w
+      i = j
     } else {
+      // Find run of normal text
+      let j = i
+      while (j < text.length && text[j] !== BLOCK) j++
+      const run = text.slice(i, j)
       ctx.fillStyle = TEXT_COLOR
-      ctx.fillText(val, seg.x, baseline)
+      ctx.fillText(run, cx, baseline)
+      cx += ctx.measureText(run).width
+      i = j
     }
   }
 }
@@ -657,12 +669,12 @@ function layoutText(text, font, maxWidth, startY) {
   const prepared = prepareWithSegments(text, font)
   const lines = []
   let y = startY
-  let cursor = 0
+  let cursor = { segmentIndex: 0, graphemeIndex: 0 }
   while (true) {
     const line = layoutNextLine(prepared, cursor, maxWidth)
     if (!line) break
     cursor = line.end
-    lines.push({ ...line, y })
+    lines.push({ text: line.text, width: line.width, ascent: line.ascent, descent: line.descent, y })
     y += line.ascent + line.descent
   }
   return { lines, endY: y }
@@ -790,21 +802,11 @@ function renderDocument(level) {
       for (const col of item.colData) {
         for (const line of col.lines) {
           const baseline = line.y + line.ascent
-          // Offset segments by column position
-          const shifted = line.segments.map(s => ({ ...s, x: s.x + col.offsetX }))
-          // First row is header
           if (block.cols[0] === 'Phase') {
             ctx.fillStyle = HEADER_COLOR
-            ctx.font = LABEL_FONT
-            for (const seg of shifted) {
-              if (seg.value.includes('\u2588')) {
-                renderLineSegments([{ ...seg }], baseline, line.ascent, line.descent, LABEL_FONT)
-              } else {
-                ctx.fillText(seg.value, seg.x, baseline)
-              }
-            }
+            renderLineText(line.text, col.offsetX, baseline, line.ascent, line.descent, LABEL_FONT)
           } else {
-            renderLineSegments(shifted, baseline, line.ascent, line.descent, SMALL_FONT)
+            renderLineText(line.text, col.offsetX, baseline, line.ascent, line.descent, SMALL_FONT)
           }
         }
       }
@@ -817,28 +819,14 @@ function renderDocument(level) {
       const baseline = line.y + line.ascent
 
       if (item.align === 'center') {
-        // Center: offset all segments
         const offset = (w - line.width) / 2
-        const shifted = line.segments.map(s => ({ ...s, x: s.x + offset }))
         ctx.fillStyle = item.color || TEXT_COLOR
-        ctx.font = item.font
-        renderLineSegments(shifted, baseline, line.ascent, line.descent, item.font)
+        renderLineText(line.text, offset, baseline, line.ascent, line.descent, item.font)
       } else if (block.type === 'meta') {
-        // Render label portion bold, rest normal
-        ctx.textBaseline = 'alphabetic'
-        for (const seg of line.segments) {
-          if (seg.value.includes('\u2588')) {
-            renderLineSegments([seg], baseline, line.ascent, line.descent, SMALL_FONT)
-          } else {
-            // Crude heuristic: chars before labelLen are the label
-            ctx.font = LABEL_FONT
-            ctx.fillStyle = MUTED_COLOR
-            ctx.fillText(seg.value, seg.x, baseline)
-          }
-        }
+        renderLineText(line.text, 0, baseline, line.ascent, line.descent, SMALL_FONT)
       } else {
         ctx.fillStyle = item.color || TEXT_COLOR
-        renderLineSegments(line.segments, baseline, line.ascent, line.descent, item.font)
+        renderLineText(line.text, 0, baseline, line.ascent, line.descent, item.font)
       }
     }
   }

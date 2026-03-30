@@ -580,7 +580,7 @@ function resizeCanvas(height) {
 function computePretextHeight(text, width) {
   if (!text.trim()) return 0
   const prepared = prepareWithSegments(text, FONT_STR)
-  let cursor = 0
+  let cursor = { segmentIndex: 0, graphemeIndex: 0 }
   let y = 0
   while (true) {
     const line = layoutNextLine(prepared, cursor, width)
@@ -601,30 +601,27 @@ function renderPretextText(text, width) {
   ctx.textBaseline = 'alphabetic'
 
   let y = 0
-  let cursor = 0
-  let lastLine = null
+  let cursor = { segmentIndex: 0, graphemeIndex: 0 }
+  let lastLineY = 0
   while (true) {
     const line = layoutNextLine(prepared, cursor, width)
     if (!line) break
-    lastLine = line
     const baseline = y + line.ascent
-    for (const seg of line.segments) {
-      ctx.fillText(seg.value, seg.x, baseline)
-    }
+    ctx.fillText(line.text, 0, baseline)
+    lastLineY = y
     y += line.ascent + line.descent
     cursor = line.end
   }
 
-  // Draw cursor after last segment
-  if (lastLine && cursorVisible) {
-    const lastSeg = lastLine.segments[lastLine.segments.length - 1]
-    if (lastSeg) {
-      const cursorX = lastSeg.x + lastSeg.width + 2
-      const baseline = (y - lastLine.ascent - lastLine.descent) + lastLine.ascent
-      ctx.fillStyle = CURSOR_COLOR
-      ctx.fillRect(cursorX, baseline - FONT_SIZE * 0.85, 2, FONT_SIZE)
-      ctx.fillStyle = TEXT_COLOR
-    }
+  // Draw cursor after last line
+  if (y > 0 && cursorVisible) {
+    const lastPrepared = prepareWithSegments(text, FONT_STR)
+    // Approximate cursor position at end of last visible text
+    const cursorX = ctx.measureText(text.slice(0, text.length)).width % width
+    const baseline = lastLineY + FONT_SIZE * 0.85
+    ctx.fillStyle = CURSOR_COLOR
+    ctx.fillRect(Math.min(cursorX, width - 4), baseline - FONT_SIZE * 0.7, 2, FONT_SIZE)
+    ctx.fillStyle = TEXT_COLOR
   }
 }
 
