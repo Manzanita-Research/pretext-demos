@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phonetic Topography</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600&family=Literata:opsz,wght@7..72,300;7..72,400&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #08080e; }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  #input-panel {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    z-index: 10;
+  }
+
+  #input-panel.hidden { display: none; }
+
+  .input-btn {
+    background: transparent;
+    border: 1px solid #C2714F66;
+    color: #e8e4dc;
+    font: 1.1rem Fraunces, Georgia, serif;
+    padding: 14px 32px;
+    cursor: pointer;
+    letter-spacing: 0.05em;
+    transition: border-color 0.3s, background 0.3s;
+    width: 260px;
+    text-align: center;
+  }
+
+  .input-btn:hover {
+    border-color: #C2714Fcc;
+    background: #C2714F0a;
+  }
+
+  .input-divider {
+    font: 0.75rem Literata, Georgia, serif;
+    color: #e8e4dc44;
+    letter-spacing: 0.08em;
+  }
+
+  #file-input { display: none; }
+
+  #status-msg {
+    position: fixed;
+    top: 1.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    font: 0.75rem Literata, Georgia, serif;
+    color: #8B9E7Eaa;
+    letter-spacing: 0.04em;
+    z-index: 10;
+    opacity: 0;
+    transition: opacity 0.6s;
+    text-align: center;
+    max-width: 80vw;
+  }
+  #status-msg.visible { opacity: 1; }
+
+  #playback-controls {
+    position: fixed;
+    bottom: 2.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 10;
+    opacity: 0;
+    transition: opacity 0.4s;
+    pointer-events: none;
+  }
+
+  #playback-controls.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  #play-pause-btn {
+    background: transparent;
+    border: 1px solid #C2714F55;
+    color: #e8e4dc;
+    font: 0.8rem Literata, Georgia, serif;
+    padding: 6px 16px;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+    transition: border-color 0.3s;
+  }
+  #play-pause-btn:hover { border-color: #C2714Fcc; }
+
+  #progress-bar {
+    width: 180px;
+    height: 2px;
+    background: #e8e4dc15;
+    border-radius: 1px;
+    position: relative;
+    cursor: pointer;
+  }
+
+  #progress-fill {
+    height: 100%;
+    background: #C2714F88;
+    border-radius: 1px;
+    width: 0%;
+    transition: width 0.1s linear;
+  }
+
+  #progress-time {
+    font: 0.65rem Literata, Georgia, serif;
+    color: #e8e4dc55;
+    letter-spacing: 0.04em;
+    min-width: 40px;
+  }
+
+  #drop-overlay {
+    position: fixed;
+    inset: 0;
+    background: #08080ecc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+
+  #drop-overlay.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  #drop-overlay span {
+    font: 1.1rem Fraunces, Georgia, serif;
+    color: #C2714Faa;
+    letter-spacing: 0.05em;
+    border: 1px dashed #C2714F44;
+    padding: 40px 60px;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="input-panel">
+  <button class="input-btn" id="mic-btn">Use Microphone</button>
+  <span class="input-divider">or</span>
+  <button class="input-btn" id="file-btn">Play Audio File</button>
+  <span class="input-divider">or</span>
+  <button class="input-btn" id="demo-btn">Play Demo Tone</button>
+</div>
+
+<input type="file" id="file-input" accept="audio/*">
+<div id="status-msg"></div>
+
+<div id="playback-controls">
+  <button id="play-pause-btn">pause</button>
+  <div id="progress-bar"><div id="progress-fill"></div></div>
+  <span id="progress-time">0:00</span>
+</div>
+
+<div id="drop-overlay"><span>Drop audio file here</span></div>
+
+<script type="module">
+import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
+
+const canvas = document.getElementById('c')
+const ctx = canvas.getContext('2d')
+const inputPanel = document.getElementById('input-panel')
+const micBtn = document.getElementById('mic-btn')
+const fileBtn = document.getElementById('file-btn')
+const demoBtn = document.getElementById('demo-btn')
+const fileInput = document.getElementById('file-input')
+const statusMsg = document.getElementById('status-msg')
+const playbackControls = document.getElementById('playback-controls')
+const playPauseBtn = document.getElementById('play-pause-btn')
+const progressFill = document.getElementById('progress-fill')
+const progressTime = document.getElementById('progress-time')
+const dropOverlay = document.getElementById('drop-overlay')
+
+const TEXT_COLOR = '#e8e4dc'
+const BG_COLOR = '#08080e'
+const GLOW_COLOR = '#C2714F'
+const ACCENT_COLOR = '#C2714F'
+const FONT = '18px Literata, Georgia'
+const LINE_HEIGHT = 28
+const FFT_SIZE = 256
+const NUM_BANDS = 64
+const MIN_WIDTH_RATIO = 0.15
+const MAX_WIDTH_RATIO = 0.92
+const SMOOTHING = 0.82
+
+const defaultText = 'Speak and watch your words take shape. Your voice becomes the container. Each frequency band sculpts a line — bass at the top, treble at the bottom. The louder the band, the wider the line. Say anything. Read aloud. Hum. Whisper. The typography reshapes itself to the sound of you.'
+
+let currentText = defaultText
+let audioCtx, analyser, freqData, smoothedFreq
+let speechSupported = false
+let recognition = null
+let interimTranscript = ''
+let finalTranscript = ''
+let micActive = false
+let inputMode = 'none' // 'mic', 'file', 'demo', or 'none'
+let renderStarted = false
+
+// Audio file playback state
+let audioSource = null
+let audioBuffer = null
+let audioStartTime = 0
+let audioPauseOffset = 0
+let audioPlaying = false
+let oscillatorNode = null
+
+function showStatus(msg) {
+  statusMsg.textContent = msg
+  statusMsg.classList.add('visible')
+}
+
+function hideStatus() {
+  statusMsg.classList.remove('visible')
+}
+
+function formatTime(seconds) {
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+// Resize canvas to device pixels
+function resize() {
+  const dpr = window.devicePixelRatio || 1
+  canvas.width = window.innerWidth * dpr
+  canvas.height = window.innerHeight * dpr
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+}
+window.addEventListener('resize', resize)
+resize()
+
+// Normalize frequency data (-100..0 dB) to 0..1
+function normalizeFreq(db) {
+  const min = -100
+  const max = -20
+  return Math.max(0, Math.min(1, (db - min) / (max - min)))
+}
+
+// Get line width from frequency band
+function getLineWidth(lineIndex, totalLines, canvasW) {
+  if (!smoothedFreq) return canvasW * MAX_WIDTH_RATIO
+
+  const bandIndex = Math.floor((lineIndex / Math.max(totalLines, 1)) * (NUM_BANDS - 1))
+  const clampedBand = Math.min(bandIndex, NUM_BANDS - 1)
+  const amplitude = smoothedFreq[clampedBand]
+
+  const minW = canvasW * MIN_WIDTH_RATIO
+  const maxW = canvasW * MAX_WIDTH_RATIO
+  return minW + amplitude * (maxW - minW)
+}
+
+// Ensure AudioContext + AnalyserNode exist
+function ensureAudioContext() {
+  if (!audioCtx) {
+    audioCtx = new AudioContext()
+    analyser = audioCtx.createAnalyser()
+    analyser.fftSize = FFT_SIZE
+    analyser.smoothingTimeConstant = 0.6
+    freqData = new Float32Array(analyser.frequencyBinCount)
+    smoothedFreq = new Float32Array(NUM_BANDS).fill(0)
+  }
+}
+
+// Set up microphone
+async function initAudio() {
+  try {
+    ensureAudioContext()
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    const source = audioCtx.createMediaStreamSource(stream)
+    source.connect(analyser)
+    micActive = true
+    inputMode = 'mic'
+    showStatus('listening...')
+    return true
+  } catch (e) {
+    console.warn('Microphone not available:', e)
+    return false
+  }
+}
+
+// Set up speech recognition
+function initSpeech() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+  if (!SR) {
+    speechSupported = false
+    return
+  }
+  speechSupported = true
+  recognition = new SR()
+  recognition.continuous = true
+  recognition.interimResults = true
+  recognition.lang = 'en-US'
+
+  recognition.onresult = (event) => {
+    interimTranscript = ''
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const result = event.results[i]
+      if (result.isFinal) {
+        finalTranscript += result[0].transcript + ' '
+      } else {
+        interimTranscript += result[0].transcript
+      }
+    }
+    const fullText = (finalTranscript + interimTranscript).trim()
+    if (fullText.length > 0) {
+      currentText = fullText
+    }
+  }
+
+  recognition.onerror = (e) => {
+    if (e.error === 'no-speech') return
+    console.warn('Speech recognition error:', e.error)
+  }
+
+  recognition.onend = () => {
+    if (micActive) {
+      try { recognition.start() } catch (e) { /* already started */ }
+    }
+  }
+
+  try { recognition.start() } catch (e) { /* */ }
+}
+
+// Stop any current audio file / demo playback
+function stopPlayback() {
+  if (audioSource) {
+    try { audioSource.stop() } catch (e) { /* */ }
+    audioSource.disconnect()
+    audioSource = null
+  }
+  if (oscillatorNode) {
+    try { oscillatorNode.stop() } catch (e) { /* */ }
+    oscillatorNode.disconnect()
+    oscillatorNode = null
+  }
+  audioPlaying = false
+  audioBuffer = null
+  audioPauseOffset = 0
+  playbackControls.classList.remove('visible')
+}
+
+// Play an audio file buffer
+function playAudioBuffer(buffer) {
+  ensureAudioContext()
+  stopPlayback()
+
+  audioBuffer = buffer
+  inputMode = 'file'
+  audioSource = audioCtx.createBufferSource()
+  audioSource.buffer = buffer
+  audioSource.connect(analyser)
+  analyser.connect(audioCtx.destination)
+
+  audioSource.onended = () => {
+    if (audioPlaying) {
+      audioPlaying = false
+      playPauseBtn.textContent = 'play'
+      audioPauseOffset = 0
+      progressFill.style.width = '0%'
+      progressTime.textContent = formatTime(0)
+    }
+  }
+
+  audioStartTime = audioCtx.currentTime - audioPauseOffset
+  audioSource.start(0, audioPauseOffset)
+  audioPlaying = true
+  playPauseBtn.textContent = 'pause'
+  playbackControls.classList.add('visible')
+  showStatus('playing audio file')
+
+  if (!renderStarted) startRender()
+}
+
+// Handle file selection
+async function handleAudioFile(file) {
+  if (!file || !file.type.startsWith('audio/')) {
+    showStatus('Please select an audio file')
+    return
+  }
+  ensureAudioContext()
+  showStatus('decoding audio...')
+  try {
+    const arrayBuf = await file.arrayBuffer()
+    const decoded = await audioCtx.decodeAudioData(arrayBuf)
+    audioPauseOffset = 0
+    playAudioBuffer(decoded)
+  } catch (e) {
+    console.error('Failed to decode audio:', e)
+    showStatus('Could not decode that audio file')
+  }
+}
+
+// Demo tone: oscillator sweep 200Hz -> 2000Hz over 10 seconds
+function playDemoTone() {
+  ensureAudioContext()
+  stopPlayback()
+
+  inputMode = 'demo'
+  oscillatorNode = audioCtx.createOscillator()
+  const gainNode = audioCtx.createGain()
+  gainNode.gain.value = 0.3
+
+  oscillatorNode.type = 'sine'
+  oscillatorNode.frequency.setValueAtTime(200, audioCtx.currentTime)
+  oscillatorNode.frequency.exponentialRampToValueAtTime(2000, audioCtx.currentTime + 10)
+
+  oscillatorNode.connect(gainNode)
+  gainNode.connect(analyser)
+  analyser.connect(audioCtx.destination)
+
+  audioStartTime = audioCtx.currentTime
+  audioPlaying = true
+  oscillatorNode.start()
+  oscillatorNode.stop(audioCtx.currentTime + 10)
+
+  oscillatorNode.onended = () => {
+    audioPlaying = false
+    inputMode = 'none'
+    playbackControls.classList.remove('visible')
+    showStatus('Demo tone finished. Drop an audio file or use the microphone.')
+  }
+
+  playbackControls.classList.add('visible')
+  playPauseBtn.textContent = 'stop'
+  showStatus('playing demo tone — 200 Hz to 2000 Hz sweep')
+
+  if (!renderStarted) startRender()
+}
+
+// Update frequency data with smoothing
+function updateFrequency() {
+  if (!analyser || !freqData) return
+
+  analyser.getFloatFrequencyData(freqData)
+
+  for (let i = 0; i < NUM_BANDS; i++) {
+    const binStart = Math.floor((i / NUM_BANDS) * freqData.length)
+    const binEnd = Math.floor(((i + 1) / NUM_BANDS) * freqData.length)
+
+    let sum = 0
+    let count = 0
+    for (let b = binStart; b < binEnd && b < freqData.length; b++) {
+      sum += normalizeFreq(freqData[b])
+      count++
+    }
+    const target = count > 0 ? sum / count : 0
+    smoothedFreq[i] = smoothedFreq[i] * SMOOTHING + target * (1 - SMOOTHING)
+  }
+}
+
+// Draw small frequency visualizer in bottom-right corner
+function drawFreqVisualizer(w, h) {
+  if (!smoothedFreq) return
+
+  const vizW = 120
+  const vizH = 40
+  const x0 = w - vizW - 20
+  const y0 = h - vizH - 20
+  const barW = vizW / NUM_BANDS
+
+  ctx.globalAlpha = 0.3
+  for (let i = 0; i < NUM_BANDS; i++) {
+    const amp = smoothedFreq[i]
+    const barH = amp * vizH
+    ctx.fillStyle = ACCENT_COLOR
+    ctx.fillRect(x0 + i * barW, y0 + vizH - barH, barW - 0.5, barH)
+  }
+  ctx.globalAlpha = 1.0
+}
+
+// Update playback progress
+function updateProgress() {
+  if (inputMode === 'file' && audioBuffer && audioPlaying) {
+    const elapsed = audioCtx.currentTime - audioStartTime
+    const duration = audioBuffer.duration
+    const pct = Math.min(100, (elapsed / duration) * 100)
+    progressFill.style.width = pct + '%'
+    progressTime.textContent = formatTime(elapsed)
+  } else if (inputMode === 'demo' && audioPlaying) {
+    const elapsed = audioCtx.currentTime - audioStartTime
+    const pct = Math.min(100, (elapsed / 10) * 100)
+    progressFill.style.width = pct + '%'
+    progressTime.textContent = formatTime(elapsed)
+  }
+}
+
+// Main render loop
+function render() {
+  const w = window.innerWidth
+  const h = window.innerHeight
+
+  // Clear
+  ctx.fillStyle = BG_COLOR
+  ctx.fillRect(0, 0, w, h)
+
+  if (inputMode !== 'none') {
+    updateFrequency()
+  }
+
+  updateProgress()
+
+  // Prepare text layout
+  const prepared = prepareWithSegments(currentText, FONT)
+  ctx.font = FONT
+
+  // First pass: figure out how many lines
+  let cursor = { segmentIndex: 0, graphemeIndex: 0 }
+  const lines = []
+
+  while (true) {
+    const line = layoutNextLine(prepared, cursor, w * MAX_WIDTH_RATIO)
+    if (line === null) break
+    lines.push(line)
+    cursor = line.end
+  }
+
+  const totalLines = lines.length
+
+  // Second pass: lay out with frequency-driven widths
+  cursor = { segmentIndex: 0, graphemeIndex: 0 }
+  const shapedLines = []
+
+  for (let i = 0; true; i++) {
+    const lineW = getLineWidth(i, Math.max(totalLines, 10), w)
+    const line = layoutNextLine(prepared, cursor, lineW)
+    if (line === null) break
+    shapedLines.push({ ...line, targetWidth: lineW, index: i })
+    cursor = line.end
+  }
+
+  // Center the block vertically
+  const blockHeight = shapedLines.length * LINE_HEIGHT
+  let startY = Math.max(40, (h - blockHeight) / 2)
+  const centerX = w / 2
+
+  // Draw each line
+  for (const line of shapedLines) {
+    const y = startY + line.index * LINE_HEIGHT
+
+    const bandIndex = Math.floor((line.index / Math.max(shapedLines.length, 1)) * (NUM_BANDS - 1))
+    const amplitude = smoothedFreq ? smoothedFreq[Math.min(bandIndex, NUM_BANDS - 1)] : 0
+
+    // Glow on loud lines
+    if (amplitude > 0.25) {
+      const glowStrength = (amplitude - 0.25) / 0.75
+      ctx.shadowColor = GLOW_COLOR
+      ctx.shadowBlur = 8 + glowStrength * 20
+      ctx.globalAlpha = 0.6 + glowStrength * 0.4
+    } else {
+      ctx.shadowColor = 'transparent'
+      ctx.shadowBlur = 0
+      ctx.globalAlpha = 0.45 + amplitude * 1.2
+    }
+
+    ctx.fillStyle = TEXT_COLOR
+    ctx.textAlign = 'center'
+    ctx.fillText(line.text, centerX, y)
+  }
+
+  // Reset shadow
+  ctx.shadowColor = 'transparent'
+  ctx.shadowBlur = 0
+  ctx.globalAlpha = 1.0
+
+  // Frequency visualizer
+  drawFreqVisualizer(w, h)
+
+  // Input mode indicator
+  ctx.globalAlpha = 0.35
+  ctx.font = '12px Literata, Georgia'
+  ctx.textAlign = 'left'
+  if (inputMode === 'mic') {
+    ctx.fillStyle = '#8B9E7E'
+    ctx.fillText(speechSupported ? 'listening...' : 'mic active (no speech recognition)', 20, h - 20)
+  } else if (inputMode === 'file') {
+    ctx.fillStyle = '#8B9E7E'
+    ctx.fillText('audio file', 20, h - 20)
+  } else if (inputMode === 'demo') {
+    ctx.fillStyle = '#8B9E7E'
+    ctx.fillText('demo tone', 20, h - 20)
+  }
+  ctx.globalAlpha = 1.0
+
+  requestAnimationFrame(render)
+}
+
+function startRender() {
+  if (renderStarted) return
+  renderStarted = true
+  render()
+}
+
+// --- Event handlers ---
+
+micBtn.addEventListener('click', async () => {
+  const micWorked = await initAudio()
+  if (micWorked) {
+    inputPanel.classList.add('hidden')
+    initSpeech()
+    startRender()
+  } else {
+    showStatus('Microphone not available. Try an audio file, or use HTTPS for mic access.')
+  }
+})
+
+fileBtn.addEventListener('click', () => {
+  fileInput.click()
+})
+
+fileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0]
+  if (file) {
+    inputPanel.classList.add('hidden')
+    handleAudioFile(file)
+  }
+})
+
+demoBtn.addEventListener('click', () => {
+  inputPanel.classList.add('hidden')
+  playDemoTone()
+})
+
+// Play/pause for audio file playback
+playPauseBtn.addEventListener('click', () => {
+  if (inputMode === 'demo') {
+    // Stop demo tone
+    stopPlayback()
+    inputMode = 'none'
+    showStatus('Drop an audio file here, or use HTTPS for microphone access')
+    return
+  }
+
+  if (!audioBuffer) return
+
+  if (audioPlaying) {
+    // Pause
+    audioPauseOffset = audioCtx.currentTime - audioStartTime
+    if (audioSource) {
+      try { audioSource.stop() } catch (e) { /* */ }
+      audioSource.disconnect()
+      audioSource = null
+    }
+    audioPlaying = false
+    playPauseBtn.textContent = 'play'
+  } else {
+    // Resume
+    playAudioBuffer(audioBuffer)
+  }
+})
+
+// Drag and drop
+let dragCounter = 0
+
+document.addEventListener('dragenter', (e) => {
+  e.preventDefault()
+  dragCounter++
+  dropOverlay.classList.add('visible')
+})
+
+document.addEventListener('dragleave', (e) => {
+  e.preventDefault()
+  dragCounter--
+  if (dragCounter <= 0) {
+    dragCounter = 0
+    dropOverlay.classList.remove('visible')
+  }
+})
+
+document.addEventListener('dragover', (e) => {
+  e.preventDefault()
+})
+
+document.addEventListener('drop', (e) => {
+  e.preventDefault()
+  dragCounter = 0
+  dropOverlay.classList.remove('visible')
+  const file = e.dataTransfer.files[0]
+  if (file) {
+    inputPanel.classList.add('hidden')
+    handleAudioFile(file)
+  }
+})
+</script>
+</body>
+</html>

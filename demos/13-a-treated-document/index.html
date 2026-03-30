@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A Treated Document</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,700;1,9..144,400&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;1,7..72,400&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #2a2520;
+    color: #e8e4dc;
+    font-family: 'Literata', Georgia, serif;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .main-area {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+  canvas {
+    flex: 1;
+    display: block;
+    cursor: pointer;
+    min-width: 0;
+  }
+  .poem-panel {
+    width: 280px;
+    min-width: 280px;
+    background: rgba(0,0,0,0.25);
+    border-left: 1px solid rgba(255,255,255,0.06);
+    padding: 32px 24px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+  .poem-panel h2 {
+    font-family: 'Fraunces', serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: rgba(250,249,246,0.4);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+  .poem-text {
+    font-family: 'Literata', Georgia, serif;
+    font-size: 15px;
+    line-height: 1.7;
+    color: #FAF9F6;
+    white-space: pre-wrap;
+    flex: 1;
+    font-style: italic;
+  }
+  .poem-count {
+    margin-top: 16px;
+    font-family: 'Literata', serif;
+    font-size: 12px;
+    color: rgba(250,249,246,0.25);
+  }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 12px 24px;
+    background: rgba(0,0,0,0.2);
+    border-top: 1px solid rgba(255,255,255,0.06);
+    font-size: 13px;
+    color: #888;
+    font-family: 'Literata', serif;
+  }
+  .controls button {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: #ccc;
+    padding: 6px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+  }
+  .controls button:hover { background: rgba(255,255,255,0.14); }
+  .controls label { display: flex; align-items: center; gap: 6px; }
+  .controls input[type="range"] { width: 80px; accent-color: #C2714F; }
+  #wordCount { color: #C2714F; }
+  @media (max-width: 700px) {
+    .main-area { flex-direction: column; }
+    .poem-panel { width: 100%; min-width: 0; max-height: 180px; border-left: none; border-top: 1px solid rgba(255,255,255,0.06); }
+  }
+</style>
+</head>
+<body>
+<div class="main-area">
+  <canvas id="canvas"></canvas>
+  <div class="poem-panel">
+    <h2>What Remains</h2>
+    <div class="poem-text" id="poemText"></div>
+    <div class="poem-count" id="poemCount"></div>
+  </div>
+</div>
+<div class="controls">
+  <button id="resetBtn">Reset</button>
+  <label>Speed <input type="range" id="speedSlider" min="400" max="4000" value="2000" step="100"></label>
+  <span id="wordCount"></span>
+  <span style="margin-left:auto;opacity:0.4;font-size:12px">click a word to erase it — or let time do the work</span>
+</div>
+<script type="module">
+import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
+
+const canvas = document.getElementById('canvas')
+const ctx = canvas.getContext('2d')
+const dpr = window.devicePixelRatio || 1
+
+// A passage written so the fragments will be evocative
+const SOURCE_TEXT = `There is a field at the edge of memory where the grasses know your name. You walked there once in autumn when the oaks were letting go of everything they held. The light came through in sheets of gold and landed on the water like a hymn. You stood still long enough to hear the creek forgetting where it came from. The stones had been there longer than any word for stone. Moss covered what needed covering. Silence held what sound could not. A bird you could not name called out across the valley and something in your chest answered without asking permission. The hills remembered rain the way skin remembers touch — not the fact of it but the feeling after. You wanted to stay but the path kept going and your feet trusted the path more than your heart trusted the stillness. So you walked. And the field closed behind you like a book no one was reading. But the grasses still know your name. They say it to the wind when no one is listening. They will say it long after you forget you were ever a body standing in the last light of October, breathing, barely breathing, watching the oaks let go.`
+
+// Sharpie mark color — not pure black, slightly warm
+const SHARPIE_COLOR = '#1a1a1a'
+
+let words = []
+let marks = [] // sharpie marks keyed by word id
+let totalWords = 0
+let lastEraseTime = 0
+let linePositions = []
+let fontSize = 18
+let lineHeight = 30
+let margin = 48
+let maxWidth = 560
+let prepared = null
+let animatingWords = []
+let allWordPositions = [] // ALL words positioned once, fixed layout
+let noisePoints = [] // pre-computed paper texture
+
+function initWords() {
+  const raw = SOURCE_TEXT.split(/\s+/)
+  words = raw.map((text, i) => ({ text, erased: false, fadeOut: 0, id: i, survivorGlow: 0 }))
+  totalWords = words.length
+  marks = []
+  animatingWords = []
+  lastEraseTime = performance.now()
+  relayout()
+  updatePoem()
+}
+
+function getSurvivingWords() {
+  return words.filter(w => !w.erased && w.fadeOut === 0)
+}
+
+function getSurvivingText() {
+  return getSurvivingWords().map(w => w.text).join(' ')
+}
+
+function relayout() {
+  // Layout ALL words (the full source text), positions are fixed
+  const text = SOURCE_TEXT
+  if (!text) { linePositions = []; allWordPositions = []; return }
+  const font = `${fontSize}px Literata, Georgia, serif`
+  try {
+    prepared = prepareWithSegments(text, font)
+  } catch(e) { return }
+
+  linePositions = []
+  let cursor = { segmentIndex: 0, graphemeIndex: 0 }
+  let y = margin + 50
+  while (true) {
+    const line = layoutNextLine(prepared, cursor, maxWidth)
+    if (!line) break
+    linePositions.push({ text: line.text, x: margin, y, width: line.width })
+    cursor = line.end
+    y += lineHeight
+  }
+
+  // Build position map for ALL words
+  allWordPositions = []
+  const allRaw = SOURCE_TEXT.split(/\s+/)
+  let wordIdx = 0
+  ctx.font = `${fontSize}px Literata, Georgia, serif`
+  for (const lp of linePositions) {
+    const lineWords = lp.text.split(/\s+/).filter(Boolean)
+    let x = lp.x
+    for (const lw of lineWords) {
+      const ww = ctx.measureText(lw).width
+      const sw = ctx.measureText(lw + ' ').width
+      if (wordIdx < allRaw.length) {
+        allWordPositions.push({
+          x, y: lp.y,
+          width: ww,
+          wordIndex: wordIdx,
+          text: lw
+        })
+      }
+      x += sw
+      wordIdx++
+    }
+  }
+}
+
+function generateNoise(width, height) {
+  noisePoints = []
+  for (let i = 0; i < 300; i++) {
+    noisePoints.push({
+      x: Math.random() * width,
+      y: Math.random() * height,
+      light: Math.random() > 0.5,
+    })
+  }
+}
+
+function resize() {
+  const rect = canvas.getBoundingClientRect()
+  canvas.width = rect.width * dpr
+  canvas.height = rect.height * dpr
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  maxWidth = Math.min(rect.width - margin * 2, 620)
+  generateNoise(rect.width, rect.height)
+  relayout()
+}
+
+function eraseWord(index) {
+  if (words[index].erased) return
+  words[index].fadeOut = 1
+  animatingWords.push(index)
+}
+
+function eraseRandom() {
+  const surviving = getSurvivingWords()
+  if (surviving.length <= 3) return
+
+  // Bias toward removing less "poetic" words — articles, prepositions, conjunctions
+  const boring = ['the', 'a', 'an', 'of', 'to', 'in', 'for', 'and', 'but', 'or', 'is', 'it', 'was', 'that', 'not', 'you', 'your', 'its', 'had', 'has', 'were', 'been', 'than', 'so', 'no', 'are']
+  const weighted = []
+  for (const w of surviving) {
+    const isBoring = boring.includes(w.text.toLowerCase().replace(/[.,;:!?]/g, ''))
+    // Boring words 3x more likely to be erased
+    const weight = isBoring ? 3 : 1
+    for (let i = 0; i < weight; i++) weighted.push(w)
+  }
+  const pick = weighted[Math.floor(Math.random() * weighted.length)]
+  eraseWord(pick.id)
+}
+
+function addMark(wordText, wordX, wordY, wordW) {
+  // Create sharpie-style crossed-out strokes at the word position
+  const numStrokes = 2 + Math.floor(Math.random() * 2) // 2-3 strokes
+  const strokes = []
+
+  for (let i = 0; i < numStrokes; i++) {
+    // Each stroke is a series of control points for a wobbly line
+    const angle = (Math.random() - 0.5) * 0.09 // 2-5 degree tilt
+    const yOffset = (Math.random() - 0.5) * 4 // slight vertical variation per stroke
+    const thickness = 2.5 + Math.random() * 2.5 // base thickness 2.5-5px
+    const overshootL = 2 + Math.random() * 4
+    const overshootR = 2 + Math.random() * 4
+
+    // Generate wobble control points along the stroke
+    const numPoints = 5 + Math.floor(Math.random() * 4)
+    const points = []
+    for (let p = 0; p < numPoints; p++) {
+      const t = p / (numPoints - 1)
+      points.push({
+        t,
+        wobbleY: (Math.random() - 0.5) * 2.5, // vertical wobble
+        thicknessMul: 0.6 + Math.sin(t * Math.PI) * 0.8 + Math.random() * 0.3, // thicker in middle
+      })
+    }
+
+    strokes.push({
+      angle,
+      yOffset,
+      thickness,
+      overshootL,
+      overshootR,
+      points,
+    })
+  }
+
+  marks.push({
+    x: wordX,
+    y: wordY,
+    w: wordW,
+    strokes,
+    opacity: 0,
+    targetOpacity: 0.92 + Math.random() * 0.08, // nearly fully opaque
+  })
+}
+
+// Format surviving text as a poem with line breaks at natural pauses
+function formatAsPoem(text) {
+  if (!text.trim()) return ''
+  // Break at punctuation, conjunctions, prepositions that feel like breath marks
+  const breakBefore = ['and', 'but', 'where', 'when', 'like', 'not', 'so', 'the', 'they', 'you', 'a']
+  const words = text.split(/\s+/).filter(Boolean)
+  if (words.length === 0) return ''
+
+  let lines = []
+  let currentLine = []
+  let wordsInLine = 0
+
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i]
+    const clean = w.toLowerCase().replace(/[.,;:!?]/g, '')
+    const prevEndsWithPunct = currentLine.length > 0 && /[.,;:!?—]$/.test(currentLine[currentLine.length - 1])
+
+    // Break after punctuation, or before certain words if line is long enough
+    if (prevEndsWithPunct && wordsInLine >= 2) {
+      lines.push(currentLine.join(' '))
+      currentLine = []
+      wordsInLine = 0
+    } else if (wordsInLine >= 4 && breakBefore.includes(clean)) {
+      lines.push(currentLine.join(' '))
+      currentLine = []
+      wordsInLine = 0
+    }
+
+    currentLine.push(w)
+    wordsInLine++
+  }
+  if (currentLine.length > 0) lines.push(currentLine.join(' '))
+
+  return lines.join('\n')
+}
+
+function updatePoem() {
+  const surviving = getSurvivingText()
+  const poem = formatAsPoem(surviving)
+  document.getElementById('poemText').textContent = poem
+  const count = getSurvivingWords().length
+  const erased = totalWords - count
+  document.getElementById('poemCount').textContent = `${erased} words returned to silence`
+}
+
+canvas.addEventListener('click', (e) => {
+  const rect = canvas.getBoundingClientRect()
+  const mx = e.clientX - rect.left
+  const my = e.clientY - rect.top
+
+  let bestDist = Infinity
+  let bestIdx = -1
+
+  for (const wp of allWordPositions) {
+    // Only allow clicking non-erased, non-fading words
+    const w = words[wp.wordIndex]
+    if (w.erased || w.fadeOut > 0) continue
+    const cx = wp.x + wp.width / 2
+    const cy = wp.y - fontSize * 0.3
+    const dist = Math.hypot(mx - cx, my - cy)
+    if (dist < bestDist && dist < 40) {
+      bestDist = dist
+      bestIdx = wp.wordIndex
+    }
+  }
+
+  if (bestIdx >= 0) {
+    eraseWord(bestIdx)
+  }
+})
+
+document.getElementById('resetBtn').addEventListener('click', initWords)
+
+function render(now) {
+  requestAnimationFrame(render)
+
+  const speed = parseInt(document.getElementById('speedSlider').value)
+  const rect = canvas.getBoundingClientRect()
+
+  // Auto-erase
+  const survivingCount = getSurvivingWords().length
+  if (now - lastEraseTime > speed && survivingCount > 3) {
+    eraseRandom()
+    lastEraseTime = now
+  }
+
+  // Update fading words
+  let needsUpdate = false
+  for (let i = animatingWords.length - 1; i >= 0; i--) {
+    const idx = animatingWords[i]
+    words[idx].fadeOut -= 0.015
+    if (words[idx].fadeOut <= 0) {
+      words[idx].fadeOut = 0
+      words[idx].erased = true
+      // Find this word's fixed position
+      const wp = allWordPositions.find(p => p.wordIndex === idx)
+      if (wp) {
+        addMark(words[idx].text, wp.x, wp.y, wp.width)
+      }
+      animatingWords.splice(i, 1)
+      needsUpdate = true
+    }
+  }
+
+  if (needsUpdate) {
+    updatePoem()
+  }
+
+  // Update mark fade-in
+  for (const m of marks) {
+    if (m.opacity < m.targetOpacity) m.opacity = Math.min(m.opacity + 0.06, m.targetOpacity)
+  }
+
+  // Update survivor glow — surviving words glow brighter as more words vanish
+  const survivalRatio = 1 - (survivingCount / totalWords)
+  for (const w of words) {
+    if (!w.erased && w.fadeOut === 0) {
+      w.survivorGlow = survivalRatio
+    }
+  }
+
+  // Draw
+  ctx.clearRect(0, 0, rect.width, rect.height)
+
+  // Warm paper-like background on canvas
+  const bg = ctx.createLinearGradient(0, 0, 0, rect.height)
+  bg.addColorStop(0, '#2e2823')
+  bg.addColorStop(0.5, '#2a2520')
+  bg.addColorStop(1, '#252019')
+  ctx.fillStyle = bg
+  ctx.fillRect(0, 0, rect.width, rect.height)
+
+  // Subtle paper texture noise (pre-computed positions)
+  ctx.globalAlpha = 0.015
+  for (const np of noisePoints) {
+    ctx.fillStyle = np.light ? '#fff' : '#000'
+    ctx.fillRect(np.x, np.y, 1, 1)
+  }
+  ctx.globalAlpha = 1
+
+  // Title
+  ctx.font = '24px Fraunces, serif'
+  ctx.fillStyle = 'rgba(250,249,246,0.3)'
+  ctx.fillText('A Treated Document', margin, margin + 10)
+
+  // Subtitle
+  ctx.font = '12px Literata, serif'
+  ctx.fillStyle = 'rgba(250,249,246,0.15)'
+  ctx.fillText('erasure finds the poem hiding in the prose', margin, margin + 30)
+
+  // Text rendering — all words at fixed positions
+  ctx.shadowColor = 'transparent'
+  ctx.shadowBlur = 0
+  ctx.font = `${fontSize}px Literata, Georgia, serif`
+
+  for (const wp of allWordPositions) {
+    const w = words[wp.wordIndex]
+
+    if (w.erased) {
+      // Erased words: render dimly underneath (sharpie marks will cover them)
+      ctx.globalAlpha = 0.35
+      ctx.fillStyle = 'rgba(250, 249, 246, 0.5)'
+      ctx.fillText(wp.text, wp.x, wp.y)
+      ctx.globalAlpha = 1
+    } else if (w.fadeOut > 0) {
+      // Fading word
+      ctx.globalAlpha = w.fadeOut
+      ctx.fillStyle = '#5C5C5C'
+      ctx.fillText(wp.text, wp.x, wp.y)
+      ctx.globalAlpha = 1
+    } else {
+      // Surviving word — gets brighter as more words vanish
+      const glow = w.survivorGlow
+      const r = 250, g = 249, b = 246
+      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${0.7 + glow * 0.3})`
+
+      if (glow > 0.6) {
+        ctx.shadowColor = `rgba(250, 249, 246, ${(glow - 0.6) * 0.4})`
+        ctx.shadowBlur = 4 + glow * 6
+      }
+
+      ctx.fillText(wp.text, wp.x, wp.y)
+      ctx.shadowColor = 'transparent'
+      ctx.shadowBlur = 0
+    }
+  }
+
+  // Sharpie marks (drawn ON TOP of text)
+  ctx.shadowColor = 'transparent'
+  ctx.shadowBlur = 0
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+
+  for (const m of marks) {
+    if (m.opacity <= 0) continue
+    ctx.globalAlpha = m.opacity
+
+    for (const stroke of m.strokes) {
+      ctx.save()
+      // Rotate around the center of the word
+      const cx = m.x + m.w / 2
+      const cy = m.y - fontSize * 0.35 + stroke.yOffset
+      ctx.translate(cx, cy)
+      ctx.rotate(stroke.angle)
+
+      const startX = -m.w / 2 - stroke.overshootL
+      const endX = m.w / 2 + stroke.overshootR
+      const totalW = endX - startX
+
+      // Draw the stroke as a filled path with variable thickness
+      ctx.beginPath()
+      // Top edge going left to right
+      for (let i = 0; i < stroke.points.length; i++) {
+        const pt = stroke.points[i]
+        const px = startX + pt.t * totalW
+        const halfH = stroke.thickness * pt.thicknessMul / 2
+        const py = pt.wobbleY - halfH
+        if (i === 0) ctx.moveTo(px, py)
+        else ctx.lineTo(px, py)
+      }
+      // Bottom edge going right to left
+      for (let i = stroke.points.length - 1; i >= 0; i--) {
+        const pt = stroke.points[i]
+        const px = startX + pt.t * totalW
+        const halfH = stroke.thickness * pt.thicknessMul / 2
+        const py = pt.wobbleY + halfH
+        ctx.lineTo(px, py)
+      }
+      ctx.closePath()
+      ctx.fillStyle = SHARPIE_COLOR
+      ctx.fill()
+
+      ctx.restore()
+    }
+  }
+  ctx.globalAlpha = 1
+
+  // Word count
+  const remaining = getSurvivingWords().length
+  document.getElementById('wordCount').textContent = `${totalWords} → ${remaining} words remaining`
+}
+
+window.addEventListener('resize', resize)
+resize()
+initWords()
+requestAnimationFrame(render)
+</script>
+</body>
+</html>

@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Soma Text</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,700;1,9..144,300&family=Literata:ital,opsz,wght@0,7..72,300;0,7..72,400;0,7..72,500;1,7..72,300;1,7..72,400&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #08080e; }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  #start-btn {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    z-index: 10;
+    background: #08080e;
+    transition: opacity 0.8s;
+  }
+
+  #start-btn h1 {
+    font: 500 2rem/1.2 'Fraunces', Georgia, serif;
+    color: #8B9E7E;
+    letter-spacing: 0.02em;
+    margin-bottom: 0.5rem;
+  }
+
+  #start-btn p {
+    font: 300 0.9rem/1.6 'Literata', Georgia, serif;
+    color: #e8e4dc88;
+    max-width: 28rem;
+    text-align: center;
+    margin-bottom: 1rem;
+  }
+
+  #start-btn button {
+    background: transparent;
+    border: 1px solid #8B9E7E44;
+    color: #8B9E7E;
+    font: 400 1rem 'Literata', Georgia, serif;
+    padding: 0.8rem 2.2rem;
+    cursor: pointer;
+    letter-spacing: 0.06em;
+    transition: border-color 0.4s, color 0.4s;
+  }
+
+  #start-btn button:hover {
+    border-color: #8B9E7E;
+    color: #e8e4dc;
+  }
+
+  #start-btn.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  #camera-status {
+    position: fixed;
+    top: 1.5rem;
+    left: 1.5rem;
+    font: 300 0.65rem/1.4 'Literata', Georgia, serif;
+    letter-spacing: 0.1em;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    opacity: 0;
+    transition: opacity 0.6s;
+  }
+
+  #camera-status.visible { opacity: 1; }
+
+  #camera-status .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #C49A3C;
+    transition: background 0.4s;
+  }
+
+  #camera-status.active .dot { background: #8B9E7E; }
+  #camera-status.error .dot { background: #C2714F; }
+
+  #status {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    font: 300 0.65rem/1.4 'Literata', Georgia, serif;
+    color: #e8e4dc33;
+    letter-spacing: 0.1em;
+    text-align: right;
+  }
+
+  #label {
+    position: fixed;
+    bottom: 1.5rem;
+    left: 1.5rem;
+    font: 300 0.65rem/1.4 'Literata', Georgia, serif;
+    color: #e8e4dc33;
+    letter-spacing: 0.1em;
+  }
+
+  #motion-meter {
+    position: fixed;
+    top: 1.5rem;
+    right: 1.5rem;
+    width: 4px;
+    height: 80px;
+    background: #e8e4dc11;
+    border-radius: 2px;
+    z-index: 5;
+    opacity: 0;
+    transition: opacity 0.6s;
+  }
+
+  #motion-meter.visible { opacity: 1; }
+
+  #motion-meter .fill {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    border-radius: 2px;
+    background: #8B9E7E;
+    transition: height 0.15s, background-color 0.4s;
+  }
+
+  #motion-meter .label {
+    position: absolute;
+    top: -1.2rem;
+    right: 0;
+    font: 300 0.5rem/1 'Literata', Georgia, serif;
+    color: #e8e4dc33;
+    letter-spacing: 0.1em;
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+<div id="start-btn">
+  <h1>soma text</h1>
+  <p>Text that responds to your body. The camera watches your motion and stillness. The words rearrange around your presence.</p>
+  <button>begin</button>
+</div>
+<canvas id="canvas"></canvas>
+<div id="camera-status"><span class="dot"></span><span class="text"></span></div>
+<div id="motion-meter"><span class="label">motion</span><span class="fill"></span></div>
+<div id="status"></div>
+<div id="label">soma text</div>
+<script type="module">
+import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
+
+const PASSAGE = `You are here. You are reading. Your body is doing a thousand things you are not aware of right now. Your eyes are moving in saccades, tiny jumps between fixation points, reconstructing meaning from fragments. Your chest is rising and falling. Your heart has been beating this whole time without your permission. There is a weight where your body meets the chair, or the floor, or whatever is holding you. You probably were not thinking about that weight until just now. Notice your hands. Notice where your tongue rests in your mouth. Notice the temperature of the air entering your nostrils. These are not distractions from reading. They are the condition of reading. Every word you have ever understood was understood by a body. Meaning does not float free. It is carried in breath and blood and the particular way your nervous system learned to make sense of marks on a surface. You are an animal reading. You are a nervous system interpreting patterns. And right now, in this moment, the text is watching you back. It can feel how still you are, how close you have come, whether you are restless or settled. The words rearrange themselves around your presence. Hold still and they will calm. Move and they scatter. Come closer and they grow to meet you. Pull away and they shrink, becoming dense and private. This is not a metaphor. This is what is happening. The camera sees your motion, your proximity, and the text responds. You are not just reading. You are in a feedback loop with language itself. The body shapes the text. The text mirrors the body. Somewhere between the two, meaning arises. Not in the words alone. Not in the body alone. In the space between.`
+
+const FONT_BASE = 17
+const FONT_FAMILY = "'Literata', Georgia, serif"
+const LINE_HEIGHT_RATIO = 1.65
+const MAX_WIDTH = 580
+const MARGIN = 60
+const BG = '#08080e'
+
+// Manzanita brand colors
+const COLOR_CALM = [139, 158, 126]      // sage #8B9E7E
+const COLOR_AGITATED = [194, 113, 79]   // terracotta #C2714F
+const OCHRE = '#C49A3C'
+
+const canvas = document.getElementById('canvas')
+const ctx = canvas.getContext('2d')
+const statusEl = document.getElementById('status')
+const cameraStatusEl = document.getElementById('camera-status')
+const cameraStatusText = cameraStatusEl.querySelector('.text')
+const motionMeterEl = document.getElementById('motion-meter')
+const motionFillEl = motionMeterEl.querySelector('.fill')
+
+let W, H, dpr
+
+function resize() {
+  dpr = window.devicePixelRatio || 1
+  W = window.innerWidth
+  H = window.innerHeight
+  canvas.width = W * dpr
+  canvas.height = H * dpr
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+}
+resize()
+window.addEventListener('resize', resize)
+
+// --- Signals ---
+let motionLevel = 0       // 0 = still, 1 = moving a lot
+let brightnessLevel = 0.5 // 0 = dark/far, 1 = bright/close
+let stillnessScore = 0    // increases the longer you hold still
+let usingCamera = false
+
+// Smoothed values for rendering
+let smoothMotion = 0
+let smoothBrightness = 0.5
+let smoothStillness = 0
+
+// --- Mouse fallback ---
+let mouseX = W / 2, mouseY = H / 2
+let prevMouseX = W / 2, prevMouseY = H / 2
+let mouseSpeed = 0
+let smoothMouseSpeed = 0
+let mouseActive = false
+
+canvas.addEventListener('pointermove', (e) => {
+  mouseX = e.clientX
+  mouseY = e.clientY
+  mouseActive = true
+})
+
+// --- Camera status display ---
+function setCameraStatus(state, message) {
+  cameraStatusEl.className = `visible ${state}`
+  cameraStatusText.textContent = message
+  cameraStatusEl.style.color = state === 'active' ? '#8B9E7E' :
+                                 state === 'error' ? '#C2714F' : OCHRE
+}
+
+// --- Webcam setup ---
+let videoEl = null
+let hiddenCanvas = null
+let hiddenCtx = null
+let prevFrame = null
+const SAMPLE_W = 160
+const SAMPLE_H = 120
+let cameraFrameCount = 0
+
+async function initCamera() {
+  setCameraStatus('pending', 'requesting camera access...')
+
+  try {
+    // Check if getUserMedia is available
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error('getUserMedia not supported')
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        width: { ideal: 320 },
+        height: { ideal: 240 },
+        facingMode: 'user',
+        frameRate: { ideal: 30 }
+      },
+      audio: false
+    })
+
+    videoEl = document.createElement('video')
+    videoEl.srcObject = stream
+    videoEl.setAttribute('playsinline', '')
+    videoEl.setAttribute('autoplay', '')
+    videoEl.muted = true
+
+    // Wait for video metadata to load so we know dimensions are ready
+    await new Promise((resolve, reject) => {
+      videoEl.onloadedmetadata = resolve
+      videoEl.onerror = reject
+      setTimeout(() => reject(new Error('Video metadata timeout')), 5000)
+    })
+
+    await videoEl.play()
+
+    // Verify the video is actually producing frames
+    if (videoEl.videoWidth === 0 || videoEl.videoHeight === 0) {
+      throw new Error('Video stream has no dimensions')
+    }
+
+    hiddenCanvas = document.createElement('canvas')
+    hiddenCanvas.width = SAMPLE_W
+    hiddenCanvas.height = SAMPLE_H
+    hiddenCtx = hiddenCanvas.getContext('2d', { willReadFrequently: true })
+
+    // Do a test frame capture to verify everything works
+    hiddenCtx.drawImage(videoEl, 0, 0, SAMPLE_W, SAMPLE_H)
+    const testData = hiddenCtx.getImageData(0, 0, SAMPLE_W, SAMPLE_H)
+    let nonZero = 0
+    for (let i = 0; i < testData.data.length; i += 4) {
+      if (testData.data[i] > 0 || testData.data[i+1] > 0 || testData.data[i+2] > 0) {
+        nonZero++
+        break
+      }
+    }
+
+    usingCamera = true
+    setCameraStatus('active', 'camera active')
+
+    // Fade out the status after a few seconds
+    setTimeout(() => {
+      if (usingCamera) {
+        cameraStatusEl.style.transition = 'opacity 2s'
+        cameraStatusEl.style.opacity = '0.4'
+      }
+    }, 3000)
+
+    return true
+  } catch (e) {
+    console.warn('Camera not available:', e.message || e)
+    usingCamera = false
+    videoEl = null
+    setCameraStatus('error', 'no camera — using mouse')
+
+    // Fade to subtle after a few seconds
+    setTimeout(() => {
+      cameraStatusEl.style.transition = 'opacity 2s'
+      cameraStatusEl.style.opacity = '0.3'
+    }, 4000)
+
+    return false
+  }
+}
+
+function analyzeFrame() {
+  if (!videoEl || !hiddenCtx) return
+  if (videoEl.readyState < videoEl.HAVE_CURRENT_DATA) return
+
+  hiddenCtx.drawImage(videoEl, 0, 0, SAMPLE_W, SAMPLE_H)
+  const imageData = hiddenCtx.getImageData(0, 0, SAMPLE_W, SAMPLE_H)
+  const data = imageData.data
+
+  // Calculate average brightness
+  let totalBrightness = 0
+  let sampleCount = 0
+
+  for (let i = 0; i < data.length; i += 16) { // sample every 4th pixel
+    const r = data[i]
+    const g = data[i + 1]
+    const b = data[i + 2]
+    totalBrightness += (r * 0.299 + g * 0.587 + b * 0.114) // perceptual brightness
+    sampleCount++
+  }
+  const avgBrightness = totalBrightness / sampleCount
+  brightnessLevel = Math.min(avgBrightness / 160, 1)
+
+  // Frame differencing for motion
+  if (prevFrame) {
+    let totalDiff = 0
+    let diffSamples = 0
+    // Sample more densely for better motion detection
+    for (let i = 0; i < data.length; i += 8) {
+      const diff = Math.abs(data[i] - prevFrame[i]) +
+                   Math.abs(data[i + 1] - prevFrame[i + 1]) +
+                   Math.abs(data[i + 2] - prevFrame[i + 2])
+      totalDiff += diff
+      diffSamples++
+    }
+    const avgDiff = totalDiff / diffSamples
+    // More sensitive motion detection — lower divisor = more sensitive
+    motionLevel = Math.min(avgDiff / 18, 1)
+  }
+
+  prevFrame = new Uint8Array(data)
+  cameraFrameCount++
+}
+
+// --- Prepare text ---
+let prepared = null
+let currentFontSize = FONT_BASE
+let currentFont = `${FONT_BASE}px ${FONT_FAMILY}`
+
+function updatePrepared(fontSize) {
+  const rounded = Math.round(fontSize * 2) / 2
+  if (rounded !== currentFontSize) {
+    currentFontSize = rounded
+    currentFont = `${rounded}px ${FONT_FAMILY}`
+    prepared = prepareWithSegments(PASSAGE, currentFont)
+  }
+}
+
+prepared = prepareWithSegments(PASSAGE, currentFont)
+
+// --- Render ---
+let lastTime = 0
+let frameCount = 0
+
+function render(time) {
+  const dt = Math.min((time - lastTime) / 16.67, 3)
+  lastTime = time
+  frameCount++
+
+  // Update signals
+  if (usingCamera) {
+    analyzeFrame()
+  } else {
+    // Mouse fallback — more responsive
+    const dx = mouseX - prevMouseX
+    const dy = mouseY - prevMouseY
+    const rawSpeed = Math.sqrt(dx * dx + dy * dy)
+    smoothMouseSpeed = smoothMouseSpeed * 0.75 + rawSpeed * 0.25
+    motionLevel = Math.min(smoothMouseSpeed / 20, 1)
+    // Use vertical mouse position as proxy for "proximity"
+    brightnessLevel = 1 - (mouseY / H)
+    prevMouseX = mouseX
+    prevMouseY = mouseY
+  }
+
+  // Smooth the signals — faster response for more dramatic effect
+  const smoothingFast = 1 - Math.pow(0.015, dt / 60)
+  const smoothingSlow = 1 - Math.pow(0.03, dt / 60)
+  smoothMotion = smoothMotion + (motionLevel - smoothMotion) * smoothingFast
+  smoothBrightness = smoothBrightness + (brightnessLevel - smoothBrightness) * smoothingSlow
+
+  // Stillness score — builds up when still, drops fast when moving
+  if (smoothMotion < 0.06) {
+    stillnessScore = Math.min(stillnessScore + 0.004 * dt, 1)
+  } else {
+    stillnessScore = Math.max(stillnessScore - 0.025 * dt, 0)
+  }
+  smoothStillness = smoothStillness + (stillnessScore - smoothStillness) * smoothingSlow
+
+  // Motion meter display
+  const meterHeight = Math.round(smoothMotion * 100)
+  motionFillEl.style.height = meterHeight + '%'
+  // Color the meter: sage when calm, terracotta when moving
+  if (smoothMotion > 0.5) {
+    motionFillEl.style.backgroundColor = '#C2714F'
+  } else if (smoothMotion > 0.2) {
+    motionFillEl.style.backgroundColor = OCHRE
+  } else {
+    motionFillEl.style.backgroundColor = '#8B9E7E'
+  }
+
+  // Clear
+  ctx.fillStyle = BG
+  ctx.fillRect(0, 0, W, H)
+
+  // Draw webcam feed as faint overlay
+  if (usingCamera && videoEl && videoEl.readyState >= videoEl.HAVE_CURRENT_DATA) {
+    ctx.save()
+    ctx.globalAlpha = 0.04 + smoothStillness * 0.04
+    ctx.translate(W, 0)
+    ctx.scale(-1, 1)
+    const videoAspect = videoEl.videoWidth / videoEl.videoHeight
+    const canvasAspect = W / H
+    let drawW, drawH, drawX, drawY
+    if (videoAspect > canvasAspect) {
+      drawH = H
+      drawW = H * videoAspect
+      drawX = (W - drawW) / 2
+      drawY = 0
+    } else {
+      drawW = W
+      drawH = W / videoAspect
+      drawX = 0
+      drawY = (H - drawH) / 2
+    }
+    ctx.drawImage(videoEl, drawX, drawY, drawW, drawH)
+    ctx.restore()
+  }
+
+  // --- Compute layout parameters from signals ---
+  // MORE DRAMATIC difference between calm and agitated states
+
+  // Font size: calm = smaller, intimate. Agitated = bigger, louder.
+  const motionExaggerated = Math.pow(smoothMotion, 0.7) // boost lower values
+  const fontSize = FONT_BASE + smoothBrightness * 6 + motionExaggerated * 4
+
+  // Line height: calm = generous breathing room. Agitated = compressed/chaotic.
+  const calmLineHeight = LINE_HEIGHT_RATIO + smoothStillness * 0.4  // very open when still
+  const agitatedLineHeight = LINE_HEIGHT_RATIO - motionExaggerated * 0.25 // tighter when moving
+  const lineHeight = fontSize * (smoothMotion > 0.15 ? agitatedLineHeight : calmLineHeight)
+
+  const baseWidth = Math.min(MAX_WIDTH, W - MARGIN * 2)
+
+  // Width variance: calm = uniform width. Agitated = wildly uneven.
+  const widthVariance = motionExaggerated * 280
+
+  // Jitter: calm = zero. Agitated = strong.
+  const jitterAmount = motionExaggerated * 8
+
+  // Letter spacing effect via slight x-offset per character position
+  const charJitter = motionExaggerated * 1.5
+
+  // Opacity: calm = full, settled. Agitated = flickering.
+  const baseAlpha = 0.5 + smoothStillness * 0.45 // calm: up to 0.95. Agitated: 0.5
+
+  // Color: sage when calm, terracotta when agitated
+  const colorT = Math.min(motionExaggerated * 1.8, 1)
+  const r = Math.round(COLOR_CALM[0] + (COLOR_AGITATED[0] - COLOR_CALM[0]) * colorT)
+  const g = Math.round(COLOR_CALM[1] + (COLOR_AGITATED[1] - COLOR_CALM[1]) * colorT)
+  const b = Math.round(COLOR_CALM[2] + (COLOR_AGITATED[2] - COLOR_CALM[2]) * colorT)
+
+  // Update font if size changed
+  updatePrepared(fontSize)
+  ctx.font = currentFont
+
+  // Layout text
+  let cursor = { segmentIndex: 0, graphemeIndex: 0 }
+  const lines = []
+
+  let lineIdx = 0
+  while (true) {
+    // Calm: consistent width. Agitated: wavy, unpredictable.
+    const noise = Math.sin(lineIdx * 3.7 + time * 0.001) * widthVariance
+    const noise2 = Math.cos(lineIdx * 5.3 + time * 0.0015) * widthVariance * 0.4
+    const width = Math.max(baseWidth + noise + noise2, 100)
+    const line = layoutNextLine(prepared, cursor, width)
+    if (!line) break
+    lines.push({ text: line.text, width, end: line.end, idx: lineIdx })
+    cursor = line.end
+    lineIdx++
+  }
+
+  // Center text block vertically — when calm, perfectly centered. When agitated, drifting.
+  const totalHeight = lines.length * lineHeight
+  const centerY = (H - totalHeight) / 2 + fontSize
+  const verticalDrift = Math.sin(time * 0.0005) * motionExaggerated * 30
+  let startY = Math.max(MARGIN, centerY + verticalDrift)
+
+  // Draw lines
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+
+    // Calm: perfectly centered. Agitated: ragged, staggered.
+    const calmX = (W - line.width) / 2
+    const agitatedOffset = Math.sin(i * 2.7 + time * 0.002) * motionExaggerated * 60
+    const xOffset = calmX + agitatedOffset
+
+    const y = startY + i * lineHeight
+
+    if (y < -lineHeight || y > H + lineHeight) continue
+
+    // Per-line jitter — zero when calm, strong when agitated
+    const jx = Math.sin(i * 5.3 + time * 0.004) * jitterAmount
+    const jy = Math.cos(i * 7.1 + time * 0.005) * jitterAmount * 0.6
+
+    // Per-line alpha variation when agitated
+    const alphaFlicker = smoothMotion > 0.15
+      ? (Math.sin(i * 3.1 + time * 0.006) * 0.15 * motionExaggerated)
+      : 0
+    const lineAlpha = Math.max(0.15, Math.min(1, baseAlpha + alphaFlicker))
+
+    // Slight rotation when agitated
+    if (motionExaggerated > 0.1) {
+      ctx.save()
+      const rot = Math.sin(i * 4.3 + time * 0.003) * motionExaggerated * 0.012
+      const cx = xOffset + jx + line.width / 2
+      const cy = y + jy
+      ctx.translate(cx, cy)
+      ctx.rotate(rot)
+      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${lineAlpha})`
+      ctx.fillText(line.text, -line.width / 2, 0)
+      ctx.restore()
+    } else {
+      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${lineAlpha})`
+      ctx.fillText(line.text, xOffset + jx, y + jy)
+    }
+  }
+
+  // Calm state: draw a subtle breathing glow behind text center
+  if (smoothStillness > 0.3) {
+    const breathCycle = Math.sin(time * 0.001) * 0.5 + 0.5 // 0..1, slow
+    const glowAlpha = (smoothStillness - 0.3) * 0.06 * breathCycle
+    const gradient = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, 300)
+    gradient.addColorStop(0, `rgba(139, 158, 126, ${glowAlpha})`)
+    gradient.addColorStop(1, 'rgba(139, 158, 126, 0)')
+    ctx.fillStyle = gradient
+    ctx.fillRect(0, 0, W, H)
+  }
+
+  // Status display
+  const motionPct = Math.round(smoothMotion * 100)
+  const stillPct = Math.round(smoothStillness * 100)
+  const inputLabel = usingCamera ? 'camera' : 'mouse'
+  statusEl.textContent = `stillness ${stillPct}%\nmotion ${motionPct}%\ninput: ${inputLabel}`
+  statusEl.style.whiteSpace = 'pre'
+
+  requestAnimationFrame(render)
+}
+
+// --- Start ---
+const startBtn = document.getElementById('start-btn')
+startBtn.querySelector('button').addEventListener('click', async () => {
+  startBtn.classList.add('hidden')
+  motionMeterEl.classList.add('visible')
+  await initCamera()
+  requestAnimationFrame(render)
+})
+</script>
+</body>
+</html>

@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Text Tectonics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=Literata:ital,opsz,wght@0,7..72,200..900;1,7..72,200..900&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #08080e; }
+  canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+  canvas.grabbing { cursor: grabbing; }
+  #loading {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: #665544; font: 15px Literata, Georgia; letter-spacing: 0.04em;
+    background: #08080e; z-index: 10; transition: opacity 0.8s;
+  }
+  #loading.hidden { opacity: 0; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="loading">deep time loading...</div>
+<canvas id="canvas"></canvas>
+<script type="module">
+import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
+
+// --- Geology text ---
+const TEXT_A = `The earth remembers in stone. Four billion years of pressure and drift written into every fold of granite, every vein of quartz. Continents are not permanent — they are slow travelers, grinding across the mantle at the speed fingernails grow. What feels solid underfoot is a thin crust riding molten rock, cracking and healing and cracking again. The Himalayas are still rising. The Atlantic is still widening. Pangaea broke apart and its children have been wandering ever since, colliding in slow motion, building mountains where they meet.`
+
+const TEXT_B = `Below the crust the mantle convects in loops that take a hundred million years to complete. Heat from the core drives plumes of magma upward, spreading the seafloor apart at mid-ocean ridges, pulling it back down at subduction zones. Where one plate slides beneath another, rock melts and volcanoes bloom. The Ring of Fire circles the Pacific like a scar. Earthquakes are the sound of the planet adjusting its grip. Every tremor is a sentence in a conversation between plates — a negotiation of pressure ongoing since the Hadean eon, when the first crust cooled from a sea of lava.`
+
+const FONT_SIZE = 15
+const FONT = `${FONT_SIZE}px Georgia`
+const LINE_HEIGHT = 22
+const PLATE_WIDTH = 400
+const PAD = 14
+
+const COLOR_A = '#C2714F'
+const COLOR_B = '#8B9E7E'
+
+const canvas = document.getElementById('canvas')
+const ctx = canvas.getContext('2d')
+let W, H, dpr
+
+function resize() {
+  dpr = window.devicePixelRatio || 1
+  W = window.innerWidth
+  H = window.innerHeight
+  canvas.width = W * dpr
+  canvas.height = H * dpr
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+}
+resize()
+window.addEventListener('resize', resize)
+
+// Prepare text with pretext
+const prepA = prepareWithSegments(TEXT_A, FONT)
+const prepB = prepareWithSegments(TEXT_B, FONT)
+
+// Plate state
+const plates = [
+  { x: 0, y: 0, vx: 0.4, vy: 0, prep: prepA, color: COLOR_A },
+  { x: 0, y: 0, vx: -0.4, vy: 0, prep: prepB, color: COLOR_B }
+]
+
+// Initialize positions off-screen
+function initPositions() {
+  plates[0].x = -PLATE_WIDTH - 80
+  plates[1].x = W + 80
+}
+initPositions()
+
+// Layout a plate into lines at a given width
+function layoutLines(prep, width) {
+  const lines = []
+  let cursor = { segmentIndex: 0, graphemeIndex: 0 }
+  const w = Math.max(60, width)
+  while (true) {
+    const line = layoutNextLine(prep, cursor, w)
+    if (!line) break
+    lines.push(line)
+    cursor = line.end
+  }
+  return lines
+}
+
+// Approximate plate height
+function plateHeight(lineCount) {
+  return lineCount * LINE_HEIGHT
+}
+
+// --- Interaction ---
+let dragging = null
+let dragOX = 0, dragOY = 0
+
+function ptr(e) {
+  const r = canvas.getBoundingClientRect()
+  return { x: e.clientX - r.left, y: e.clientY - r.top }
+}
+
+canvas.addEventListener('pointerdown', e => {
+  const p = ptr(e)
+  // Check plates in reverse order (top first)
+  for (let i = 1; i >= 0; i--) {
+    const pl = plates[i]
+    const lines = layoutLines(pl.prep, PLATE_WIDTH)
+    const ph = plateHeight(lines.length)
+    const py = H / 2 - ph / 2 + pl.y
+    if (p.x >= pl.x && p.x <= pl.x + PLATE_WIDTH + PAD * 2 &&
+        p.y >= py - PAD && p.y <= py + ph + PAD) {
+      dragging = i
+      dragOX = p.x - pl.x
+      dragOY = p.y - pl.y
+      canvas.classList.add('grabbing')
+      canvas.setPointerCapture(e.pointerId)
+      return
+    }
+  }
+})
+
+canvas.addEventListener('pointermove', e => {
+  if (dragging !== null) {
+    const p = ptr(e)
+    plates[dragging].x = p.x - dragOX
+    plates[dragging].y = p.y - dragOY
+    plates[dragging].vx = 0
+    plates[dragging].vy = 0
+  }
+})
+
+canvas.addEventListener('pointerup', () => {
+  dragging = null
+  canvas.classList.remove('grabbing')
+})
+
+// --- Quake state ---
+let quakeIntensity = 0
+
+function quakeShake() {
+  if (quakeIntensity < 0.2) return { x: 0, y: 0 }
+  return {
+    x: (Math.random() - 0.5) * quakeIntensity * 3,
+    y: (Math.random() - 0.5) * quakeIntensity * 3
+  }
+}
+
+// --- Persistent particles for collision debris ---
+const debris = []
+function spawnDebris(cx, yMin, yMax, count) {
+  for (let i = 0; i < count; i++) {
+    const lifespan = 40 + Math.random() * 60
+    debris.push({
+      x: cx + (Math.random() - 0.5) * 20,
+      y: yMin + Math.random() * (yMax - yMin),
+      vx: (Math.random() - 0.5) * 1.5,
+      vy: -0.5 - Math.random() * 2,
+      life: lifespan,
+      maxLife: lifespan,
+      size: 1 + Math.random() * 2
+    })
+  }
+}
+
+function updateDebris() {
+  for (let i = debris.length - 1; i >= 0; i--) {
+    const d = debris[i]
+    d.x += d.vx
+    d.y += d.vy
+    d.vy += 0.02 // slight gravity
+    d.life--
+    if (d.life <= 0) debris.splice(i, 1)
+  }
+}
+
+function drawDebris() {
+  for (const d of debris) {
+    const a = (d.life / d.maxLife) * 0.5
+    ctx.fillStyle = `rgba(${107 + Math.random() * 30 | 0}, ${58 + Math.random() * 20 | 0}, ${42 + Math.random() * 10 | 0}, ${a})`
+    ctx.fillRect(d.x, d.y, d.size, d.size)
+  }
+}
+
+// --- Main loop ---
+let lastCollisionSpawn = 0
+
+function render(t) {
+  ctx.clearRect(0, 0, W, H)
+
+  // --- Physics update ---
+  for (let i = 0; i < 2; i++) {
+    if (dragging !== i) {
+      plates[i].x += plates[i].vx
+      plates[i].y += plates[i].vy
+      // Dampen vertical drift
+      plates[i].vy *= 0.98
+    }
+  }
+
+  // Edges of the two plates facing each other
+  const rightEdgeA = plates[0].x + PLATE_WIDTH + PAD * 2
+  const leftEdgeB = plates[1].x
+  const gap = leftEdgeB - rightEdgeA  // positive = separated, negative = overlapping
+  const overlap = -gap
+
+  // Collision response
+  if (overlap > 0) {
+    // Plates are overlapping
+    if (dragging === null) {
+      // Slow both plates down, then gently push them apart
+      plates[0].vx *= 0.995
+      plates[1].vx *= 0.995
+
+      // Resist further overlap
+      const pushForce = 0.001 + overlap * 0.00005
+      plates[0].vx -= pushForce
+      plates[1].vx += pushForce
+
+      // Clamp velocities so plates don't fly apart
+      plates[0].vx = Math.max(plates[0].vx, -0.3)
+      plates[1].vx = Math.min(plates[1].vx, 0.3)
+    }
+
+    // Quake builds with overlap
+    quakeIntensity += overlap * 0.002
+    quakeIntensity = Math.min(quakeIntensity, 10)
+
+    // Spawn debris particles at collision zone
+    if (t - lastCollisionSpawn > 100 && overlap > 5) {
+      const cx = (rightEdgeA + leftEdgeB) / 2
+      const linesA = layoutLines(prepA, PLATE_WIDTH)
+      const ph = plateHeight(linesA.length)
+      const baseY = H / 2 - ph / 2
+      spawnDebris(cx, baseY, baseY + ph, Math.min(Math.floor(overlap * 0.05), 6))
+      lastCollisionSpawn = t
+    }
+  } else {
+    // Plates separated: auto-drift toward center
+    if (dragging !== 0) {
+      const targetA = W / 2 - PLATE_WIDTH - PAD * 2 - 10
+      const diffA = targetA - plates[0].x
+      plates[0].vx += diffA * 0.0001
+      plates[0].vx *= 0.998
+    }
+    if (dragging !== 1) {
+      const targetB = W / 2 + 10
+      const diffB = targetB - plates[1].x
+      plates[1].vx += diffB * 0.0001
+      plates[1].vx *= 0.998
+    }
+  }
+
+  quakeIntensity *= 0.95
+
+  // --- Background fault lines ---
+  ctx.strokeStyle = 'rgba(255,255,255,0.012)'
+  ctx.lineWidth = 0.5
+  for (let x = 0; x < W; x += 70) {
+    const off = Math.sin(x * 0.008 + t * 0.0004) * 6
+    ctx.beginPath()
+    ctx.moveTo(x + off, 0)
+    ctx.lineTo(x - off, H)
+    ctx.stroke()
+  }
+
+  // --- Rift glow when plates separated ---
+  if (gap > 15) {
+    const riftL = rightEdgeA
+    const riftR = leftEdgeB
+    const riftW = riftR - riftL
+    const riftCX = riftL + riftW / 2
+
+    const linesA = layoutLines(prepA, PLATE_WIDTH)
+    const ph = plateHeight(linesA.length)
+    const baseY = H / 2 - ph / 2
+
+    // Magma glow gradient — ochre #C49A3C
+    const intensity = Math.min(riftW * 0.001, 0.3)
+    const grad = ctx.createLinearGradient(riftL, 0, riftR, 0)
+    grad.addColorStop(0, 'rgba(196, 154, 60, 0)')
+    grad.addColorStop(0.25, `rgba(196, 154, 60, ${intensity * 0.4})`)
+    grad.addColorStop(0.5, `rgba(210, 170, 60, ${intensity})`)
+    grad.addColorStop(0.75, `rgba(196, 154, 60, ${intensity * 0.4})`)
+    grad.addColorStop(1, 'rgba(196, 154, 60, 0)')
+    ctx.fillStyle = grad
+    ctx.fillRect(riftL, baseY - 30, riftW, ph + 60)
+
+    // Jagged rift line — ochre tinted
+    ctx.strokeStyle = `rgba(196, 154, 60, ${Math.min(0.5, intensity * 1.5)})`
+    ctx.lineWidth = 1.5
+    ctx.beginPath()
+    let first = true
+    for (let y = baseY - 15; y < baseY + ph + 15; y += 2.5) {
+      const jx = Math.sin(y * 0.12 + t * 0.002) * 4 + Math.sin(y * 0.3) * 2
+      if (first) { ctx.moveTo(riftCX + jx, y); first = false }
+      else ctx.lineTo(riftCX + jx, y)
+    }
+    ctx.stroke()
+
+    // Secondary faint glow — ochre
+    ctx.strokeStyle = `rgba(196, 154, 60, ${intensity * 0.3})`
+    ctx.lineWidth = 4
+    ctx.stroke()
+  }
+
+  // --- Render plates ---
+  const overlapClamped = Math.max(0, overlap)
+
+  for (let pi = 0; pi < 2; pi++) {
+    const plate = plates[pi]
+
+    // Compression: narrow the plate width at the collision edge
+    // The compression factor affects how many chars fit per line
+    const compressionRatio = overlapClamped > 0
+      ? Math.max(0.4, 1 - overlapClamped / (PLATE_WIDTH * 2))
+      : 1
+    const effectiveW = PLATE_WIDTH * compressionRatio
+    const lines = layoutLines(plate.prep, effectiveW)
+    const ph = plateHeight(lines.length)
+    const baseY = H / 2 - ph / 2
+
+    const shake = quakeShake()
+
+    // For the left plate, text anchors at left edge.
+    // For the right plate, text anchors at the plate's x position.
+    const anchorX = plate.x + PAD + shake.x
+    const anchorY = baseY + plate.y + shake.y
+
+    ctx.save()
+
+    for (let li = 0; li < lines.length; li++) {
+      const line = lines[li]
+      const ly = anchorY + li * LINE_HEIGHT
+
+      if (ly < -LINE_HEIGHT * 2 || ly > H + LINE_HEIGHT * 2) continue
+
+      let dx = 0, dy = 0, sx = 1, alpha = 1, fs = FONT_SIZE
+
+      if (overlapClamped > 0) {
+        // How close is this line to the collision boundary?
+        // Collision happens at the meeting point of the two plates.
+        const collisionX = (rightEdgeA + leftEdgeB) / 2
+
+        // For left plate: right side is collision edge
+        // For right plate: left side is collision edge
+        let lineCenter
+        if (pi === 0) {
+          lineCenter = anchorX + effectiveW  // right edge of left plate text
+        } else {
+          lineCenter = anchorX               // left edge of right plate text
+        }
+
+        const distFromCollision = Math.abs(lineCenter - collisionX)
+        const proximity = Math.max(0, 1 - distFromCollision / (PLATE_WIDTH * 0.6))
+
+        // --- Mountain building ---
+        // Lines near the collision get pushed upward
+        const mountainAmp = proximity * Math.min(overlapClamped * 0.5, 50)
+        // Vary by line index for a folded/crumpled look
+        const fold = Math.sin(li * 0.8 + t * 0.0008) * proximity * 5
+        const bucklePeak = Math.sin(li * 1.7) * proximity * Math.min(overlapClamped * 0.15, 12)
+        dy = -mountainAmp + fold + bucklePeak
+
+        // --- Horizontal crumple ---
+        const crumpleAmt = proximity * Math.min(overlapClamped * 0.0015, 0.12)
+        sx = 1 - crumpleAmt
+
+        // --- Subduction: right plate slides under ---
+        if (pi === 1 && overlapClamped > 20) {
+          const subDepth = Math.min((overlapClamped - 20) / 250, 0.8)
+          const subFactor = proximity * subDepth
+          alpha = 1 - subFactor * 0.65
+          fs = FONT_SIZE * (1 - subFactor * 0.3)
+          dy += subFactor * 12 // sink downward
+        }
+
+        // --- Overthrust: left plate rides up slightly ---
+        if (pi === 0 && overlapClamped > 20) {
+          const thrustDepth = Math.min((overlapClamped - 20) / 300, 0.5)
+          const thrustFactor = proximity * thrustDepth
+          dy -= thrustFactor * 8
+        }
+
+        // Slight horizontal jitter from seismic stress
+        if (proximity > 0.2) {
+          dx += Math.sin(li * 3.1 + t * 0.004) * proximity * 1.5
+        }
+      }
+
+      ctx.save()
+      ctx.globalAlpha = alpha
+      ctx.font = `${fs}px Georgia`
+      ctx.fillStyle = plate.color
+      ctx.translate(anchorX + dx, ly + dy)
+      ctx.scale(sx, 1)
+      ctx.fillText(line.text, 0, 0)
+      ctx.restore()
+    }
+
+    ctx.restore()
+  }
+
+  // --- Draw debris ---
+  updateDebris()
+  drawDebris()
+
+  // --- HUD ---
+  ctx.save()
+  ctx.font = '10px Fraunces, Georgia'
+  ctx.fillStyle = 'rgba(255,255,255,0.18)'
+  ctx.textAlign = 'center'
+  ctx.fillText('T E X T   T E C T O N I C S', W / 2, H - 18)
+  ctx.fillStyle = 'rgba(255,255,255,0.09)'
+  ctx.font = '10px Literata, Georgia'
+  ctx.fillText('drag plates to move them', W / 2, H - 34)
+  ctx.restore()
+
+  requestAnimationFrame(render)
+}
+
+// Start
+document.getElementById('loading').classList.add('hidden')
+requestAnimationFrame(render)
+</script>
+</body>
+</html>

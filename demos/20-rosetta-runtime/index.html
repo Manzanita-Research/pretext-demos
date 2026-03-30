@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Rosetta Runtime</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #08080e;
+    color: #e8e4dc;
+    font-family: 'JetBrains Mono', monospace;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    padding: 16px 32px 12px;
+    display: flex;
+    align-items: baseline;
+    gap: 24px;
+    border-bottom: 1px solid rgba(232, 228, 220, 0.06);
+    flex-shrink: 0;
+  }
+
+  header h1 {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-weight: 300;
+    font-size: 20px;
+    color: #8a8478;
+    letter-spacing: 0.08em;
+  }
+
+  header .subtitle {
+    font-size: 10px;
+    color: #4a4640;
+    letter-spacing: 0.05em;
+  }
+
+  .main {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  .editor-pane {
+    width: 42%;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid rgba(232, 228, 220, 0.06);
+    min-height: 0;
+  }
+
+  .editor-header {
+    padding: 12px 20px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(232, 228, 220, 0.04);
+    flex-shrink: 0;
+  }
+
+  .editor-header .label {
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #5a564e;
+  }
+
+  .editor-header .status {
+    font-size: 9px;
+    color: #3a6a4a;
+    letter-spacing: 0.05em;
+  }
+
+  .editor-container {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  #editor-highlight {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 1.7;
+    padding: 20px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-y: auto;
+    color: #c8c4bc;
+    pointer-events: none;
+    tab-size: 2;
+    border: none;
+    z-index: 2;
+  }
+
+  #editor-highlight .cmd {
+    color: #c49a6c;
+  }
+
+  #editor-highlight .arg {
+    color: #6a9a6a;
+  }
+
+  #editor-highlight .num {
+    pointer-events: auto;
+    cursor: ew-resize;
+    border-radius: 2px;
+    padding: 0 1px;
+    transition: background 0.1s;
+  }
+
+  #editor-highlight .num:hover {
+    background: rgba(106, 154, 106, 0.2);
+  }
+
+  #editor-highlight .num.scrubbing {
+    background: rgba(106, 154, 106, 0.35);
+  }
+
+  #editor {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: transparent;
+    caret-color: #e8e4dc;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 1.7;
+    padding: 20px;
+    resize: none;
+    overflow-y: auto;
+    tab-size: 2;
+    z-index: 1;
+  }
+
+  #editor::placeholder {
+    color: #3a3830;
+  }
+
+  .legend {
+    padding: 12px 20px;
+    border-top: 1px solid rgba(232, 228, 220, 0.04);
+    flex-shrink: 0;
+    overflow-y: auto;
+    max-height: 180px;
+  }
+
+  .legend-title {
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #5a564e;
+    margin-bottom: 8px;
+  }
+
+  .legend-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3px 16px;
+  }
+
+  .legend-item {
+    font-size: 10px;
+    line-height: 1.6;
+    color: #4a4640;
+  }
+
+  .legend-item .cmd {
+    color: #c49a6c;
+  }
+
+  .legend-item .arg {
+    color: #6a8a6a;
+  }
+
+  .canvas-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .canvas-header {
+    padding: 12px 20px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(232, 228, 220, 0.04);
+    flex-shrink: 0;
+  }
+
+  .canvas-header .label {
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #5a564e;
+  }
+
+  .canvas-header .info {
+    font-size: 9px;
+    color: #4a4640;
+    letter-spacing: 0.05em;
+  }
+
+  .canvas-wrap {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>The Rosetta Runtime</h1>
+  <span class="subtitle">the source code is the output is the source code</span>
+</header>
+
+<div class="main">
+  <div class="editor-pane">
+    <div class="editor-header">
+      <span class="label">Source</span>
+      <span class="status" id="status">running</span>
+    </div>
+    <div class="editor-container">
+      <div id="editor-highlight" aria-hidden="true"></div>
+      <textarea id="editor" spellcheck="false" placeholder="Type something..."></textarea>
+    </div>
+    <div class="legend">
+      <div class="legend-title">Commands</div>
+      <div class="legend-grid">
+        <div class="legend-item"><span class="cmd">width</span> <span class="arg">n</span> &mdash; layout width px</div>
+        <div class="legend-item"><span class="cmd">circle</span> <span class="arg">r</span> &mdash; flow around circle</div>
+        <div class="legend-item"><span class="cmd">columns</span> <span class="arg">n</span> &mdash; split into columns</div>
+        <div class="legend-item"><span class="cmd">wave</span> <span class="arg">amp freq</span> &mdash; wave left margin</div>
+        <div class="legend-item"><span class="cmd">indent</span> <span class="arg">px</span> &mdash; progressive indent</div>
+        <div class="legend-item"><span class="cmd">mirror</span> &mdash; mirror left-to-right</div>
+        <div class="legend-item"><span class="cmd">breathe</span> <span class="arg">speed</span> &mdash; animate width</div>
+        <div class="legend-item"><span class="cmd">font</span> <span class="arg">size</span> &mdash; font size px</div>
+        <div class="legend-item"><span class="cmd">color</span> <span class="arg">hex</span> &mdash; text color</div>
+        <div class="legend-item"><span class="cmd">gravity</span> &mdash; text drifts down</div>
+      </div>
+      <div style="margin-top:8px;font-size:9px;color:#5a564e;letter-spacing:0.03em">
+        drag <span style="color:#6a9a6a;cursor:ew-resize">green numbers</span> to scrub &middot; shift = fine &middot; alt = coarse
+      </div>
+    </div>
+  </div>
+
+  <div class="canvas-pane">
+    <div class="canvas-header">
+      <span class="label">Output</span>
+      <span class="info" id="line-count"></span>
+    </div>
+    <div class="canvas-wrap">
+      <canvas id="c"></canvas>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
+
+// --- Elements ---
+const editor = document.getElementById('editor')
+const canvas = document.getElementById('c')
+const ctx = canvas.getContext('2d')
+const statusEl = document.getElementById('status')
+const lineCountEl = document.getElementById('line-count')
+const canvasWrap = document.querySelector('.canvas-wrap')
+
+// --- Canvas sizing ---
+let dpr = window.devicePixelRatio || 1
+let W, H
+
+function resize() {
+  dpr = window.devicePixelRatio || 1
+  const rect = canvasWrap.getBoundingClientRect()
+  W = rect.width
+  H = rect.height
+  canvas.width = W * dpr
+  canvas.height = H * dpr
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+}
+resize()
+window.addEventListener('resize', resize)
+
+// --- Default text ---
+const defaultText = `width 600 Welcome to the Rosetta Runtime, where every word is both literature and instruction. The text you are reading right now is also the program that renders itself. font 18 These words just got bigger because the command appeared right here in the sentence. wave 40 3 And now the edges of each line are rippling, undulating back and forth, because wave was invoked with an amplitude and frequency. circle 100 Do you see the invisible circle in the center? The text parts around it like water around a stone, flowing to whichever side has more room. indent 8 Each line now steps further right than the last, a cascading staircase of words marching toward the margin. columns 2 And now everything splits into two rivers of text running side by side, each column finding its own rhythm within the narrower space. breathe 1.5 The whole composition is slowly expanding and contracting, as if the page itself is breathing, because that instruction lives here among the words. color d4a574 The color just shifted to amber, warm like afternoon light, because the program told itself to change. This is a language that speaks about itself, a page that is aware of its own shape. Every word carries dual purpose: meaning and instruction, content and code, the poem and the machine that renders it.`
+
+editor.value = defaultText
+
+// --- Syntax highlighting overlay ---
+const highlightEl = document.getElementById('editor-highlight')
+
+function updateHighlight() {
+  const text = editor.value
+  const html = buildHighlightedHtml(text)
+  // Add a trailing newline so the overlay height matches even when the
+  // textarea content ends with a newline (browsers add an extra blank line)
+  highlightEl.innerHTML = html + '\n'
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+function findHighlightSpans(text) {
+  const spans = []
+  const regex = /\b(width|circle|columns|wave|indent|mirror|breathe|font|color|gravity)\b/gi
+  let match
+  while ((match = regex.exec(text)) !== null) {
+    spans.push({ start: match.index, end: match.index + match[0].length, type: 'command' })
+    const after = text.slice(match.index + match[0].length)
+    const argMatch = after.match(/^(\s+[\d.#a-fA-F]+)(\s+[\d.]+)?/)
+    if (argMatch) {
+      const argStart = match.index + match[0].length
+      spans.push({ start: argStart, end: argStart + argMatch[0].length, type: 'arg' })
+    }
+  }
+  return spans
+}
+
+function buildHighlightedHtml(text) {
+  const spans = findHighlightSpans(text)
+  if (spans.length === 0) return escapeHtml(text)
+
+  // Sort and merge overlapping spans, keeping type priority (command > arg)
+  spans.sort((a, b) => a.start - b.start)
+
+  // Split into non-overlapping segments with type info
+  const segments = []
+  let pos = 0
+  for (const span of spans) {
+    if (span.start > pos) {
+      segments.push({ text: text.slice(pos, span.start), type: 'normal', start: pos })
+    }
+    if (span.start >= pos) {
+      segments.push({ text: text.slice(span.start, span.end), type: span.type, start: span.start })
+      pos = span.end
+    }
+  }
+  if (pos < text.length) {
+    segments.push({ text: text.slice(pos), type: 'normal', start: pos })
+  }
+
+  return segments.map(seg => {
+    const escaped = escapeHtml(seg.text)
+    if (seg.type === 'command') return `<span class="cmd">${escaped}</span>`
+    if (seg.type === 'arg') {
+      // Wrap individual numbers in draggable spans with text offsets
+      let html = ''
+      const numRegex = /([\s]*)([0-9]+\.?[0-9]*)/g
+      let m, lastIdx = 0
+      while ((m = numRegex.exec(seg.text)) !== null) {
+        // Text before this match
+        if (m.index > lastIdx) html += escapeHtml(seg.text.slice(lastIdx, m.index))
+        // Whitespace before number
+        html += escapeHtml(m[1])
+        // Number with data attributes for scrubbing
+        const numStart = seg.start + m.index + m[1].length
+        html += `<span class="num" data-start="${numStart}" data-len="${m[2].length}">${escapeHtml(m[2])}</span>`
+        lastIdx = m.index + m[0].length
+      }
+      if (lastIdx < seg.text.length) html += escapeHtml(seg.text.slice(lastIdx))
+      return `<span class="arg">${html}</span>`
+    }
+    return escaped
+  }).join('')
+}
+
+// Sync scroll between textarea and overlay
+editor.addEventListener('scroll', () => {
+  highlightEl.scrollTop = editor.scrollTop
+  highlightEl.scrollLeft = editor.scrollLeft
+})
+
+editor.addEventListener('input', updateHighlight)
+
+// Initial highlight
+updateHighlight()
+
+// --- Command keywords ---
+const COMMANDS = ['width', 'circle', 'columns', 'wave', 'indent', 'mirror', 'breathe', 'font', 'color', 'gravity']
+
+// --- Parse commands from text ---
+function parseCommands(text) {
+  const commands = {
+    baseWidth: 500,
+    circle: null,
+    columns: null,
+    wave: null,
+    indent: null,
+    mirror: false,
+    breathe: null,
+    fontSize: 15,
+    color: '#e8e4dc',
+    gravity: false
+  }
+
+  const lower = text.toLowerCase()
+  const words = lower.split(/\s+/)
+
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i]
+    switch (w) {
+      case 'width': {
+        const n = parseFloat(words[i + 1])
+        if (!isNaN(n) && n > 0) commands.baseWidth = Math.min(Math.max(n, 50), 2000)
+        break
+      }
+      case 'circle': {
+        const r = parseFloat(words[i + 1])
+        if (!isNaN(r) && r > 0) commands.circle = { radius: Math.min(r, 500) }
+        break
+      }
+      case 'columns': {
+        const n = parseInt(words[i + 1])
+        if (!isNaN(n) && n >= 2 && n <= 8) commands.columns = n
+        break
+      }
+      case 'wave': {
+        const amp = parseFloat(words[i + 1])
+        const freq = parseFloat(words[i + 2])
+        if (!isNaN(amp)) {
+          commands.wave = {
+            amplitude: Math.min(Math.abs(amp), 200),
+            frequency: !isNaN(freq) ? freq * 0.3 : 0.5
+          }
+        }
+        break
+      }
+      case 'indent': {
+        const px = parseFloat(words[i + 1])
+        if (!isNaN(px)) commands.indent = Math.min(Math.abs(px), 100)
+        break
+      }
+      case 'mirror':
+        commands.mirror = true
+        break
+      case 'breathe': {
+        const spd = parseFloat(words[i + 1])
+        commands.breathe = { speed: !isNaN(spd) ? Math.max(spd, 0.1) : 1 }
+        break
+      }
+      case 'font': {
+        const sz = parseFloat(words[i + 1])
+        if (!isNaN(sz) && sz > 0) commands.fontSize = Math.min(Math.max(sz, 6), 120)
+        break
+      }
+      case 'color': {
+        const hex = words[i + 1]
+        if (hex && /^#?[0-9a-f]{3,8}$/i.test(hex)) {
+          commands.color = hex.startsWith('#') ? hex : '#' + hex
+        }
+        break
+      }
+      case 'gravity':
+        commands.gravity = true
+        break
+    }
+  }
+
+  return commands
+}
+
+// --- Find command positions in text for highlighting ---
+function findCommandSpans(text) {
+  const spans = []
+  const regex = /\b(width|circle|columns|wave|indent|mirror|breathe|font|color|gravity)\b/gi
+  let match
+  while ((match = regex.exec(text)) !== null) {
+    spans.push({ start: match.index, end: match.index + match[0].length, type: 'command' })
+    // Also highlight the numeric arguments after
+    const after = text.slice(match.index + match[0].length)
+    const argMatch = after.match(/^(\s+[\d.#a-fA-F]+)(\s+[\d.]+)?/)
+    if (argMatch) {
+      const argStart = match.index + match[0].length
+      spans.push({
+        start: argStart,
+        end: argStart + argMatch[0].length,
+        type: 'arg'
+      })
+    }
+  }
+  return spans
+}
+
+// --- Circle width calculation ---
+function getCircleWidthAtY(y, radius, centerX, centerY) {
+  const dy = y - centerY
+  if (Math.abs(dy) >= radius) return null // no exclusion
+  const halfChord = Math.sqrt(radius * radius - dy * dy)
+  return { left: centerX - halfChord, right: centerX + halfChord }
+}
+
+// --- Render ---
+let animFrame = null
+
+function render() {
+  animFrame = requestAnimationFrame(render)
+
+  const text = editor.value
+  if (!text.trim()) {
+    ctx.clearRect(0, 0, W, H)
+    lineCountEl.textContent = '0 lines'
+    return
+  }
+
+  const commands = parseCommands(text)
+  const fontSize = commands.fontSize
+  const lineHeight = Math.round(fontSize * 1.6)
+  const fontStr = `${fontSize}px Georgia, serif`
+  const PAD = 32
+
+  let prepared
+  try {
+    prepared = prepareWithSegments(text, fontStr)
+  } catch (e) {
+    statusEl.textContent = 'error'
+    statusEl.style.color = '#a44'
+    return
+  }
+
+  statusEl.textContent = 'running'
+  statusEl.style.color = '#3a6a4a'
+
+  ctx.clearRect(0, 0, W, H)
+
+  // Determine layout bounds
+  let baseWidth = Math.min(commands.baseWidth, W - PAD * 2)
+
+  // Breathe modulation
+  let breatheMod = 1
+  if (commands.breathe) {
+    breatheMod = 1 + Math.sin(Date.now() * 0.001 * commands.breathe.speed) * 0.2
+  }
+
+  const numCols = commands.columns || 1
+  const colGap = 20
+  const totalAvail = baseWidth * breatheMod
+  const colWidth = numCols > 1 ? (totalAvail - colGap * (numCols - 1)) / numCols : totalAvail
+
+  // Center of canvas for circle
+  const canvasCenterX = W / 2
+  const canvasCenterY = H / 2
+
+  // Compute starting X for centered layout
+  const layoutStartX = Math.max(PAD, (W - totalAvail) / 2)
+
+  // --- Layout pass: line by line, adjusting width per Y position ---
+  // For circle mode, we need to know Y before we lay out. We do a forward
+  // pass, computing Y as we go and adjusting widths accordingly.
+
+  let cursor = { segmentIndex: 0, graphemeIndex: 0 }
+  let lineIndex = 0
+  let allLines = [] // { text, x, y, lineIndex }
+  let y = PAD + lineHeight
+  const maxIterations = 2000
+  let iterations = 0
+
+  while (iterations++ < maxIterations) {
+    if (y > H + lineHeight) break
+
+    // --- Step 1: Circle exclusion (depends on absolute canvas position) ---
+    // Start with the full column width; circle carves from this first.
+    let availLeft = layoutStartX
+    let availRight = layoutStartX + colWidth
+    let circleActive = false
+
+    if (commands.circle) {
+      const circ = getCircleWidthAtY(y - fontSize * 0.3, commands.circle.radius, canvasCenterX, canvasCenterY)
+      if (circ) {
+        circleActive = true
+        const leftSpace = Math.max(0, circ.left - availLeft)
+        const rightSpace = Math.max(0, availRight - circ.right)
+
+        if (leftSpace >= rightSpace && leftSpace > 20) {
+          // Use space to the left of the circle
+          availRight = circ.left
+        } else if (rightSpace > 20) {
+          // Use space to the right of the circle
+          availLeft = circ.right + 4
+        } else {
+          // Circle fills the whole width here -- skip this Y
+          y += lineHeight
+          continue
+        }
+      }
+    }
+
+    // --- Step 2: Wave indent (applied after circle exclusion) ---
+    let waveIndent = 0
+    if (commands.wave) {
+      waveIndent = (Math.sin(lineIndex * commands.wave.frequency) + 1) * 0.5 * commands.wave.amplitude
+      availLeft += waveIndent
+    }
+
+    // --- Step 3: Progressive indent (applied after circle exclusion) ---
+    let indentPx = 0
+    if (commands.indent) {
+      indentPx = lineIndex * commands.indent
+      availLeft += indentPx
+    }
+
+    // Final line X and effective width
+    let lineX = availLeft
+    let effectiveWidth = Math.max(availRight - availLeft, 20)
+
+    const line = layoutNextLine(prepared, cursor, effectiveWidth)
+    if (!line) break
+
+    allLines.push({
+      text: line.text,
+      x: lineX,
+      y,
+      lineIndex,
+      width: effectiveWidth
+    })
+
+    cursor = line.end
+    y += lineHeight
+    lineIndex++
+  }
+
+  const totalLines = allLines.length
+
+  // If columns, we need to re-layout into columns
+  // For columns mode, split text evenly and lay out each column separately
+  // Circle is disabled in multi-column mode (too complex to compose well)
+  if (numCols > 1) {
+    allLines = []
+    cursor = { segmentIndex: 0, graphemeIndex: 0 }
+    // First, collect all lines with single-column width to count them
+    let tempLines = []
+    let tempCursor = { segmentIndex: 0, graphemeIndex: 0 }
+    let ti = 0
+    while (ti++ < maxIterations) {
+      let w = colWidth
+      if (commands.wave) {
+        const waveOffset = (Math.sin(ti * commands.wave.frequency) + 1) * 0.5 * commands.wave.amplitude
+        w -= waveOffset
+      }
+      w = Math.max(w, 20)
+      const ln = layoutNextLine(prepared, tempCursor, w)
+      if (!ln) break
+      tempLines.push(ln)
+      tempCursor = ln.end
+    }
+    const perCol = Math.ceil(tempLines.length / numCols)
+
+    // Now re-layout, assigning lines to columns
+    cursor = { segmentIndex: 0, graphemeIndex: 0 }
+    lineIndex = 0
+    let colIdx = 0
+    let colLineIdx = 0
+
+    for (let i = 0; i < tempLines.length; i++) {
+      colIdx = Math.floor(i / perCol)
+      colLineIdx = i - colIdx * perCol
+      if (colIdx >= numCols) break
+
+      const colX = layoutStartX + colIdx * (colWidth + colGap)
+      const ly = PAD + lineHeight + colLineIdx * lineHeight
+
+      if (ly > H + lineHeight) continue
+
+      allLines.push({
+        text: tempLines[i].text,
+        x: colX,
+        y: ly,
+        lineIndex: i,
+        width: colWidth
+      })
+    }
+  }
+
+  // Gravity: offset all lines downward
+  if (commands.gravity && allLines.length > 0) {
+    const minY = Math.min(...allLines.map(l => l.y))
+    const maxY = Math.max(...allLines.map(l => l.y))
+    const textBlockHeight = maxY - minY + lineHeight
+    const availHeight = H - PAD * 2
+    const drift = Math.max(0, availHeight - textBlockHeight)
+    const gravityOffset = drift * (0.5 + 0.5 * Math.sin(Date.now() * 0.0005))
+    for (const ln of allLines) {
+      ln.y += gravityOffset
+    }
+  }
+
+  // --- Render pass ---
+  ctx.font = fontStr
+  ctx.textBaseline = 'alphabetic'
+
+  for (const ln of allLines) {
+    if (ln.y < -lineHeight || ln.y > H + lineHeight) continue
+
+    if (commands.mirror) {
+      ctx.save()
+      ctx.translate(ln.x + ln.width, 0)
+      ctx.scale(-1, 1)
+      renderLineWithHighlighting(ctx, ln.text, 0, ln.y, commands, fontStr)
+      ctx.restore()
+    } else {
+      renderLineWithHighlighting(ctx, ln.text, ln.x, ln.y, commands, fontStr)
+    }
+  }
+
+  // Draw circle outline faintly if circle command active (disabled in multi-column mode)
+  if (commands.circle && numCols <= 1) {
+    ctx.beginPath()
+    ctx.arc(canvasCenterX, canvasCenterY, commands.circle.radius, 0, Math.PI * 2)
+    ctx.strokeStyle = 'rgba(196, 154, 108, 0.12)'
+    ctx.lineWidth = 1
+    ctx.stroke()
+  }
+
+  lineCountEl.textContent = `${allLines.length} lines`
+}
+
+// --- Render a line with command highlighting ---
+function renderLineWithHighlighting(ctx, lineText, x, y, commands, fontStr) {
+  const lineSpans = findCommandSpans(lineText)
+
+  if (lineSpans.length === 0) {
+    ctx.fillStyle = commands.color
+    ctx.font = fontStr
+    ctx.textAlign = 'left'
+    ctx.fillText(lineText, x, y)
+    return
+  }
+
+  // Sort spans by start position
+  lineSpans.sort((a, b) => a.start - b.start)
+
+  // Merge overlapping spans
+  const merged = []
+  for (const s of lineSpans) {
+    if (merged.length > 0 && s.start <= merged[merged.length - 1].end) {
+      merged[merged.length - 1].end = Math.max(merged[merged.length - 1].end, s.end)
+      merged[merged.length - 1].type = s.type === 'command' ? 'command' : merged[merged.length - 1].type
+    } else {
+      merged.push({ ...s })
+    }
+  }
+
+  // Render segments with color differentiation
+  let curX = x
+  let pos = 0
+  ctx.font = fontStr
+  ctx.textAlign = 'left'
+
+  for (const span of merged) {
+    // Text before this span
+    if (span.start > pos) {
+      const before = lineText.slice(pos, span.start)
+      ctx.fillStyle = commands.color
+      ctx.fillText(before, curX, y)
+      curX += ctx.measureText(before).width
+    }
+
+    const cmdPart = lineText.slice(span.start, span.end)
+
+    // Split command keyword from its arguments
+    const cmdMatch = cmdPart.match(/^(\s*)(width|circle|columns|wave|indent|mirror|breathe|font|color|gravity)/i)
+    if (cmdMatch) {
+      const leadingSpace = cmdMatch[1]
+      const keyword = cmdMatch[2]
+      const rest = cmdPart.slice(cmdMatch[0].length)
+
+      if (leadingSpace) {
+        ctx.fillStyle = commands.color
+        ctx.fillText(leadingSpace, curX, y)
+        curX += ctx.measureText(leadingSpace).width
+      }
+
+      // Command keyword in warm accent
+      ctx.fillStyle = '#c49a6c'
+      ctx.fillText(keyword, curX, y)
+      curX += ctx.measureText(keyword).width
+
+      // Arguments in muted green
+      if (rest) {
+        ctx.fillStyle = '#6a9a6a'
+        ctx.fillText(rest, curX, y)
+        curX += ctx.measureText(rest).width
+      }
+    } else {
+      ctx.fillStyle = '#6a9a6a'
+      ctx.fillText(cmdPart, curX, y)
+      curX += ctx.measureText(cmdPart).width
+    }
+
+    pos = span.end
+  }
+
+  // Remaining text after last span
+  if (pos < lineText.length) {
+    const after = lineText.slice(pos)
+    ctx.fillStyle = commands.color
+    ctx.fillText(after, curX, y)
+  }
+}
+
+// --- Number scrubbing ---
+// Click and drag on green numbers in the overlay to scrub their values
+highlightEl.addEventListener('mousedown', (e) => {
+  const numSpan = e.target.closest('.num')
+  if (!numSpan) return
+
+  e.preventDefault()
+  e.stopPropagation()
+
+  const startOffset = parseInt(numSpan.dataset.start)
+  const originalText = editor.value
+  // Find the current number at that offset
+  const numMatch = originalText.slice(startOffset).match(/^[0-9]+\.?[0-9]*/)
+  if (!numMatch) return
+  const originalValue = parseFloat(numMatch[0])
+  const isFloat = numMatch[0].includes('.')
+  const startX = e.clientX
+
+  numSpan.classList.add('scrubbing')
+  document.body.style.cursor = 'ew-resize'
+  document.body.style.userSelect = 'none'
+
+  function onMove(e2) {
+    const dx = e2.clientX - startX
+    let sensitivity = 1
+    if (e2.shiftKey) sensitivity = 0.1  // fine
+    if (e2.altKey) sensitivity = 5      // coarse
+
+    let newValue = originalValue + dx * sensitivity
+    newValue = Math.max(0, newValue)
+    const newStr = isFloat ? newValue.toFixed(1) : String(Math.round(newValue))
+
+    // Re-find the number at startOffset (it may have changed length from prior drags)
+    const text = editor.value
+    const curMatch = text.slice(startOffset).match(/^[0-9]+\.?[0-9]*/)
+    if (!curMatch) return
+    const curEnd = startOffset + curMatch[0].length
+    editor.value = text.slice(0, startOffset) + newStr + text.slice(curEnd)
+    updateHighlight()
+  }
+
+  function onUp() {
+    document.removeEventListener('mousemove', onMove)
+    document.removeEventListener('mouseup', onUp)
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+    // The span may have been replaced by updateHighlight, so just remove class from all
+    highlightEl.querySelectorAll('.scrubbing').forEach(el => el.classList.remove('scrubbing'))
+  }
+
+  document.addEventListener('mousemove', onMove)
+  document.addEventListener('mouseup', onUp)
+})
+
+// Start render loop
+requestAnimationFrame(render)
+
+</script>
+</body>
+</html>

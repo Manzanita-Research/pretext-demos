@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Babel Columns</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=Literata:ital,opsz,wght@0,7..72,200..900;1,7..72,200..900&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #08080e; }
+  canvas { display: block; width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script type="module">
+import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
+
+// --- Text content ---
+
+const englishText = `Language is the oldest technology. Before wheels, before fire pits lined with stone, humans shaped breath into meaning. Every sentence is an act of compression — centuries of shared experience packed into vibrations that cross the air between two people. Writing pushed that further. Marks on clay, ink on paper, pixels on glass: each leap let us speak across time. The Latin alphabet descends from Phoenician traders who scratched consonants onto pottery. Romans carved it into empire. Monks copied it by candlelight. Gutenberg stamped it into metal. And now it flows through fiber optic cables at the speed of light, still carrying the same fundamental impulse: I have something to say, and I need you to hear it. Typography is how we give that impulse a body. Communication is not merely the transfer of information. It is the construction of shared reality. When two people speak, they are building a world together — fragile, temporary, suspended between their separate minds like a bridge made of breath. Every misunderstanding reveals the miracle: that we understand each other at all.`
+
+const arabicText = `اللغة هي أقدم تقنية عرفها الإنسان. قبل العجلات وقبل مواقد النار، صاغ البشر أنفاسهم في معانٍ. كل جملة هي فعل ضغط — قرون من التجارب المشتركة مكثفة في اهتزازات تعبر الهواء بين شخصين. والكتابة دفعت ذلك أبعد. علامات على الطين وحبر على الورق وبكسلات على الزجاج: كل قفزة أتاحت لنا أن نتحدث عبر الزمن. الأبجدية العربية تنحدر من النبطية التي تفرعت من الآرامية. حملها التجار والعلماء والشعراء عبر القارات. نسخها الخطاطون بعناية فائقة في المساجد والقصور. والآن تتدفق عبر الألياف الضوئية بسرعة النور حاملة نفس الدافع الأساسي: لدي ما أقوله وأحتاج أن تسمعني. فن الخط هو كيف نمنح ذلك الدافع جسداً. التواصل ليس مجرد نقل للمعلومات. إنه بناء واقع مشترك. عندما يتحدث شخصان، فإنهما يبنيان عالماً معاً — هشاً ومؤقتاً ومعلقاً بين عقلين منفصلين كجسر مصنوع من الأنفاس.`
+
+const chineseText = `语言是人类最古老的技术。在车轮之前，在石砌火坑之前，人类就将呼吸塑造成意义。每一个句子都是一次压缩——几个世纪的共同经验被浓缩在两个人之间穿越空气的振动中。书写将这一切推得更远。泥板上的刻痕、纸上的墨迹、玻璃上的像素：每一次飞跃都让我们跨越时间说话。汉字起源于商代的甲骨文，龟甲上的裂纹被解读为神谕。秦始皇统一了文字，僧侣们用毛笔抄写经卷，毕昇发明了活字印刷。如今，文字以光速穿过光纤电缆，承载着同样根本的冲动：我有话要说，我需要你听到。字体排印，就是我们赋予这种冲动以形体的方式。交流不仅仅是信息的传递。它是共同现实的建构。当两个人交谈时，他们正在一起建造一个世界——脆弱的、短暂的、悬挂在两个独立心灵之间，如同用呼吸筑成的桥梁。每一次误解都揭示了奇迹：我们居然能够理解彼此。`
+
+// --- Canvas setup ---
+
+const canvas = document.getElementById('c')
+const ctx = canvas.getContext('2d')
+let dpr = window.devicePixelRatio || 1
+let W, H
+
+function resize() {
+  dpr = window.devicePixelRatio || 1
+  W = window.innerWidth
+  H = window.innerHeight
+  canvas.width = W * dpr
+  canvas.height = H * dpr
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+}
+resize()
+window.addEventListener('resize', () => { resize(); prepareFonts() })
+
+// --- Fonts and preparation ---
+
+const FONT_SIZE = 15
+const LINE_HEIGHT = 24
+const MARGIN = 32
+const GAP = 16
+const TOP_MARGIN = 80
+
+const englishFont = `${FONT_SIZE}px Literata, Georgia, "Times New Roman", serif`
+const arabicFont = `${FONT_SIZE}px "Geeza Pro", "Traditional Arabic", "Simplified Arabic", "Noto Naskh Arabic", serif`
+const chineseFont = `${FONT_SIZE}px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif`
+
+let preparedEn, preparedAr, preparedZh
+
+function prepareFonts() {
+  preparedEn = prepareWithSegments(englishText, englishFont)
+  preparedAr = prepareWithSegments(arabicText, arabicFont)
+  preparedZh = prepareWithSegments(chineseText, chineseFont)
+}
+prepareFonts()
+
+// --- Column colors ---
+
+const COL = [
+  { text: '#e8d4c8', label: '#C2714F', name: 'English', bg: 'rgba(194, 113, 79, 0.04)' },
+  { text: '#e8dcc0', label: '#C49A3C', name: 'العربية', bg: 'rgba(196, 154, 60, 0.04)' },
+  { text: '#c8d8c4', label: '#8B9E7E', name: '中文', bg: 'rgba(139, 158, 126, 0.04)' },
+]
+
+// --- Adversarial width system ---
+
+const totalUsable = () => W - MARGIN * 2 - GAP * 2
+const BASE_RATIO = 1 / 3
+const AMPLITUDE = 0.15 // max deviation from base ratio
+
+let animating = true
+let manualOverride = false
+let manualRatios = [1/3, 1/3, 1/3]
+let animTime = 0
+
+function getAdversarialWidths(t) {
+  if (manualOverride) {
+    const total = totalUsable()
+    return manualRatios.map(r => r * total)
+  }
+
+  const rawA = Math.sin(t * 0.7)
+  const rawB = Math.sin(t * 1.1 + Math.PI / 3)
+  const rawC = Math.sin(t * 0.9 + 2 * Math.PI / 3)
+
+  // Map to ratios centered on BASE_RATIO
+  let rA = BASE_RATIO + rawA * AMPLITUDE
+  let rB = BASE_RATIO + rawB * AMPLITUDE
+  let rC = BASE_RATIO + rawC * AMPLITUDE
+
+  // Normalize so they sum to 1
+  const sum = rA + rB + rC
+  rA /= sum
+  rB /= sum
+  rC /= sum
+
+  // Enforce minimum width
+  const MIN_RATIO = 0.12
+  const clamp = (ratios) => {
+    let clamped = ratios.map(r => Math.max(r, MIN_RATIO))
+    const cs = clamped.reduce((a, b) => a + b, 0)
+    return clamped.map(r => r / cs)
+  }
+
+  const [fA, fB, fC] = clamp([rA, rB, rC])
+  const total = totalUsable()
+  return [fA * total, fB * total, fC * total]
+}
+
+// --- Divider dragging ---
+
+let draggingDivider = -1 // -1 = none, 0 = between col 0 and 1, 1 = between col 1 and 2
+let dragStartX = 0
+let resumeTimer = null
+
+function getDividerPositions(widths) {
+  const x0 = MARGIN + widths[0]
+  const x1 = MARGIN + widths[0] + GAP + widths[1]
+  return [x0 + GAP / 2, x1 + GAP / 2]
+}
+
+function hitDivider(mx) {
+  const widths = currentWidths
+  const divs = getDividerPositions(widths)
+  for (let i = 0; i < divs.length; i++) {
+    if (Math.abs(mx - divs[i]) < 12) return i
+  }
+  return -1
+}
+
+let currentWidths = [100, 100, 100]
+
+canvas.addEventListener('mousedown', e => {
+  const d = hitDivider(e.clientX)
+  if (d >= 0) {
+    draggingDivider = d
+    dragStartX = e.clientX
+    manualOverride = true
+    manualRatios = currentWidths.map(w => w / totalUsable())
+    if (resumeTimer) clearTimeout(resumeTimer)
+    e.preventDefault()
+  }
+})
+
+canvas.addEventListener('mousemove', e => {
+  if (draggingDivider >= 0) {
+    const dx = e.clientX - dragStartX
+    dragStartX = e.clientX
+    const total = totalUsable()
+    const dRatio = dx / total
+
+    if (draggingDivider === 0) {
+      manualRatios[0] += dRatio
+      manualRatios[1] -= dRatio
+    } else {
+      manualRatios[1] += dRatio
+      manualRatios[2] -= dRatio
+    }
+
+    // Clamp
+    const MIN = 0.08
+    for (let i = 0; i < 3; i++) {
+      if (manualRatios[i] < MIN) {
+        const deficit = MIN - manualRatios[i]
+        manualRatios[i] = MIN
+        // Redistribute deficit
+        const other = i === 0 ? 1 : i === 2 ? 1 : (draggingDivider === 0 ? 0 : 2)
+        manualRatios[other] -= deficit
+      }
+    }
+
+    // Re-normalize
+    const s = manualRatios.reduce((a, b) => a + b, 0)
+    manualRatios = manualRatios.map(r => r / s)
+  } else {
+    // Update cursor
+    const d = hitDivider(e.clientX)
+    canvas.style.cursor = d >= 0 ? 'col-resize' : 'default'
+  }
+})
+
+canvas.addEventListener('mouseup', () => {
+  if (draggingDivider >= 0) {
+    draggingDivider = -1
+    // Resume animation after 3 seconds
+    if (resumeTimer) clearTimeout(resumeTimer)
+    resumeTimer = setTimeout(() => {
+      manualOverride = false
+    }, 3000)
+  }
+})
+
+// Touch support
+canvas.addEventListener('touchstart', e => {
+  const touch = e.touches[0]
+  const d = hitDivider(touch.clientX)
+  if (d >= 0) {
+    draggingDivider = d
+    dragStartX = touch.clientX
+    manualOverride = true
+    manualRatios = currentWidths.map(w => w / totalUsable())
+    if (resumeTimer) clearTimeout(resumeTimer)
+    e.preventDefault()
+  }
+}, { passive: false })
+
+canvas.addEventListener('touchmove', e => {
+  if (draggingDivider >= 0) {
+    const touch = e.touches[0]
+    const dx = touch.clientX - dragStartX
+    dragStartX = touch.clientX
+    const total = totalUsable()
+    const dRatio = dx / total
+
+    if (draggingDivider === 0) {
+      manualRatios[0] += dRatio
+      manualRatios[1] -= dRatio
+    } else {
+      manualRatios[1] += dRatio
+      manualRatios[2] -= dRatio
+    }
+
+    const MIN = 0.08
+    for (let i = 0; i < 3; i++) {
+      if (manualRatios[i] < MIN) {
+        const deficit = MIN - manualRatios[i]
+        manualRatios[i] = MIN
+        const other = i === 1 ? (draggingDivider === 0 ? 0 : 2) : 1
+        manualRatios[other] -= deficit
+      }
+    }
+    const s = manualRatios.reduce((a, b) => a + b, 0)
+    manualRatios = manualRatios.map(r => r / s)
+    e.preventDefault()
+  }
+}, { passive: false })
+
+canvas.addEventListener('touchend', () => {
+  if (draggingDivider >= 0) {
+    draggingDivider = -1
+    if (resumeTimer) clearTimeout(resumeTimer)
+    resumeTimer = setTimeout(() => { manualOverride = false }, 3000)
+  }
+})
+
+// --- Render ---
+
+function render(timestamp) {
+  requestAnimationFrame(render)
+
+  if (!manualOverride) {
+    animTime = timestamp * 0.001
+  }
+
+  ctx.clearRect(0, 0, W, H)
+  ctx.fillStyle = '#08080e'
+  ctx.fillRect(0, 0, W, H)
+
+  const widths = getAdversarialWidths(animTime)
+  currentWidths = widths
+
+  // Column x positions
+  const colX = [
+    MARGIN,
+    MARGIN + widths[0] + GAP,
+    MARGIN + widths[0] + GAP + widths[1] + GAP,
+  ]
+
+  // --- Draw column backgrounds ---
+  for (let i = 0; i < 3; i++) {
+    ctx.fillStyle = COL[i].bg
+    ctx.fillRect(colX[i], 0, widths[i], H)
+  }
+
+  // --- Draw dividers ---
+  const dividerX = [
+    MARGIN + widths[0] + GAP / 2,
+    MARGIN + widths[0] + GAP + widths[1] + GAP / 2,
+  ]
+
+  for (let i = 0; i < 2; i++) {
+    const x = dividerX[i]
+    // Animated divider — pulse opacity
+    const pulse = 0.12 + 0.06 * Math.sin(animTime * 2 + i * Math.PI)
+    ctx.strokeStyle = `rgba(200, 200, 208, ${pulse})`
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(x, TOP_MARGIN - 10)
+    ctx.lineTo(x, H - 20)
+    ctx.stroke()
+
+    // Small drag handle
+    const handleAlpha = draggingDivider === i ? 0.5 : 0.2
+    ctx.fillStyle = `rgba(200, 200, 208, ${handleAlpha})`
+    ctx.beginPath()
+    ctx.roundRect(x - 3, TOP_MARGIN - 20, 6, 14, 3)
+    ctx.fill()
+  }
+
+  // --- Title ---
+  ctx.fillStyle = '#a89e8e'
+  ctx.font = '300 24px Fraunces, Georgia, serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'alphabetic'
+  ctx.fillText('Babel Columns', W / 2, 36)
+
+  // --- Column width labels and names ---
+  ctx.font = '10px Fraunces, Georgia, serif'
+  ctx.textBaseline = 'alphabetic'
+
+  for (let i = 0; i < 3; i++) {
+    const cx = colX[i] + widths[i] / 2
+
+    // Column name
+    ctx.fillStyle = COL[i].label
+    ctx.textAlign = 'center'
+    ctx.fillText(COL[i].name, cx, TOP_MARGIN - 24)
+
+    // Width in pixels
+    ctx.fillStyle = COL[i].label + '99'
+    ctx.fillText(`${Math.round(widths[i])}px`, cx, TOP_MARGIN - 10)
+
+    // Top rule
+    ctx.strokeStyle = COL[i].label + '30'
+    ctx.lineWidth = 0.5
+    ctx.beginPath()
+    ctx.moveTo(colX[i], TOP_MARGIN - 4)
+    ctx.lineTo(colX[i] + widths[i], TOP_MARGIN - 4)
+    ctx.stroke()
+  }
+
+  // --- Layout and render text ---
+
+  const prepared = [preparedEn, preparedAr, preparedZh]
+  const fonts = [englishFont, arabicFont, chineseFont]
+  const isRTL = [false, true, false]
+  const padding = 10
+
+  for (let col = 0; col < 3; col++) {
+    const x = colX[col] + padding
+    const colW = widths[col] - padding * 2
+
+    if (colW < 20) continue
+
+    ctx.font = fonts[col]
+    ctx.textBaseline = 'alphabetic'
+    ctx.fillStyle = COL[col].text
+
+    let cursor = { segmentIndex: 0, graphemeIndex: 0 }
+    let y = TOP_MARGIN + LINE_HEIGHT
+    let lineCount = 0
+
+    while (y < H - 30) {
+      const line = layoutNextLine(prepared[col], cursor, colW)
+      if (line === null) break
+
+      if (isRTL[col]) {
+        ctx.save()
+        ctx.direction = 'rtl'
+        ctx.textAlign = 'right'
+        ctx.fillText(line.text, x + colW, y)
+        ctx.restore()
+      } else {
+        ctx.textAlign = 'left'
+        ctx.direction = 'ltr'
+        ctx.fillText(line.text, x, y)
+      }
+
+      cursor = line.end
+      y += LINE_HEIGHT
+      lineCount++
+    }
+
+    // Line count at bottom
+    ctx.font = '10px Fraunces, Georgia, serif'
+    ctx.fillStyle = COL[col].label + '60'
+    ctx.textAlign = 'center'
+    ctx.direction = 'ltr'
+    ctx.fillText(`${lineCount} lines`, colX[col] + widths[col] / 2, H - 12)
+  }
+
+  // --- Hint text ---
+  ctx.font = '11px Literata, Georgia, serif'
+  ctx.fillStyle = '#5C5C5C'
+  ctx.textAlign = 'center'
+  ctx.direction = 'ltr'
+  ctx.fillText('drag the dividers to override the animation', W / 2, H - 12)
+}
+
+requestAnimationFrame(render)
+</script>
+</body>
+</html>

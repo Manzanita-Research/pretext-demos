@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Babel Sieve</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=Literata:ital,opsz,wght@0,7..72,200..900;1,7..72,200..900&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #08080e;
+    color: #c8c8d0;
+    font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    overflow: hidden;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  canvas {
+    display: block;
+    flex: 1;
+    cursor: crosshair;
+  }
+
+  #ui {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 20px;
+    background: rgba(8, 8, 14, 0.85);
+    border-top: 1px solid rgba(200, 200, 208, 0.08);
+    font-size: 12px;
+    z-index: 10;
+    gap: 16px;
+  }
+
+  #stats {
+    display: flex;
+    gap: 18px;
+    opacity: 0.6;
+    flex-shrink: 0;
+    font-family: Fraunces, Georgia, serif;
+    font-variation-settings: 'WONK' 1, 'SOFT' 100;
+  }
+
+  #stats span { white-space: nowrap; }
+
+  #input-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  #word-input {
+    background: rgba(200, 200, 208, 0.06);
+    border: 1px solid rgba(200, 200, 208, 0.12);
+    color: #c8c8d0;
+    font-family: Literata, Georgia, serif;
+    font-size: 12px;
+    padding: 5px 10px;
+    border-radius: 4px;
+    width: 160px;
+    outline: none;
+  }
+
+  #word-input:focus {
+    border-color: rgba(194, 113, 79, 0.4);
+  }
+
+  #word-input::placeholder {
+    color: rgba(200, 200, 208, 0.25);
+  }
+
+  #hint {
+    opacity: 0.35;
+    font-size: 11px;
+    white-space: nowrap;
+    font-family: Literata, Georgia, serif;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+
+<div id="ui">
+  <div id="stats">
+    <span id="stat-falling">falling: 0</span>
+    <span id="stat-stuck">stuck: 0</span>
+    <span id="stat-through">through: 0</span>
+  </div>
+  <div id="input-wrap">
+    <input id="word-input" type="text" placeholder="type a word, press enter" autocomplete="off" spellcheck="false" />
+    <span id="hint">click anywhere to drop words</span>
+  </div>
+</div>
+
+<script type="module">
+// ── Word pool ──────────────────────────────────────────────────────
+const WORD_POOL = [
+  // tiny
+  'a','I','no','go','be','do','if','an','or','so','up','we','am','is','it','ox',
+  // short
+  'the','and','but','for','not','you','all','can','had','her','was','one','our',
+  'out','day','get','has','him','his','how','its','may','new','now','old','see',
+  'way','who','oil','did','let','say','she','too','use','run','ask','own','put',
+  // medium
+  'word','time','long','make','look','come','just','know','take','some','good',
+  'give','most','only','tell','very','when','also','back','call','hand','much',
+  'then','well','here','must','into','year','them','life','with','from','work',
+  'part','keep','last','real','self','hold','song','note','echo','drum','bass',
+  'tone','beat','haze','glow','dusk','hush','pine','salt','wind','root','seed',
+  // long
+  'about','other','which','their','there','first','would','after','think','these',
+  'sound','water','small','place','where','right','still','again','music','light',
+  'world','house','never','heart','earth','north','voice','stone','dream','ocean',
+  'quiet','bloom','ember','grain','river','smoke','ghost','vapor','amber','cedar',
+  // longer
+  'between','through','another','because','thought','before','number','system',
+  'shadow','garden','harbor','lantern','feather','whisper','passage','current',
+  'gravity','silence','texture','surface','pattern','weather','nothing','morning',
+  'evening','strange','thunder','voltage','mineral','horizon','pilgrim',
+  // longest
+  'something','beautiful','different','important','community','together','remember',
+  'frequency','resonance','migration','continent','sculpture','telephone','blueprint',
+  'trembling','cloudcover','watershed','gestation','turbulence','revolution',
+  'architecture','constellation','understanding','transformation','Mediterranean',
+  'electromagnetic','crystallography','bioluminescence','kaleidoscope','seismograph'
+];
+
+// ── Constants ──────────────────────────────────────────────────────
+const GRAVITY = 0.18;
+const FRICTION = 0.92;
+const BOUNCE = 0.3;
+const FONT_SIZE = 14;
+const FONT = `${FONT_SIZE}px Literata, Georgia, serif`;
+const LINE_HEIGHT = FONT_SIZE + 6;
+const NUM_SIEVE_LEVELS = 5;
+const INITIAL_WORDS = 35;
+const BATCH_INTERVAL = 2800;
+const BATCH_SIZE = 4;
+const FLOOR_MARGIN = 50;
+
+// ── Canvas setup ───────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  buildSieve();
+}
+window.addEventListener('resize', resize);
+
+// ── Measure word widths ────────────────────────────────────────────
+function measureWord(word) {
+  ctx.font = FONT;
+  return ctx.measureText(word).width;
+}
+
+// ── Color by width ─────────────────────────────────────────────────
+function colorForWidth(w) {
+  // short=sage #8B9E7E, medium=ochre #C49A3C, long=terracotta #C2714F
+  const minW = 8, maxW = 180;
+  const t = Math.min(1, Math.max(0, (w - minW) / (maxW - minW)));
+  if (t < 0.35) {
+    // sage → ochre transition
+    const s = t / 0.35;
+    const r = Math.round(139 + s * 57);   // 139 → 196
+    const g = Math.round(158 - s * 4);     // 158 → 154
+    const b = Math.round(126 - s * 66);    // 126 → 60
+    return `rgb(${r},${g},${b})`;
+  } else if (t < 0.65) {
+    // ochre
+    const s = (t - 0.35) / 0.3;
+    const r = Math.round(196 - s * 2);     // 196 → 194
+    const g = Math.round(154 - s * 41);    // 154 → 113
+    const b = Math.round(60 + s * 19);     // 60 → 79
+    return `rgb(${r},${g},${b})`;
+  } else {
+    // ochre → terracotta
+    const s = (t - 0.65) / 0.35;
+    const r = Math.round(194 - s * 34);    // 194 → 160
+    const g = Math.round(113 - s * 31);    // 113 → 82
+    const b = Math.round(79 - s * 34);     // 79 → 45
+    return `rgb(${r},${g},${b})`;
+  }
+}
+
+// ── Sieve bars ─────────────────────────────────────────────────────
+let sieveLevels = [];
+
+function buildSieve() {
+  sieveLevels = [];
+  const topMargin = 60;
+  const bottomMargin = FLOOR_MARGIN + 60;
+  const usableH = H - topMargin - bottomMargin;
+  const levelSpacing = usableH / (NUM_SIEVE_LEVELS + 1);
+
+  for (let i = 0; i < NUM_SIEVE_LEVELS; i++) {
+    const y = topMargin + levelSpacing * (i + 1);
+    // Each level: array of bars with gaps between them
+    const numGaps = 3 + i; // more gaps lower down
+    const bars = [];
+    const totalGaps = numGaps;
+    const totalBars = totalGaps + 1;
+    const avgBarWidth = W / (totalBars + totalGaps * 0.6);
+
+    let x = 0;
+    for (let b = 0; b < totalBars; b++) {
+      const barWidth = avgBarWidth * (0.7 + Math.random() * 0.6);
+      bars.push({
+        x: x,
+        width: barWidth,
+        baseGap: 30 + Math.random() * 50, // base gap width after this bar
+        gapPhase: Math.random() * Math.PI * 2,
+        gapSpeed: 0.3 + Math.random() * 0.7,
+      });
+      x += barWidth + bars[bars.length - 1].baseGap;
+    }
+
+    // Scale to fit width
+    const totalW = x - bars[bars.length - 1].baseGap;
+    const scale = W / totalW;
+    for (const bar of bars) {
+      bar.x *= scale;
+      bar.width *= scale;
+      bar.baseGap *= scale;
+    }
+
+    sieveLevels.push({ y, bars, thickness: 5 });
+  }
+}
+
+// Get bar geometry at current time for a sieve level
+function getBarRects(level, time) {
+  const rects = [];
+  let x = 0;
+  const bars = level.bars;
+  for (let i = 0; i < bars.length; i++) {
+    const bar = bars[i];
+    const gapOsc = Math.sin(time * bar.gapSpeed + bar.gapPhase);
+    const gapWidth = bar.baseGap * (0.5 + 0.5 * gapOsc); // oscillate 0-100% of base
+
+    rects.push({
+      x: x,
+      y: level.y,
+      width: bar.width,
+      height: level.thickness,
+      gapAfter: gapWidth,
+    });
+    x += bar.width + gapWidth;
+  }
+
+  // Rescale so bars always span full width
+  const totalUsed = x - (rects.length > 0 ? rects[rects.length - 1].gapAfter : 0);
+  if (totalUsed > 0) {
+    const scale = W / totalUsed;
+    let cx = 0;
+    for (const r of rects) {
+      r.x = cx;
+      r.width *= scale;
+      r.gapAfter *= scale;
+      cx += r.width + r.gapAfter;
+    }
+  }
+  return rects;
+}
+
+// ── Word objects ───────────────────────────────────────────────────
+let words = [];
+let wordIdCounter = 0;
+
+function createWord(text, x, y) {
+  const width = measureWord(text);
+  return {
+    id: wordIdCounter++,
+    text,
+    x: x ?? (Math.random() * (W - width)),
+    y: y ?? (-LINE_HEIGHT - Math.random() * 100),
+    vx: (Math.random() - 0.5) * 0.5,
+    vy: Math.random() * 0.5,
+    width,
+    height: LINE_HEIGHT,
+    mass: width, // mass proportional to measured width
+    color: colorForWidth(width),
+    settled: false,
+    settledTime: 0,
+    throughSieve: false,
+    alpha: 1,
+  };
+}
+
+function spawnRandom(x, y) {
+  const text = WORD_POOL[Math.floor(Math.random() * WORD_POOL.length)];
+  words.push(createWord(text, x, y));
+}
+
+function spawnWord(text, x, y) {
+  words.push(createWord(text, x, y));
+}
+
+// ── Physics ────────────────────────────────────────────────────────
+function simulate(time, dt) {
+  const floorY = H - FLOOR_MARGIN;
+
+  // Precompute bar rects for each level
+  const allBarRects = sieveLevels.map(l => getBarRects(l, time));
+
+  for (const w of words) {
+    if (w.settled) continue;
+
+    // Gravity
+    w.vy += GRAVITY;
+
+    // Air drag (light)
+    w.vx *= 0.998;
+    w.vy *= 0.999;
+
+    // Tentative position
+    let nx = w.x + w.vx;
+    let ny = w.y + w.vy;
+
+    // Collision with sieve bars
+    for (const barRects of allBarRects) {
+      for (const bar of barRects) {
+        // Is the word overlapping this bar horizontally?
+        const wordLeft = nx;
+        const wordRight = nx + w.width;
+        const barLeft = bar.x;
+        const barRight = bar.x + bar.width;
+
+        const hOverlap = wordRight > barLeft && wordLeft < barRight;
+        if (!hOverlap) continue;
+
+        const barTop = bar.y;
+        const barBottom = bar.y + bar.height;
+        const wordBottom = ny + w.height;
+        const wordTop = ny;
+
+        // Falling onto top of bar
+        if (w.vy > 0 && wordBottom > barTop && w.y + w.height <= barTop + w.vy + 2) {
+          ny = barTop - w.height;
+          w.vy = -w.vy * BOUNCE;
+          if (Math.abs(w.vy) < 0.5) w.vy = 0;
+
+          // Slide toward nearest gap
+          const wordCenter = nx + w.width / 2;
+          let nearestGapX = null;
+          let nearestDist = Infinity;
+
+          for (const b of barRects) {
+            const gapCenter = b.x + b.width + b.gapAfter / 2;
+            const dist = Math.abs(wordCenter - gapCenter);
+            if (dist < nearestDist) {
+              nearestDist = dist;
+              nearestGapX = gapCenter;
+
+              // Can we fit through this gap?
+              if (b.gapAfter > w.width + 4) {
+                // Slide toward it
+                const slideForce = 0.08 * w.mass * 0.005;
+                w.vx += (gapCenter - wordCenter) > 0 ? slideForce : -slideForce;
+              }
+            }
+          }
+
+          // Small random jitter to prevent perfect stacking
+          w.vx += (Math.random() - 0.5) * 0.15;
+        }
+
+        // Rising into bottom of bar
+        if (w.vy < 0 && wordTop < barBottom && w.y >= barBottom + w.vy - 2) {
+          ny = barBottom;
+          w.vy = -w.vy * BOUNCE * 0.5;
+        }
+      }
+    }
+
+    // Floor collision
+    if (ny + w.height > floorY) {
+      ny = floorY - w.height;
+      w.vy = -w.vy * BOUNCE * 0.5;
+      if (Math.abs(w.vy) < 0.3) {
+        w.vy = 0;
+        w.settledTime += dt;
+        if (w.settledTime > 1) w.settled = true;
+      }
+      w.vx *= FRICTION;
+    }
+
+    // Wall collision
+    if (nx < 0) { nx = 0; w.vx = Math.abs(w.vx) * BOUNCE; }
+    if (nx + w.width > W) { nx = W - w.width; w.vx = -Math.abs(w.vx) * BOUNCE; }
+
+    // Ceiling
+    if (ny < -200) ny = -200;
+
+    w.x = nx;
+    w.y = ny;
+  }
+
+  // Simple word-word collision (push apart vertically when overlapping)
+  for (let i = 0; i < words.length; i++) {
+    const a = words[i];
+    if (a.settled && a.vy === 0) continue;
+    for (let j = i + 1; j < words.length; j++) {
+      const b = words[j];
+
+      const hOverlap = a.x + a.width > b.x && a.x < b.x + b.width;
+      const vOverlap = a.y + a.height > b.y && a.y < b.y + b.height;
+
+      if (hOverlap && vOverlap) {
+        // Push apart
+        const overlapY = Math.min(a.y + a.height - b.y, b.y + b.height - a.y);
+        const overlapX = Math.min(a.x + a.width - b.x, b.x + b.width - a.x);
+
+        if (overlapY < overlapX) {
+          // Separate vertically
+          if (a.y < b.y) {
+            a.y -= overlapY * 0.5;
+            b.y += overlapY * 0.5;
+            if (a.vy > 0 && b.vy <= 0) {
+              const transfer = a.vy * 0.4;
+              b.vy += transfer;
+              a.vy -= transfer;
+            }
+          } else {
+            b.y -= overlapY * 0.5;
+            a.y += overlapY * 0.5;
+            if (b.vy > 0 && a.vy <= 0) {
+              const transfer = b.vy * 0.4;
+              a.vy += transfer;
+              b.vy -= transfer;
+            }
+          }
+        } else {
+          // Separate horizontally
+          if (a.x < b.x) {
+            a.x -= overlapX * 0.3;
+            b.x += overlapX * 0.3;
+          } else {
+            b.x -= overlapX * 0.3;
+            a.x += overlapX * 0.3;
+          }
+          // Exchange some horizontal velocity
+          const avgVx = (a.vx + b.vx) * 0.5;
+          a.vx = avgVx + (a.vx - avgVx) * 0.5;
+          b.vx = avgVx + (b.vx - avgVx) * 0.5;
+        }
+
+        // Unsettle both
+        a.settled = false;
+        a.settledTime = 0;
+        b.settled = false;
+        b.settledTime = 0;
+      }
+    }
+  }
+
+  // Track which words have passed below the last sieve
+  if (sieveLevels.length > 0) {
+    const lastSieveY = sieveLevels[sieveLevels.length - 1].y;
+    for (const w of words) {
+      if (!w.throughSieve && w.y > lastSieveY + 10) {
+        w.throughSieve = true;
+      }
+    }
+  }
+}
+
+// ── Rendering ──────────────────────────────────────────────────────
+function render(time) {
+  ctx.clearRect(0, 0, W, H);
+
+  // Draw sieve bars
+  const allBarRects = sieveLevels.map(l => getBarRects(l, time));
+  for (const barRects of allBarRects) {
+    for (const bar of barRects) {
+      ctx.fillStyle = 'rgba(155, 142, 168, 0.1)';
+      ctx.fillRect(bar.x, bar.y, bar.width, bar.height);
+
+      // Subtle edge highlight
+      ctx.fillStyle = 'rgba(155, 142, 168, 0.18)';
+      ctx.fillRect(bar.x, bar.y, bar.width, 1);
+    }
+  }
+
+  // Draw gap indicators (subtle)
+  for (const barRects of allBarRects) {
+    for (const bar of barRects) {
+      const gapX = bar.x + bar.width;
+      const gapW = bar.gapAfter;
+      if (gapW > 0) {
+        ctx.fillStyle = `rgba(200, 200, 208, ${0.02 + 0.02 * Math.min(1, gapW / 80)})`;
+        ctx.fillRect(gapX, bar.y, gapW, bar.height);
+      }
+    }
+  }
+
+  // Draw words
+  ctx.font = FONT;
+  ctx.textBaseline = 'top';
+  for (const w of words) {
+    const alpha = w.alpha * (w.settled ? 0.6 : 1);
+    ctx.fillStyle = w.color.replace('rgb', 'rgba').replace(')', `,${alpha})`);
+    ctx.fillText(w.text, w.x, w.y + 3);
+  }
+
+  // Floor line
+  const floorY = H - FLOOR_MARGIN;
+  ctx.strokeStyle = 'rgba(155, 142, 168, 0.08)';
+  ctx.beginPath();
+  ctx.moveTo(0, floorY);
+  ctx.lineTo(W, floorY);
+  ctx.stroke();
+}
+
+// ── Stats ──────────────────────────────────────────────────────────
+const statFalling = document.getElementById('stat-falling');
+const statStuck = document.getElementById('stat-stuck');
+const statThrough = document.getElementById('stat-through');
+
+function updateStats() {
+  let falling = 0, stuck = 0, through = 0;
+  const lastSieveY = sieveLevels.length > 0
+    ? sieveLevels[sieveLevels.length - 1].y
+    : H;
+
+  for (const w of words) {
+    if (w.throughSieve) {
+      through++;
+    } else if (w.settled || (w.vy === 0 && w.y > 0 && w.y < lastSieveY)) {
+      stuck++;
+    } else {
+      falling++;
+    }
+  }
+  statFalling.textContent = `falling: ${falling}`;
+  statStuck.textContent = `stuck: ${stuck}`;
+  statThrough.textContent = `through: ${through}`;
+}
+
+// ── Main loop ──────────────────────────────────────────────────────
+let lastTime = 0;
+let simTime = 0;
+let statTick = 0;
+
+function frame(ts) {
+  const dt = Math.min(0.05, (ts - lastTime) / 1000);
+  lastTime = ts;
+  simTime += dt;
+
+  simulate(simTime, dt);
+  render(simTime);
+
+  statTick += dt;
+  if (statTick > 0.3) {
+    updateStats();
+    statTick = 0;
+  }
+
+  requestAnimationFrame(frame);
+}
+
+// ── Input ──────────────────────────────────────────────────────────
+canvas.addEventListener('click', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  for (let i = 0; i < 3; i++) {
+    spawnRandom(x + (Math.random() - 0.5) * 60, y + (Math.random() - 0.5) * 20);
+  }
+});
+
+const wordInput = document.getElementById('word-input');
+wordInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && wordInput.value.trim()) {
+    const text = wordInput.value.trim();
+    // Split on spaces and drop each word
+    const parts = text.split(/\s+/);
+    for (const part of parts) {
+      if (part.length > 0) {
+        spawnWord(part, W / 2 - measureWord(part) / 2 + (Math.random() - 0.5) * 100, -20);
+      }
+    }
+    wordInput.value = '';
+  }
+});
+
+// Prevent space/key events from triggering when typing
+wordInput.addEventListener('keydown', (e) => e.stopPropagation());
+
+// ── Init ───────────────────────────────────────────────────────────
+resize();
+
+// Spawn initial words
+for (let i = 0; i < INITIAL_WORDS; i++) {
+  spawnRandom(
+    Math.random() * W,
+    -LINE_HEIGHT - Math.random() * 300
+  );
+}
+
+// Periodically drop more words
+setInterval(() => {
+  if (words.length < 200) {
+    for (let i = 0; i < BATCH_SIZE; i++) {
+      spawnRandom(
+        Math.random() * W,
+        -LINE_HEIGHT - Math.random() * 40
+      );
+    }
+  }
+}, BATCH_INTERVAL);
+
+// Cull words that have been settled too long at the very bottom to keep performance
+setInterval(() => {
+  if (words.length > 150) {
+    words = words.filter(w => {
+      if (w.settled && w.settledTime > 10 && w.throughSieve) {
+        return Math.random() > 0.3; // fade out some settled-through words
+      }
+      return true;
+    });
+  }
+}, 5000);
+
+requestAnimationFrame(frame);
+</script>
+
+</body>
+</html>

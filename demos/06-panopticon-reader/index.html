@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Panopticon Reader</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,300;1,9..144,400&family=Literata:ital,opsz,wght@0,7..72,300;0,7..72,400;0,7..72,500;1,7..72,300;1,7..72,400&display=swap" rel="stylesheet">
+<script src="https://webgazer.cs.brown.edu/webgazer.js" defer></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #08080e;
+    color: #e8e4dc;
+    font-family: 'Literata', Georgia, 'Times New Roman', serif;
+    overflow: hidden;
+    cursor: none;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  canvas {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+
+  #note {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 13px;
+    color: rgba(194, 113, 79, 0.45);
+    font-family: 'Literata', Georgia, serif;
+    font-style: italic;
+    pointer-events: none;
+    z-index: 10;
+    text-align: center;
+    line-height: 1.6;
+  }
+
+  #note span {
+    display: block;
+    font-size: 11px;
+    color: rgba(139, 158, 126, 0.35);
+    margin-top: 4px;
+  }
+
+  /* --- Mode toggle & controls --- */
+  #controls {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 10px;
+    font-family: 'Literata', Georgia, serif;
+    cursor: default;
+  }
+
+  .mode-btn {
+    background: rgba(232, 228, 220, 0.06);
+    border: 1px solid rgba(194, 113, 79, 0.25);
+    color: rgba(232, 228, 220, 0.5);
+    padding: 6px 14px;
+    font-size: 12px;
+    font-family: 'Literata', Georgia, serif;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    letter-spacing: 0.03em;
+  }
+
+  .mode-btn:hover {
+    background: rgba(194, 113, 79, 0.12);
+    border-color: rgba(194, 113, 79, 0.5);
+    color: rgba(232, 228, 220, 0.8);
+  }
+
+  .mode-btn.active {
+    background: rgba(194, 113, 79, 0.18);
+    border-color: rgba(194, 113, 79, 0.6);
+    color: #C2714F;
+  }
+
+  #calibration-hint {
+    font-size: 11px;
+    color: rgba(196, 154, 60, 0.6);
+    max-width: 200px;
+    text-align: right;
+    line-height: 1.5;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    pointer-events: none;
+  }
+
+  #calibration-hint.visible {
+    opacity: 1;
+  }
+
+  #radius-indicator {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    z-index: 100;
+    font-family: 'Literata', Georgia, serif;
+    font-size: 11px;
+    color: rgba(139, 158, 126, 0.4);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+  }
+
+  #radius-indicator.visible {
+    opacity: 1;
+  }
+
+  /* Style WebGazer video preview */
+  #webgazerVideoContainer {
+    position: fixed !important;
+    bottom: 12px !important;
+    right: 12px !important;
+    top: auto !important;
+    left: auto !important;
+    width: 120px !important;
+    height: 90px !important;
+    z-index: 50 !important;
+    border-radius: 6px !important;
+    overflow: hidden !important;
+    border: 1px solid rgba(194, 113, 79, 0.3) !important;
+    opacity: 0.7 !important;
+  }
+
+  #webgazerVideoFeed {
+    width: 120px !important;
+    height: 90px !important;
+  }
+
+  #webgazerFaceFeedbackBox {
+    display: none !important;
+  }
+
+  #webgazerFaceOverlay {
+    width: 120px !important;
+    height: 90px !important;
+  }
+
+  #webgazerGazeDot {
+    display: none !important;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+
+<div id="controls">
+  <div style="display: flex; gap: 6px;">
+    <button class="mode-btn active" id="btn-mouse">Mouse</button>
+    <button class="mode-btn" id="btn-eyes">Eye Tracking</button>
+  </div>
+  <div id="calibration-hint">
+    Look at each corner of the screen slowly. The calibration improves the more you look around.
+  </div>
+</div>
+
+<div id="radius-indicator"></div>
+
+<div id="note">
+  Move to read. Your fovea is smaller than you think. Scroll to resize the lens.
+  <span>We built this to feel the shape of attention.</span>
+</div>
+
+<script type="module">
+import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
+
+const canvas = document.getElementById('canvas')
+const ctx = canvas.getContext('2d')
+const radiusIndicator = document.getElementById('radius-indicator')
+const calibrationHint = document.getElementById('calibration-hint')
+const btnMouse = document.getElementById('btn-mouse')
+const btnEyes = document.getElementById('btn-eyes')
+
+// --- Text about perception, vision, attention ---
+const passage = `We think we see the whole page. We don't. The eye's fovea — that tiny pit at the center of the retina — covers about two degrees of your visual field. Hold your thumb at arm's length: your foveal vision barely covers your thumbnail. Everything else is peripheral, smeared, guessed at by a brain desperate to construct the illusion of a complete scene.
+
+Reading is not absorption. It is a series of rapid jumps — saccades — three or four per second, each one a tiny controlled seizure of the eye muscles. Between jumps you fixate, and during that fixation you resolve maybe seven to nine characters clearly. The rest is context, prediction, pattern matching. Your brain is reading a sentence you haven't seen yet, filling in the blanks before the fovea arrives.
+
+This is the fundamental deception of consciousness: the feeling that you are taking in the whole visual field at once. You are not. You are sampling. You are building a model from scraps — a few sharp fragments stitched into a panorama by a neural system that abhors uncertainty.
+
+Consider what this means for reading on a screen. Every word you "see" in your peripheral vision right now is a hallucination — your visual cortex's best guess based on word shape, letter frequency, and context. If I changed a word out there in the margins, you might never notice. Your brain would patch over it, smooth it out, maintain the fiction of complete perception.
+
+The philosopher Alva Noë argues that perception is not something that happens to us but something we do. We enact our visual world through movement — saccades, head turns, body shifts. Seeing is an activity, not a state. The world is not projected onto a screen inside your skull. It is explored, interrogated, constructed in real time through the body's engagement with surfaces.
+
+This is what makes reading so strange. It feels passive — the words pour in. But reading is one of the most demanding perceptual tasks we perform. Each fixation is a decision. Each saccade is a hypothesis about where meaning lives on the page. The eye does not scan smoothly across text like a typewriter carriage. It leaps, lands, extracts, leaps again. Sometimes it regresses — jumping backward to re-examine a word the brain flagged as wrong.
+
+What you are experiencing now is a mirror. The text dissolves where you are not looking because that is what text always does. You have simply never been shown the truth of your own perception. The clear window you think you're reading through is actually a keyhole. You peer through it in rapid succession, and your brain pastes the views together into the illusion of a page.
+
+We built this because we wanted to feel the shape of attention itself — to make visible the invisible border between what we perceive and what we invent.`
+
+// --- Configuration ---
+const FONT_SIZE = 18
+const LINE_HEIGHT = 30
+const FONT = `${FONT_SIZE}px Literata, Georgia`
+const MAX_WIDTH = 640
+const FOVEAL_RADIUS_MIN = 60
+const FOVEAL_RADIUS_MAX = 400
+const FOVEAL_RADIUS_DEFAULT = 140
+const PARAFOVEAL_RATIO = 2.7 // parafoveal = foveal * this
+const SCRAMBLE_POOL = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.,;:\u2014\'"!?  '
+
+// --- State ---
+let mouseX = -1000
+let mouseY = -1000
+let gazeX = -1000
+let gazeY = -1000
+let smoothX = -1000
+let smoothY = -1000
+let fovealRadius = FOVEAL_RADIUS_DEFAULT
+let targetFovealRadius = FOVEAL_RADIUS_DEFAULT
+let lines = []
+let charPositions = [] // [{char, x, y, width}]
+let textOffsetX = 0
+let textOffsetY = 0
+let dpr = 1
+let frameCount = 0
+let inputMode = 'mouse' // 'mouse' or 'eyes'
+let webgazerReady = false
+let radiusFlashTimer = 0
+let lensRingPulse = 0 // for the resize pulse animation
+
+// --- Prepare text layout ---
+const prepared = prepareWithSegments(passage, FONT)
+
+function layoutText() {
+  lines = []
+  charPositions = []
+
+  let cursor = { segmentIndex: 0, graphemeIndex: 0 }
+  let y = 0
+
+  while (true) {
+    const line = layoutNextLine(prepared, cursor, MAX_WIDTH)
+    if (line === null) break
+    lines.push({ text: line.text, y })
+    cursor = line.end
+    y += LINE_HEIGHT
+  }
+
+  // Measure each character position
+  const totalHeight = lines.length * LINE_HEIGHT
+  textOffsetX = (canvas.width / dpr - MAX_WIDTH) / 2
+  textOffsetY = Math.max(60, (canvas.height / dpr - totalHeight) / 2)
+
+  charPositions = []
+  ctx.save()
+  ctx.font = FONT
+
+  for (const line of lines) {
+    const chars = [...line.text]
+    let xAccum = 0
+
+    for (let i = 0; i < chars.length; i++) {
+      const ch = chars[i]
+      const w = ctx.measureText(ch).width
+      charPositions.push({
+        char: ch,
+        x: textOffsetX + xAccum,
+        y: textOffsetY + line.y,
+        width: w
+      })
+      xAccum += w
+    }
+  }
+
+  ctx.restore()
+}
+
+// --- Resize ---
+function resize() {
+  dpr = window.devicePixelRatio || 1
+  canvas.width = window.innerWidth * dpr
+  canvas.height = window.innerHeight * dpr
+  canvas.style.width = window.innerWidth + 'px'
+  canvas.style.height = window.innerHeight + 'px'
+  ctx.scale(dpr, dpr)
+  layoutText()
+}
+
+window.addEventListener('resize', resize)
+resize()
+
+// --- Mouse tracking ---
+window.addEventListener('mousemove', (e) => {
+  mouseX = e.clientX
+  mouseY = e.clientY
+})
+
+window.addEventListener('mouseleave', () => {
+  mouseX = -1000
+  mouseY = -1000
+})
+
+// --- Scroll wheel lens size ---
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault()
+
+  // Scroll up (negative deltaY) = bigger lens, scroll down = smaller
+  const delta = -e.deltaY * 0.5
+  targetFovealRadius = Math.max(
+    FOVEAL_RADIUS_MIN,
+    Math.min(FOVEAL_RADIUS_MAX, targetFovealRadius + delta)
+  )
+
+  // Trigger pulse animation
+  lensRingPulse = 1.0
+
+  // Show radius indicator
+  radiusFlashTimer = 90 // ~1.5 seconds at 60fps
+}, { passive: false })
+
+// --- Eye tracking mode ---
+btnMouse.addEventListener('click', () => {
+  inputMode = 'mouse'
+  btnMouse.classList.add('active')
+  btnEyes.classList.remove('active')
+  calibrationHint.classList.remove('visible')
+
+  if (webgazerReady && typeof webgazer !== 'undefined') {
+    try { webgazer.pause() } catch (_) {}
+  }
+})
+
+btnEyes.addEventListener('click', async () => {
+  inputMode = 'eyes'
+  btnEyes.classList.add('active')
+  btnMouse.classList.remove('active')
+  calibrationHint.classList.add('visible')
+
+  // Hide hint after a while
+  setTimeout(() => {
+    calibrationHint.classList.remove('visible')
+  }, 12000)
+
+  if (webgazerReady) {
+    try { webgazer.resume() } catch (_) {}
+    return
+  }
+
+  // Initialize WebGazer
+  if (typeof webgazer === 'undefined') {
+    // WebGazer script hasn't loaded — fall back silently
+    console.warn('WebGazer not available. Falling back to mouse.')
+    inputMode = 'mouse'
+    btnMouse.classList.add('active')
+    btnEyes.classList.remove('active')
+    calibrationHint.classList.remove('visible')
+    return
+  }
+
+  try {
+    webgazer
+      .setRegression('ridge')
+      .setGazeListener((data, _timestamp) => {
+        if (data == null) return
+        gazeX = data.x
+        gazeY = data.y
+      })
+
+    await webgazer.begin()
+    webgazerReady = true
+
+    // Style the video preview after it exists
+    setTimeout(() => {
+      const videoContainer = document.getElementById('webgazerVideoContainer')
+      if (videoContainer) {
+        videoContainer.style.cssText = `
+          position: fixed !important;
+          bottom: 12px !important;
+          right: 12px !important;
+          top: auto !important;
+          left: auto !important;
+          width: 120px !important;
+          height: 90px !important;
+          z-index: 50 !important;
+          border-radius: 6px !important;
+          overflow: hidden !important;
+          border: 1px solid rgba(194, 113, 79, 0.3) !important;
+          opacity: 0.7 !important;
+        `
+      }
+      // Hide the default gaze dot
+      const gazeDot = document.getElementById('webgazerGazeDot')
+      if (gazeDot) gazeDot.style.display = 'none'
+    }, 500)
+
+  } catch (err) {
+    console.warn('Eye tracking unavailable:', err.message)
+    inputMode = 'mouse'
+    btnMouse.classList.add('active')
+    btnEyes.classList.remove('active')
+    calibrationHint.classList.remove('visible')
+  }
+})
+
+// --- Scramble character ---
+function scrambleChar(ch, intensity) {
+  if (ch === ' ' || ch === '\n') return ch
+  if (Math.random() > intensity) return ch
+  return SCRAMBLE_POOL[Math.floor(Math.random() * SCRAMBLE_POOL.length)]
+}
+
+// --- Render loop ---
+function render() {
+  frameCount++
+
+  // Choose input source
+  let inputX, inputY
+  if (inputMode === 'eyes' && webgazerReady) {
+    inputX = gazeX
+    inputY = gazeY
+  } else {
+    inputX = mouseX
+    inputY = mouseY
+  }
+
+  // Smooth input interpolation
+  const lerp = inputMode === 'eyes' ? 0.08 : 0.15
+  smoothX += (inputX - smoothX) * lerp
+  smoothY += (inputY - smoothY) * lerp
+
+  // Smooth radius transition
+  fovealRadius += (targetFovealRadius - fovealRadius) * 0.12
+
+  const parafovealRadius = fovealRadius * PARAFOVEAL_RATIO
+
+  const w = canvas.width / dpr
+  const h = canvas.height / dpr
+
+  // Clear
+  ctx.clearRect(0, 0, w, h)
+
+  const isActive = inputX > 0 && inputY > 0
+
+  // Draw radial glow around cursor
+  if (isActive) {
+    const gradient = ctx.createRadialGradient(
+      smoothX, smoothY, 0,
+      smoothX, smoothY, fovealRadius * 1.5
+    )
+    gradient.addColorStop(0, 'rgba(194, 113, 79, 0.03)')
+    gradient.addColorStop(0.5, 'rgba(232, 228, 220, 0.015)')
+    gradient.addColorStop(1, 'rgba(232, 228, 220, 0)')
+    ctx.fillStyle = gradient
+    ctx.fillRect(0, 0, w, h)
+  }
+
+  // Draw foveal radius indicator ring
+  if (isActive) {
+    ctx.beginPath()
+    ctx.arc(smoothX, smoothY, fovealRadius, 0, Math.PI * 2)
+    ctx.strokeStyle = 'rgba(194, 113, 79, 0.04)'
+    ctx.lineWidth = 1
+    ctx.stroke()
+  }
+
+  // Draw lens resize pulse ring
+  if (lensRingPulse > 0.01 && isActive) {
+    ctx.beginPath()
+    const pulseRadius = fovealRadius + (1 - lensRingPulse) * 20
+    ctx.arc(smoothX, smoothY, pulseRadius, 0, Math.PI * 2)
+    ctx.strokeStyle = `rgba(194, 113, 79, ${lensRingPulse * 0.35})`
+    ctx.lineWidth = 2
+    ctx.stroke()
+    lensRingPulse *= 0.92
+  }
+
+  // Draw each character
+  ctx.font = FONT
+  ctx.textBaseline = 'top'
+
+  for (let i = 0; i < charPositions.length; i++) {
+    const cp = charPositions[i]
+    const ch = cp.char
+
+    if (ch === ' ') continue
+
+    // Distance from cursor to character center
+    const cx = cp.x + cp.width / 2
+    const cy = cp.y + FONT_SIZE / 2
+    const dx = cx - smoothX
+    const dy = cy - smoothY
+    const dist = Math.sqrt(dx * dx + dy * dy)
+
+    // Normalized distance zones
+    let opacity, jitterX, jitterY, displayChar
+
+    if (dist < fovealRadius) {
+      // Foveal zone — clear reading
+      const t = dist / fovealRadius
+      opacity = 1.0 - t * 0.1
+      jitterX = 0
+      jitterY = 0
+      displayChar = ch
+    } else if (dist < parafovealRadius) {
+      // Parafoveal zone — degrading
+      const t = (dist - fovealRadius) / (parafovealRadius - fovealRadius)
+      const eased = t * t
+      opacity = 0.9 - eased * 0.6
+      jitterX = eased * 3 * (Math.sin(frameCount * 0.05 + i * 0.7) + Math.random() - 0.5)
+      jitterY = eased * 2 * (Math.cos(frameCount * 0.04 + i * 0.5) + Math.random() - 0.5)
+      displayChar = scrambleChar(ch, eased * 0.5)
+    } else {
+      // Peripheral zone — letter soup
+      const t = Math.min((dist - parafovealRadius) / 300, 1)
+      opacity = 0.3 - t * 0.2
+      const jitterScale = 4 + t * 6
+      jitterX = jitterScale * (Math.sin(frameCount * 0.03 + i * 1.1) + (Math.random() - 0.5) * 2)
+      jitterY = jitterScale * (Math.cos(frameCount * 0.025 + i * 0.9) + (Math.random() - 0.5) * 2)
+      displayChar = scrambleChar(ch, 0.7 + t * 0.3)
+    }
+
+    // Clamp opacity
+    opacity = Math.max(0.05, Math.min(1, opacity))
+
+    // Color: warm terracotta near center, fading to dim
+    const colorT = Math.min(dist / parafovealRadius, 1)
+    const r = Math.round(232 - colorT * (232 - 51))
+    const g = Math.round(228 - colorT * (228 - 51))
+    const b = Math.round(220 - colorT * (220 - 51))
+
+    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`
+    ctx.fillText(displayChar, cp.x + jitterX, cp.y + jitterY)
+  }
+
+  // Custom cursor — small dot with terracotta tint
+  if (isActive) {
+    ctx.beginPath()
+    ctx.arc(smoothX, smoothY, 3, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(194, 113, 79, 0.6)'
+    ctx.fill()
+  }
+
+  // Radius indicator fade
+  if (radiusFlashTimer > 0) {
+    radiusFlashTimer--
+    const fadeOpacity = Math.min(1, radiusFlashTimer / 30)
+    radiusIndicator.textContent = `${Math.round(fovealRadius)}px`
+    radiusIndicator.style.opacity = fadeOpacity * 0.7
+    radiusIndicator.classList.add('visible')
+  } else {
+    radiusIndicator.classList.remove('visible')
+  }
+
+  requestAnimationFrame(render)
+}
+
+requestAnimationFrame(render)
+</script>
+</body>
+</html>

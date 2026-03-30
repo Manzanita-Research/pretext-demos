@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Rosetta Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=Literata:ital,opsz,wght@0,7..72,200..900;1,7..72,200..900&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #08080e; }
+  canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+  canvas.dragging { cursor: grabbing; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script type="module">
+import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
+
+// --- Text content: three scripts, same theme ---
+
+const latinText = `Language is the oldest technology. Before wheels, before fire pits lined with stone, humans shaped breath into meaning. Every sentence is an act of compression — centuries of shared experience packed into vibrations that cross the air between two people. Writing pushed that further. Marks on clay, ink on paper, pixels on glass: each leap let us speak across time. The Latin alphabet descends from Phoenician traders who scratched consonants onto pottery. Romans carved it into empire. Monks copied it by candlelight. Gutenberg stamped it into metal. And now it flows through fiber optic cables at the speed of light, still carrying the same fundamental impulse: I have something to say, and I need you to hear it. Typography is how we give that impulse a body.`
+
+const arabicText = `اللغة هي أقدم تقنية عرفها الإنسان. قبل العجلات وقبل مواقد النار، صاغ البشر أنفاسهم في معانٍ. كل جملة هي فعل ضغط — قرون من التجارب المشتركة مكثفة في اهتزازات تعبر الهواء بين شخصين. والكتابة دفعت ذلك أبعد. علامات على الطين وحبر على الورق وبكسلات على الزجاج: كل قفزة أتاحت لنا أن نتحدث عبر الزمن. الأبجدية العربية تنحدر من النبطية التي تفرعت من الآرامية. حملها التجار والعلماء والشعراء عبر القارات. نسخها الخطاطون بعناية فائقة في المساجد والقصور. والآن تتدفق عبر الألياف الضوئية بسرعة النور حاملة نفس الدافع الأساسي: لدي ما أقوله وأحتاج أن تسمعني. فن الخط هو كيف نمنح ذلك الدافع جسداً.`
+
+const chineseText = `语言是人类最古老的技术。在车轮之前，在石砌火坑之前，人类就将呼吸塑造成意义。每一个句子都是一次压缩——几个世纪的共同经验被浓缩在两个人之间穿越空气的振动中。书写将这一切推得更远。泥板上的刻痕、纸上的墨迹、玻璃上的像素：每一次飞跃都让我们跨越时间说话。汉字起源于商代的甲骨文，龟甲上的裂纹被解读为神谕。秦始皇统一了文字，僧侣们用毛笔抄写经卷，毕昇发明了活字印刷。如今，文字以光速穿过光纤电缆，承载着同样根本的冲动：我有话要说，我需要你听到。字体排印，就是我们赋予这种冲动以形体的方式。`
+
+// --- Canvas setup ---
+
+const canvas = document.getElementById('c')
+const ctx = canvas.getContext('2d')
+let dpr = window.devicePixelRatio || 1
+let W, H
+
+function resize() {
+  dpr = window.devicePixelRatio || 1
+  W = window.innerWidth
+  H = window.innerHeight
+  canvas.width = W * dpr
+  canvas.height = H * dpr
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+}
+resize()
+window.addEventListener('resize', () => { resize(); prepareFonts() })
+
+// --- Obstacle state ---
+
+let obs = { x: 0, y: 0, r: 70 }
+let dragging = false
+let dragOffset = { x: 0, y: 0 }
+
+// Center the obstacle initially
+obs.x = W / 2
+obs.y = H / 2
+
+// --- Drag handling ---
+
+function getPos(e) {
+  if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY }
+  return { x: e.clientX, y: e.clientY }
+}
+
+function hitTest(px, py) {
+  const dx = px - obs.x, dy = py - obs.y
+  return dx * dx + dy * dy <= (obs.r + 10) * (obs.r + 10)
+}
+
+canvas.addEventListener('mousedown', e => {
+  const p = getPos(e)
+  if (hitTest(p.x, p.y)) {
+    dragging = true
+    dragOffset.x = p.x - obs.x
+    dragOffset.y = p.y - obs.y
+    canvas.classList.add('dragging')
+  }
+})
+
+canvas.addEventListener('mousemove', e => {
+  if (dragging) {
+    const p = getPos(e)
+    obs.x = p.x - dragOffset.x
+    obs.y = p.y - dragOffset.y
+  } else {
+    const p = getPos(e)
+    canvas.style.cursor = hitTest(p.x, p.y) ? 'grab' : 'default'
+  }
+})
+
+canvas.addEventListener('mouseup', () => {
+  dragging = false
+  canvas.classList.remove('dragging')
+})
+
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault()
+  const p = getPos(e)
+  if (hitTest(p.x, p.y)) {
+    dragging = true
+    dragOffset.x = p.x - obs.x
+    dragOffset.y = p.y - obs.y
+  }
+}, { passive: false })
+
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault()
+  if (dragging) {
+    const p = getPos(e)
+    obs.x = p.x - dragOffset.x
+    obs.y = p.y - dragOffset.y
+  }
+}, { passive: false })
+
+canvas.addEventListener('touchend', () => { dragging = false })
+
+// --- Column layout ---
+
+const MARGIN = 40
+const GAP = 24
+const TOP_MARGIN = 100
+const FONT_SIZE = 15
+const LINE_HEIGHT = 24
+const TITLE_SIZE = 11
+
+// --- Prepare text with pretext ---
+
+const latinFont = `${FONT_SIZE}px Georgia, "Times New Roman", serif`
+const arabicFont = `${FONT_SIZE}px "Geeza Pro", "Traditional Arabic", "Simplified Arabic", serif`
+const chineseFont = `${FONT_SIZE}px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif`
+
+let preparedLatin, preparedArabic, preparedChinese
+
+function prepareFonts() {
+  preparedLatin = prepareWithSegments(latinText, latinFont)
+  preparedArabic = prepareWithSegments(arabicText, arabicFont)
+  preparedChinese = prepareWithSegments(chineseText, chineseFont)
+}
+prepareFonts()
+
+// --- Compute available width for a line given the obstacle ---
+
+function getLineWidth(y, lineH, colLeft, colRight, obsX, obsY, obsR) {
+  // Check if the obstacle circle overlaps this line's vertical band
+  const lineTop = y - lineH * 0.8 // approximate ascent
+  const lineBot = y + lineH * 0.2 // approximate descent
+
+  // Find the vertical distance from circle center to closest point in line band
+  let closestY = obsY
+  if (obsY < lineTop) closestY = lineTop
+  else if (obsY > lineBot) closestY = lineBot
+
+  const dy = obsY - closestY
+  const maxDx = Math.sqrt(Math.max(0, obsR * obsR - dy * dy))
+
+  if (maxDx <= 0) {
+    // No intersection
+    return { width: colRight - colLeft, xStart: colLeft }
+  }
+
+  const circleLeft = obsX - maxDx
+  const circleRight = obsX + maxDx
+
+  // Does the circle intersection overlap our column?
+  if (circleRight <= colLeft || circleLeft >= colRight) {
+    return { width: colRight - colLeft, xStart: colLeft }
+  }
+
+  // Obstacle clips into our column. Decide which side has more space.
+  const spaceLeft = Math.max(0, Math.min(circleLeft, colRight) - colLeft)
+  const spaceRight = Math.max(0, colRight - Math.max(circleRight, colLeft))
+
+  if (spaceLeft >= spaceRight) {
+    return { width: Math.max(spaceLeft, 30), xStart: colLeft }
+  } else {
+    return { width: Math.max(spaceRight, 30), xStart: Math.max(circleRight, colLeft) }
+  }
+}
+
+// --- Colors ---
+
+const COL_TINTS = [
+  { bg: 'rgba(194, 113, 79, 0.05)', text: '#e8d4c8', label: '#C2714F', name: 'Latin' },
+  { bg: 'rgba(196, 154, 60, 0.05)', text: '#e8dcc0', label: '#C49A3C', name: 'Arabic' },
+  { bg: 'rgba(139, 158, 126, 0.05)', text: '#c8d8c4', label: '#8B9E7E', name: 'Chinese' },
+]
+
+// --- Render ---
+
+function render() {
+  ctx.clearRect(0, 0, W, H)
+
+  // Background
+  ctx.fillStyle = '#08080e'
+  ctx.fillRect(0, 0, W, H)
+
+  const colWidth = (W - MARGIN * 2 - GAP * 2) / 3
+  const columns = [
+    { left: MARGIN, right: MARGIN + colWidth },
+    { left: MARGIN + colWidth + GAP, right: MARGIN + colWidth * 2 + GAP },
+    { left: MARGIN + colWidth * 2 + GAP * 2, right: MARGIN + colWidth * 3 + GAP * 2 },
+  ]
+
+  // Draw column backgrounds
+  for (let i = 0; i < 3; i++) {
+    ctx.fillStyle = COL_TINTS[i].bg
+    ctx.fillRect(columns[i].left, 0, columns[i].right - columns[i].left, H)
+  }
+
+  // Draw title
+  ctx.fillStyle = '#a89e8e'
+  ctx.font = `300 28px Fraunces, Georgia, serif`
+  ctx.fontVariationSettings = "'WONK' 1, 'SOFT' 100"
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'alphabetic'
+  ctx.fillText('The Rosetta Engine', W / 2, 50)
+
+  // Draw subtitle
+  ctx.fillStyle = '#5C5C5C'
+  ctx.font = `13px Literata, Georgia, serif`
+  ctx.fillText('Drag the stone to see how three writing systems solve the same spatial problem', W / 2, 72)
+
+  // Draw column labels
+  ctx.font = `${TITLE_SIZE}px Fraunces, Georgia, serif`
+  ctx.textBaseline = 'alphabetic'
+  for (let i = 0; i < 3; i++) {
+    ctx.fillStyle = COL_TINTS[i].label
+    ctx.textAlign = 'center'
+    ctx.fillText(COL_TINTS[i].name.toUpperCase(), (columns[i].left + columns[i].right) / 2, TOP_MARGIN - 14)
+
+    // Thin top rule
+    ctx.strokeStyle = COL_TINTS[i].label + '40'
+    ctx.lineWidth = 0.5
+    ctx.beginPath()
+    ctx.moveTo(columns[i].left, TOP_MARGIN - 6)
+    ctx.lineTo(columns[i].right, TOP_MARGIN - 6)
+    ctx.stroke()
+  }
+
+  // --- Layout and render each column ---
+
+  const prepared = [preparedLatin, preparedArabic, preparedChinese]
+  const fonts = [latinFont, arabicFont, chineseFont]
+  const isRTL = [false, true, false]
+
+  for (let col = 0; col < 3; col++) {
+    const colLeft = columns[col].left + 12
+    const colRight = columns[col].right - 12
+
+    ctx.font = fonts[col]
+    ctx.textBaseline = 'alphabetic'
+
+    let cursor = { segmentIndex: 0, graphemeIndex: 0 }
+    let y = TOP_MARGIN + LINE_HEIGHT
+    let lineCount = 0
+
+    while (y < H - 40) {
+      const info = getLineWidth(y, LINE_HEIGHT, colLeft, colRight, obs.x, obs.y, obs.r)
+      const lineW = info.width
+
+      if (lineW < 30) {
+        // Skip this line if no room
+        y += LINE_HEIGHT
+        continue
+      }
+
+      const line = layoutNextLine(prepared[col], cursor, lineW)
+      if (line === null) break
+
+      ctx.fillStyle = COL_TINTS[col].text
+
+      if (isRTL[col]) {
+        // Arabic: right-to-left
+        ctx.save()
+        ctx.direction = 'rtl'
+        ctx.textAlign = 'right'
+        // The xStart from getLineWidth gives left edge of available space
+        // For RTL, we draw from the right edge of that available space
+        const rightEdge = info.xStart + info.width
+        ctx.fillText(line.text, rightEdge, y)
+        ctx.restore()
+      } else {
+        ctx.textAlign = 'left'
+        ctx.direction = 'ltr'
+        ctx.fillText(line.text, info.xStart, y)
+      }
+
+      cursor = line.end
+      y += LINE_HEIGHT
+      lineCount++
+    }
+
+    // Line count indicator at bottom
+    ctx.font = `${TITLE_SIZE}px Fraunces, Georgia, serif`
+    ctx.fillStyle = COL_TINTS[col].label + '80'
+    ctx.textAlign = 'center'
+    ctx.direction = 'ltr'
+    ctx.fillText(`${lineCount} lines`, (columns[col].left + columns[col].right) / 2, H - 20)
+  }
+
+  // --- Draw obstacle ---
+
+  // Outer glow
+  const gradient = ctx.createRadialGradient(obs.x, obs.y, obs.r * 0.3, obs.x, obs.y, obs.r * 1.8)
+  gradient.addColorStop(0, 'rgba(200, 180, 140, 0.08)')
+  gradient.addColorStop(1, 'rgba(200, 180, 140, 0)')
+  ctx.fillStyle = gradient
+  ctx.beginPath()
+  ctx.arc(obs.x, obs.y, obs.r * 1.8, 0, Math.PI * 2)
+  ctx.fill()
+
+  // Stone circle
+  ctx.beginPath()
+  ctx.arc(obs.x, obs.y, obs.r, 0, Math.PI * 2)
+  ctx.fillStyle = '#1a1a24'
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(200, 180, 140, 0.3)'
+  ctx.lineWidth = 1.5
+  ctx.stroke()
+
+  // Stone texture — concentric rings
+  for (let r = 15; r < obs.r; r += 12) {
+    ctx.beginPath()
+    ctx.arc(obs.x, obs.y, r, 0, Math.PI * 2)
+    ctx.strokeStyle = `rgba(200, 180, 140, ${0.04 + (r / obs.r) * 0.04})`
+    ctx.lineWidth = 0.5
+    ctx.stroke()
+  }
+
+  // Rosetta label
+  ctx.fillStyle = 'rgba(200, 180, 140, 0.5)'
+  ctx.font = `9px Fraunces, Georgia, serif`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.direction = 'ltr'
+  ctx.fillText('ROSETTA', obs.x, obs.y - 6)
+  ctx.fillText('STONE', obs.x, obs.y + 6)
+
+  requestAnimationFrame(render)
+}
+
+requestAnimationFrame(render)
+</script>
+</body>
+</html>

@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Jacquard Text Loom</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,400&family=JetBrains+Mono:wght@300;400;500&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #08080e;
+    --fg: #e8e4dc;
+    --dim: #e8e4dc44;
+    --accent: #e8e4dc22;
+    --warp-color: #C49A3C;
+    --weft-color: #a0aab4;
+    --terracotta: #C2714F;
+    --bark: #6B3A2A;
+    --fog: #E8E5DF;
+    --cell-on: #C49A3C33;
+    --cell-off: transparent;
+    --cell-border: #e8e4dc18;
+    --cell-hover: #e8e4dc11;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: 'JetBrains Mono', monospace;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  header {
+    padding: 1.25rem 1.5rem 0.75rem;
+    flex-shrink: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 1.5rem;
+  }
+
+  h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 400;
+    font-size: 1.15rem;
+    color: var(--warp-color);
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    font-optical-sizing: auto;
+  }
+
+  .history-note {
+    font-family: 'EB Garamond', serif;
+    font-size: 0.8rem;
+    color: #e8e4dc38;
+    font-style: italic;
+    line-height: 1.4;
+  }
+
+  .main {
+    flex: 1;
+    display: flex;
+    gap: 1.5rem;
+    padding: 0.75rem 1.5rem 1.25rem;
+    min-height: 0;
+  }
+
+  /* Left panel: punch card + controls */
+  .left-panel {
+    width: 340px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-height: 0;
+  }
+
+  .section-label {
+    font-family: 'Fraunces', serif;
+    font-size: 0.65rem;
+    color: var(--dim);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .punch-card-wrap {
+    flex-shrink: 0;
+  }
+
+  .punch-card {
+    display: grid;
+    gap: 1px;
+    user-select: none;
+    cursor: crosshair;
+  }
+
+  .punch-card .cell {
+    aspect-ratio: 1;
+    border: 1px solid var(--cell-border);
+    border-radius: 1px;
+    transition: background 0.1s;
+  }
+
+  .punch-card .cell:hover {
+    border-color: #e8e4dc33;
+  }
+
+  .punch-card .cell.on {
+    background: var(--cell-on);
+    border-color: #C49A3C44;
+  }
+
+  .controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+    padding-right: 4px;
+  }
+
+  .control-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .control-row label {
+    font-size: 0.6rem;
+    color: var(--dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    width: 100%;
+    margin-bottom: 0.15rem;
+  }
+
+  button, .preset-btn {
+    background: transparent;
+    border: 1px solid var(--cell-border);
+    color: var(--dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    padding: 0.35rem 0.65rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-transform: uppercase;
+  }
+
+  button:hover, .preset-btn:hover {
+    border-color: var(--dim);
+    color: var(--fg);
+  }
+
+  button.active, .preset-btn.active {
+    border-color: var(--warp-color);
+    color: var(--warp-color);
+  }
+
+  .text-input {
+    width: 100%;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--accent);
+    color: var(--fg);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    padding: 0.35rem 0;
+    outline: none;
+    transition: border-color 0.3s;
+  }
+
+  .text-input:focus {
+    border-bottom-color: var(--dim);
+  }
+
+  .text-input::placeholder {
+    color: var(--accent);
+    font-style: italic;
+  }
+
+  .weave-btn {
+    background: transparent;
+    border: 1px solid var(--warp-color);
+    color: var(--warp-color);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.2s;
+    width: 100%;
+    margin-top: 0.25rem;
+  }
+
+  .weave-btn:hover {
+    background: #C49A3C11;
+    color: #d4b35e;
+  }
+
+  .weave-btn.weaving {
+    border-color: var(--terracotta);
+    color: var(--terracotta);
+    animation: pulse-btn 1s ease-in-out infinite;
+  }
+
+  @keyframes pulse-btn {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .toggle-switch {
+    position: relative;
+    width: 32px;
+    height: 16px;
+    background: var(--cell-border);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.2s;
+    border: 1px solid var(--cell-border);
+    flex-shrink: 0;
+  }
+
+  .toggle-switch.on {
+    background: var(--warp-color);
+    border-color: var(--warp-color);
+  }
+
+  .toggle-switch::after {
+    content: '';
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background: var(--fg);
+    border-radius: 50%;
+    top: 1px;
+    left: 1px;
+    transition: transform 0.2s;
+  }
+
+  .toggle-switch.on::after {
+    transform: translateX(16px);
+  }
+
+  .toggle-label {
+    font-size: 0.6rem;
+    color: var(--dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* Right panel: woven output */
+  .right-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+  }
+
+  .loom-frame {
+    flex: 1;
+    position: relative;
+    min-height: 0;
+    border: 6px solid var(--bark);
+    border-radius: 3px;
+    box-shadow:
+      inset 0 0 12px rgba(107, 58, 42, 0.3),
+      0 2px 16px rgba(107, 58, 42, 0.15),
+      0 0 0 1px rgba(107, 58, 42, 0.4);
+    background: var(--bg);
+    /* Wood grain texture via repeating gradient */
+    background-image:
+      repeating-linear-gradient(
+        90deg,
+        transparent,
+        transparent 3px,
+        rgba(107, 58, 42, 0.03) 3px,
+        rgba(107, 58, 42, 0.03) 4px
+      );
+  }
+
+  /* Corner pegs on the loom frame */
+  .loom-frame::before,
+  .loom-frame::after {
+    content: '';
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: radial-gradient(circle, #8B5E3C 30%, #5A3222 70%);
+    border-radius: 50%;
+    z-index: 2;
+    box-shadow: 0 0 3px rgba(0,0,0,0.4);
+  }
+  .loom-frame::before { top: -4px; left: -4px; }
+  .loom-frame::after { top: -4px; right: -4px; }
+
+  .loom-frame-bottom-pegs::before,
+  .loom-frame-bottom-pegs::after {
+    content: '';
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: radial-gradient(circle, #8B5E3C 30%, #5A3222 70%);
+    border-radius: 50%;
+    z-index: 2;
+    box-shadow: 0 0 3px rgba(0,0,0,0.4);
+  }
+  .loom-frame-bottom-pegs::before { bottom: -4px; left: -4px; }
+  .loom-frame-bottom-pegs::after { bottom: -4px; right: -4px; }
+
+  .canvas-wrap {
+    position: absolute;
+    inset: 0;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Thread type tooltip */
+  .thread-tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: rgba(8, 8, 14, 0.9);
+    border: 1px solid var(--cell-border);
+    padding: 0.25rem 0.5rem;
+    font-size: 0.6rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg);
+    border-radius: 2px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 10;
+    white-space: nowrap;
+  }
+  .thread-tooltip.visible {
+    opacity: 1;
+  }
+
+  .legend {
+    display: flex;
+    gap: 1.25rem;
+    padding-top: 0.5rem;
+    justify-content: flex-end;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.6rem;
+    color: var(--dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .legend-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 1px;
+  }
+
+  .swatch-warp { background: var(--warp-color); opacity: 0.7; }
+  .swatch-weft { background: var(--weft-color); opacity: 0.7; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>The Jacquard Text Loom</h1>
+  <span class="history-note">
+    Jacquard built a loom in 1804 that read punched cards to decide which threads to raise.
+    Ada Lovelace looked at those cards and saw something else entirely — a general-purpose machine.
+    Binary was born from silk. Now we run the circle back: binary weaving characters into cloth.
+  </span>
+</header>
+
+<div class="main">
+  <div class="left-panel">
+    <span class="section-label">Punch Card</span>
+    <div class="punch-card-wrap">
+      <div class="punch-card" id="punchCard"></div>
+    </div>
+
+    <div class="controls">
+      <div class="control-row">
+        <label>Pattern Presets</label>
+        <button class="preset-btn active" data-preset="plain">Plain</button>
+        <button class="preset-btn" data-preset="twill">Twill</button>
+        <button class="preset-btn" data-preset="satin">Satin</button>
+        <button class="preset-btn" data-preset="basket">Basket</button>
+        <button class="preset-btn" data-preset="diamond">Diamond</button>
+        <button class="preset-btn" data-preset="herringbone">Herringbone</button>
+      </div>
+
+      <div class="control-row">
+        <label>Warp Text <span style="color: var(--warp-color);">(vertical)</span></label>
+        <input type="text" class="text-input" id="warpInput" value="01" placeholder="Characters for warp threads...">
+      </div>
+
+      <div class="control-row">
+        <label>Weft Text <span style="color: var(--weft-color);">(horizontal)</span></label>
+        <input type="text" class="text-input" id="weftInput"
+          value="Every thread remembers the hand that guided it. The loom does not create the pattern; it reveals what was always possible in the crossing of warp and weft. To weave is to think in two dimensions at once, each intersection a decision, each row a sentence in a language older than writing."
+          placeholder="Text for weft threads...">
+      </div>
+
+      <div class="toggle-row">
+        <div class="toggle-switch" id="continuousToggle"></div>
+        <span class="toggle-label">Continuous weave</span>
+      </div>
+
+      <button class="weave-btn" id="weaveBtn">Weave</button>
+    </div>
+  </div>
+
+  <div class="right-panel">
+    <span class="section-label">Woven Textile</span>
+    <div class="loom-frame">
+      <div class="loom-frame-bottom-pegs"></div>
+      <div class="canvas-wrap">
+        <canvas id="loomCanvas"></canvas>
+      </div>
+      <div class="thread-tooltip" id="threadTooltip"></div>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-swatch swatch-warp"></div> Warp</div>
+      <div class="legend-item"><div class="legend-swatch swatch-weft"></div> Weft</div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
+
+// --- Config ---
+const GRID_COLS = 16
+const GRID_ROWS = 16
+const FONT_SIZE = 13
+const FONT = `${FONT_SIZE}px 'JetBrains Mono', monospace`
+const CELL_W = FONT_SIZE
+const CELL_H = Math.round(FONT_SIZE * 1.45)
+const WARP_COLOR = '#C49A3C'
+const WEFT_COLOR = '#a0aab4'
+const WARP_DIM = '#C49A3C30'
+const WEFT_DIM = '#a0aab422'
+const TERRACOTTA = '#C2714F'
+const SHUTTLE_SPEED = 250 // ms per row
+
+// --- State ---
+let grid = Array.from({ length: GRID_ROWS }, () => Array(GRID_COLS).fill(false))
+let weaveProgress = -1 // -1 = show all, 0..rows = animating
+let shuttleX = 0 // 0..1 normalized shuttle position within current row
+let shuttleDirection = 1 // 1 = left-to-right, -1 = right-to-left
+let shuttleTimer = null
+let animFrame = null
+let isDrawing = false
+let drawValue = true
+let isWeaving = false
+let continuousWeave = false
+let hoverCell = null // { row, col, x, y } for thread hover
+
+// Precomputed weft lines cache
+let cachedWeftLines = null
+let cachedCols = 0
+let cachedRows = 0
+
+// --- DOM ---
+const punchCard = document.getElementById('punchCard')
+const canvas = document.getElementById('loomCanvas')
+const ctx = canvas.getContext('2d')
+const warpInput = document.getElementById('warpInput')
+const weftInput = document.getElementById('weftInput')
+const weaveBtn = document.getElementById('weaveBtn')
+const continuousToggle = document.getElementById('continuousToggle')
+const threadTooltip = document.getElementById('threadTooltip')
+const loomFrame = document.querySelector('.loom-frame')
+
+// --- Punch Card Grid ---
+punchCard.style.gridTemplateColumns = `repeat(${GRID_COLS}, 1fr)`
+
+const cells = []
+for (let r = 0; r < GRID_ROWS; r++) {
+  cells[r] = []
+  for (let c = 0; c < GRID_COLS; c++) {
+    const cell = document.createElement('div')
+    cell.className = 'cell'
+    cell.dataset.row = r
+    cell.dataset.col = c
+
+    cell.addEventListener('mousedown', (e) => {
+      e.preventDefault()
+      isDrawing = true
+      drawValue = !grid[r][c]
+      grid[r][c] = drawValue
+      syncCell(r, c)
+      renderLoom()
+    })
+    cell.addEventListener('mouseenter', () => {
+      if (!isDrawing) return
+      grid[r][c] = drawValue
+      syncCell(r, c)
+      renderLoom()
+    })
+
+    punchCard.appendChild(cell)
+    cells[r][c] = cell
+  }
+}
+
+document.addEventListener('mouseup', () => { isDrawing = false })
+
+function syncCell(r, c) {
+  cells[r][c].classList.toggle('on', grid[r][c])
+}
+
+function syncAllCells() {
+  for (let r = 0; r < GRID_ROWS; r++) {
+    for (let c = 0; c < GRID_COLS; c++) {
+      syncCell(r, c)
+    }
+  }
+}
+
+// --- Presets ---
+const presets = {
+  plain: (r, c) => (r + c) % 2 === 0,
+  twill: (r, c) => (r + c) % 4 < 2,
+  satin: (r, c) => (r * 3 + c) % 5 === 0,
+  basket: (r, c) => (Math.floor(r / 2) + Math.floor(c / 2)) % 2 === 0,
+  diamond: (r, c) => {
+    const hr = GRID_ROWS / 2
+    const hc = GRID_COLS / 2
+    const dr = Math.abs(r - hr + 0.5) / hr
+    const dc = Math.abs(c - hc + 0.5) / hc
+    return (dr + dc) < 0.7
+  },
+  herringbone: (r, c) => {
+    const block = Math.floor(r / 4)
+    const offset = block % 2 === 0 ? c : GRID_COLS - 1 - c
+    return (r + offset) % 4 < 2
+  }
+}
+
+function applyPreset(name) {
+  const fn = presets[name]
+  if (!fn) return
+  for (let r = 0; r < GRID_ROWS; r++) {
+    for (let c = 0; c < GRID_COLS; c++) {
+      grid[r][c] = fn(r, c)
+    }
+  }
+  syncAllCells()
+  stopWeaving()
+  weaveProgress = -1
+  renderLoom()
+
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'))
+  document.querySelector(`[data-preset="${name}"]`)?.classList.add('active')
+}
+
+document.querySelectorAll('.preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => applyPreset(btn.dataset.preset))
+})
+
+// --- Continuous Weave Toggle ---
+continuousToggle.addEventListener('click', () => {
+  continuousWeave = !continuousWeave
+  continuousToggle.classList.toggle('on', continuousWeave)
+  if (continuousWeave && !isWeaving) {
+    startWeaving()
+  } else if (!continuousWeave && isWeaving) {
+    // Let current weave finish, then stop
+  }
+})
+
+// --- Canvas Resize ---
+function resize() {
+  const wrap = canvas.parentElement
+  const dpr = window.devicePixelRatio || 1
+  canvas.width = wrap.clientWidth * dpr
+  canvas.height = wrap.clientHeight * dpr
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  cachedWeftLines = null
+  renderLoom()
+}
+
+window.addEventListener('resize', resize)
+
+// --- Hover detection for thread visibility ---
+canvas.addEventListener('mousemove', (e) => {
+  const rect = canvas.getBoundingClientRect()
+  const mx = e.clientX - rect.left
+  const my = e.clientY - rect.top
+  const padding = 4
+
+  const col = Math.floor(mx / CELL_W)
+  const row = Math.floor((my - padding) / CELL_H)
+  const w = canvas.parentElement.clientWidth
+  const totalCols = Math.floor(w / CELL_W)
+  const totalRows = cachedWeftLines ? cachedWeftLines.length : 0
+
+  if (col >= 0 && col < totalCols && row >= 0 && row < totalRows) {
+    const patternRow = row % GRID_ROWS
+    const patternCol = col % GRID_COLS
+    const isWarpUp = grid[patternRow][patternCol]
+
+    // Only show for fully woven rows
+    if (weaveProgress >= 0 && row >= weaveProgress) {
+      hideTooltip()
+      hoverCell = null
+      renderLoom()
+      return
+    }
+
+    hoverCell = { row, col }
+
+    const tooltipText = isWarpUp ? 'warp thread' : 'weft thread'
+    const tooltipColor = isWarpUp ? WARP_COLOR : WEFT_COLOR
+    threadTooltip.textContent = tooltipText
+    threadTooltip.style.color = tooltipColor
+    threadTooltip.style.borderColor = tooltipColor + '44'
+
+    // Position tooltip
+    const tooltipX = Math.min(e.clientX - rect.left + 12, rect.width - 100)
+    const tooltipY = e.clientY - rect.top - 28
+    threadTooltip.style.left = tooltipX + 'px'
+    threadTooltip.style.top = tooltipY + 'px'
+    threadTooltip.classList.add('visible')
+
+    renderLoom()
+  } else {
+    hideTooltip()
+    if (hoverCell) {
+      hoverCell = null
+      renderLoom()
+    }
+  }
+})
+
+canvas.addEventListener('mouseleave', () => {
+  hideTooltip()
+  if (hoverCell) {
+    hoverCell = null
+    renderLoom()
+  }
+})
+
+function hideTooltip() {
+  threadTooltip.classList.remove('visible')
+}
+
+// --- Weave Animation (shuttle-based) ---
+function startWeaving() {
+  if (isWeaving) return
+  isWeaving = true
+  weaveProgress = 0
+  shuttleX = 0
+  shuttleDirection = 1
+  weaveBtn.textContent = 'Weaving...'
+  weaveBtn.classList.add('weaving')
+  cachedWeftLines = null // force recompute
+
+  animateShuttleRow()
+}
+
+function stopWeaving() {
+  isWeaving = false
+  if (shuttleTimer) {
+    clearTimeout(shuttleTimer)
+    shuttleTimer = null
+  }
+  if (animFrame) {
+    cancelAnimationFrame(animFrame)
+    animFrame = null
+  }
+  weaveBtn.textContent = 'Weave'
+  weaveBtn.classList.remove('weaving')
+}
+
+function animateShuttleRow() {
+  if (!isWeaving) return
+
+  const totalRows = computeTotalRows()
+
+  // Animate shuttle across current row
+  const shuttleDuration = SHUTTLE_SPEED
+  const startTime = performance.now()
+  const direction = shuttleDirection
+
+  function tickShuttle(now) {
+    if (!isWeaving) return
+    const elapsed = now - startTime
+    const progress = Math.min(elapsed / shuttleDuration, 1)
+
+    // Ease in-out for a rhythmic feel
+    const eased = progress < 0.5
+      ? 2 * progress * progress
+      : 1 - Math.pow(-2 * progress + 2, 2) / 2
+
+    shuttleX = direction === 1 ? eased : 1 - eased
+
+    renderLoom()
+
+    if (progress < 1) {
+      animFrame = requestAnimationFrame(tickShuttle)
+    } else {
+      // Row complete
+      weaveProgress++
+      shuttleDirection *= -1
+
+      if (weaveProgress <= totalRows) {
+        shuttleTimer = setTimeout(() => animateShuttleRow(), 30)
+      } else {
+        if (continuousWeave) {
+          // Loop: restart
+          weaveProgress = 0
+          shuttleX = 0
+          shuttleDirection = 1
+          shuttleTimer = setTimeout(() => animateShuttleRow(), 200)
+        } else {
+          weaveProgress = -1
+          stopWeaving()
+          renderLoom()
+        }
+      }
+    }
+  }
+
+  animFrame = requestAnimationFrame(tickShuttle)
+}
+
+weaveBtn.addEventListener('click', () => {
+  if (isWeaving) {
+    stopWeaving()
+    weaveProgress = -1
+    renderLoom()
+  } else {
+    startWeaving()
+  }
+})
+
+function computeTotalRows() {
+  const canvasH = canvas.parentElement.clientHeight
+  return Math.ceil(canvasH / CELL_H) + 1
+}
+
+// --- Prepare weft lines (cached) ---
+function getWeftLines(cols, rows) {
+  if (cachedWeftLines && cachedCols === cols && cachedRows >= rows) {
+    return cachedWeftLines
+  }
+
+  const weftText = weftInput.value || 'thread '
+  const repeatedWeft = (weftText + ' ').repeat(Math.ceil(5000 / (weftText.length + 1)))
+
+  let prepared
+  try {
+    prepared = prepareWithSegments(repeatedWeft, FONT)
+  } catch (e) {
+    return null
+  }
+
+  const weftLines = []
+  let cursor = { segmentIndex: 0, graphemeIndex: 0 }
+
+  for (let r = 0; r < rows; r++) {
+    const lineWidth = cols * CELL_W
+    const line = layoutNextLine(prepared, cursor, lineWidth)
+    if (!line) break
+    weftLines.push(line.text)
+    cursor = line.end
+  }
+
+  cachedWeftLines = weftLines
+  cachedCols = cols
+  cachedRows = rows
+  return weftLines
+}
+
+// --- Core Rendering ---
+function renderLoom() {
+  const w = canvas.parentElement.clientWidth
+  const h = canvas.parentElement.clientHeight
+  ctx.clearRect(0, 0, w, h)
+
+  const warpText = warpInput.value || '01'
+
+  const cols = Math.floor(w / CELL_W)
+  const rows = Math.ceil(h / CELL_H) + 1
+
+  const weftLines = getWeftLines(cols, rows)
+  if (!weftLines) return
+
+  // Build warp columns
+  const warpChars = []
+  for (let c = 0; c < cols; c++) {
+    warpChars.push(warpText[c % warpText.length])
+  }
+
+  ctx.font = FONT
+  ctx.textBaseline = 'top'
+
+  const padding = 4
+
+  // Determine shuttle pixel position for current animating row
+  let shuttlePixelX = -1
+  let shuttleRow = -1
+  if (isWeaving && weaveProgress >= 0 && weaveProgress < weftLines.length) {
+    shuttleRow = weaveProgress
+    shuttlePixelX = shuttleX * (cols * CELL_W)
+  }
+
+  for (let r = 0; r < weftLines.length; r++) {
+    // During animation: only show completed rows + partially revealed current row
+    if (weaveProgress >= 0 && r > weaveProgress) break
+
+    const weftLine = weftLines[r]
+    const patternRow = r % GRID_ROWS
+    const y = padding + r * CELL_H
+    const weftChars = [...weftLine]
+
+    const isCurrentShuttleRow = r === shuttleRow
+
+    for (let c = 0; c < cols; c++) {
+      const patternCol = c % GRID_COLS
+      const isWarpUp = grid[patternRow][patternCol]
+      const x = c * CELL_W
+
+      // During shuttle animation on current row, only reveal chars behind shuttle
+      if (isCurrentShuttleRow) {
+        const charCenterX = x + CELL_W / 2
+        const revealed = shuttleDirection === 1
+          ? charCenterX <= shuttlePixelX
+          : charCenterX >= shuttlePixelX
+        if (!revealed) continue
+      }
+
+      // Thread tension wobble: chars near shuttle position get a subtle vertical offset
+      let wobbleY = 0
+      if (isCurrentShuttleRow || (shuttleRow >= 0 && r === shuttleRow - 1)) {
+        const charCenterX = x + CELL_W / 2
+        const dist = Math.abs(charCenterX - shuttlePixelX)
+        if (dist < CELL_W * 4) {
+          const proximity = 1 - dist / (CELL_W * 4)
+          wobbleY = Math.sin(performance.now() * 0.015 + c * 0.8) * proximity * 2.5
+        }
+      }
+
+      // Hover highlight
+      const isHovered = hoverCell && hoverCell.row === r && hoverCell.col === c
+      const isHoverRowOrCol = hoverCell && (hoverCell.row === r || hoverCell.col === c)
+
+      // Draw background cell
+      if (isWarpUp) {
+        ctx.fillStyle = isHovered ? '#C49A3C55' : WARP_DIM
+        ctx.fillRect(x, y, CELL_W, CELL_H)
+      } else if (isHovered) {
+        ctx.fillStyle = '#a0aab433'
+        ctx.fillRect(x, y, CELL_W, CELL_H)
+      }
+
+      // Subtle cross-highlight on hover (row/col)
+      if (isHoverRowOrCol && !isHovered) {
+        const hoverIsWarp = hoverCell ? grid[hoverCell.row % GRID_ROWS][hoverCell.col % GRID_COLS] : false
+        if (hoverIsWarp && hoverCell.col === c) {
+          // Highlight warp column
+          ctx.fillStyle = '#C49A3C0C'
+          ctx.fillRect(x, y, CELL_W, CELL_H)
+        } else if (!hoverIsWarp && hoverCell.row === r) {
+          // Highlight weft row
+          ctx.fillStyle = '#a0aab40C'
+          ctx.fillRect(x, y, CELL_W, CELL_H)
+        }
+      }
+
+      // Draw the visible thread character
+      if (isWarpUp) {
+        ctx.fillStyle = isHovered ? '#e8d48c' : WARP_COLOR
+        const warpChar = warpText[(r + c) % warpText.length]
+        ctx.fillText(warpChar, x + 1, y + 2 + wobbleY)
+      } else {
+        ctx.fillStyle = isHovered ? '#c8d4de' : WEFT_COLOR
+        const weftChar = weftChars[c] || ' '
+        ctx.fillText(weftChar, x + 1, y + 2 + wobbleY)
+      }
+    }
+
+    // Draw shuttle line
+    if (isCurrentShuttleRow) {
+      // Shuttle indicator - a small bright mark
+      const sy = y + CELL_H / 2
+      ctx.save()
+
+      // Shuttle trail line
+      ctx.strokeStyle = TERRACOTTA + '66'
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      if (shuttleDirection === 1) {
+        ctx.moveTo(0, sy)
+        ctx.lineTo(shuttlePixelX, sy)
+      } else {
+        ctx.moveTo(cols * CELL_W, sy)
+        ctx.lineTo(shuttlePixelX, sy)
+      }
+      ctx.stroke()
+
+      // Shuttle head (small triangle/diamond)
+      ctx.fillStyle = TERRACOTTA
+      ctx.beginPath()
+      const sx = shuttlePixelX
+      const dir = shuttleDirection
+      ctx.moveTo(sx + dir * 8, sy)
+      ctx.lineTo(sx - dir * 3, sy - 4)
+      ctx.lineTo(sx - dir * 3, sy + 4)
+      ctx.closePath()
+      ctx.fill()
+
+      // Glow around shuttle
+      ctx.shadowColor = TERRACOTTA
+      ctx.shadowBlur = 8
+      ctx.fillStyle = TERRACOTTA
+      ctx.beginPath()
+      ctx.arc(sx, sy, 2, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.shadowBlur = 0
+
+      ctx.restore()
+    }
+
+    // Bottom edge line for just-completed row during animation
+    if (weaveProgress >= 0 && r === weaveProgress - 1 && !isCurrentShuttleRow) {
+      ctx.strokeStyle = WARP_COLOR + '33'
+      ctx.lineWidth = 0.5
+      ctx.beginPath()
+      ctx.moveTo(0, y + CELL_H)
+      ctx.lineTo(w, y + CELL_H)
+      ctx.stroke()
+    }
+  }
+
+  // Draw faint grid lines for texture
+  ctx.strokeStyle = '#e8e4dc08'
+  ctx.lineWidth = 0.5
+  for (let r = 0; r <= rows; r++) {
+    const y = padding + r * CELL_H
+    ctx.beginPath()
+    ctx.moveTo(0, y)
+    ctx.lineTo(w, y)
+    ctx.stroke()
+  }
+  for (let c = 0; c <= cols; c++) {
+    const x = c * CELL_W
+    ctx.beginPath()
+    ctx.moveTo(x, padding)
+    ctx.lineTo(x, padding + rows * CELL_H)
+    ctx.stroke()
+  }
+}
+
+// --- Input listeners ---
+warpInput.addEventListener('input', () => {
+  weaveProgress = -1
+  stopWeaving()
+  renderLoom()
+})
+weftInput.addEventListener('input', () => {
+  weaveProgress = -1
+  stopWeaving()
+  cachedWeftLines = null
+  renderLoom()
+})
+
+// --- Init ---
+applyPreset('plain')
+
+// Wait for fonts then re-render
+document.fonts.ready.then(() => {
+  resize()
+})
+
+// Initial resize
+requestAnimationFrame(resize)
+</script>
+
+</body>
+</html>

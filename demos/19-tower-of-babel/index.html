@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Tower of Babel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,100..900,0..100,0..1;1,9..144,100..900,0..100,0..1&family=Literata:opsz,wght@7..72,400;7..72,600&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #08080e;
+    overflow: hidden;
+    font-family: 'Literata', Georgia, serif;
+    color: #FAF9F6;
+    height: 100vh;
+    width: 100vw;
+  }
+  canvas {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+  #input-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px 24px;
+    background: linear-gradient(to bottom, rgba(8,8,14,0.95) 0%, rgba(8,8,14,0) 100%);
+    pointer-events: none;
+  }
+  #input-bar input {
+    pointer-events: all;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 6px;
+    padding: 10px 18px;
+    font-size: 18px;
+    font-family: 'Literata', Georgia, serif;
+    color: #FAF9F6;
+    width: 400px;
+    max-width: 80vw;
+    outline: none;
+    text-align: center;
+    transition: border-color 0.2s;
+  }
+  #input-bar input::placeholder { color: rgba(250,249,246,0.3); }
+  #input-bar input:focus { border-color: rgba(250,249,246,0.3); }
+  #hud {
+    position: fixed;
+    bottom: 20px;
+    right: 24px;
+    z-index: 10;
+    font-family: 'Fraunces', Georgia, serif;
+    font-variation-settings: "WONK" 1, "SOFT" 100;
+    font-size: 14px;
+    color: rgba(250,249,246,0.4);
+    text-align: right;
+    line-height: 1.6;
+    pointer-events: none;
+  }
+  #title-overlay {
+    position: fixed;
+    bottom: 20px;
+    left: 24px;
+    z-index: 10;
+    pointer-events: none;
+  }
+  #title-overlay h1 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-variation-settings: "WONK" 1, "SOFT" 100;
+    font-size: 14px;
+    font-weight: 400;
+    color: rgba(250,249,246,0.25);
+    letter-spacing: 0.08em;
+  }
+</style>
+</head>
+<body>
+
+<div id="input-bar">
+  <input type="text" id="word-input" placeholder="add a word to the tower" autofocus autocomplete="off" />
+</div>
+
+<div id="hud">
+  <div id="hud-height">0 stories</div>
+  <div id="hud-words">0 words</div>
+</div>
+
+<div id="title-overlay">
+  <h1>THE TOWER OF BABEL</h1>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script type="module">
+// -- Constants --
+const GRAVITY = 800;
+const GROUND_MARGIN = 60;
+const FONT_SIZE = 22;
+const COLLAPSE_RATIO = 0.38;
+const SWAY_AMOUNT = 0;
+const SWAY_SPEED = 0;
+const RESTITUTION = 0.08;
+const FRICTION = 0.6;
+const ANGULAR_DAMPING = 0.75;
+const WALL_BOUNCE = 0.2;
+const MAX_ROTATION = 0.087; // ~5 degrees in radians
+
+// Brand palette colors per language
+const LANG_COLORS = {
+  english:  '#C2714F', // terracotta
+  arabic:   '#C49A3C', // ochre
+  chinese:  '#8B9E7E', // sage
+  spanish:  '#6B3A2A', // bark
+  japanese: '#9B8EA8', // lavender-dried
+  user:     '#FAF9F6', // cream
+};
+
+const WORD_POOLS = {
+  english:  ["tower", "language", "babel", "heaven", "earth", "build", "scatter", "confusion", "foundation", "together"],
+  arabic:   ["برج", "لغة", "بابل", "سماء", "أرض"],
+  chinese:  ["塔", "语言", "巴别", "天", "地", "建造"],
+  spanish:  ["torre", "lengua", "cielo", "tierra", "construir"],
+  japanese: ["塔", "言語", "天国", "地球", "建設"],
+};
+
+// Wider/longer words for the foundation layer
+const FOUNDATION_WORDS = [
+  { text: "foundation", lang: "english" },
+  { text: "confusion",  lang: "english" },
+  { text: "construir",  lang: "spanish" },
+  { text: "language",   lang: "english" },
+  { text: "together",   lang: "english" },
+];
+
+const LANG_KEYS = Object.keys(WORD_POOLS);
+
+// -- Canvas setup --
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let W, H, groundY;
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  groundY = H - GROUND_MARGIN;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// -- HUD --
+const hudHeight = document.getElementById('hud-height');
+const hudWords = document.getElementById('hud-words');
+
+// -- Particles --
+const particles = [];
+
+class Particle {
+  constructor(x, y, color, opts = {}) {
+    this.x = x;
+    this.y = y;
+    this.vx = opts.vx !== undefined ? opts.vx : (Math.random() - 0.5) * 120;
+    this.vy = opts.vy !== undefined ? opts.vy : -Math.random() * 80 - 20;
+    this.life = 1;
+    this.decay = opts.decay || (0.6 + Math.random() * 1.2);
+    this.size = opts.size || (1.5 + Math.random() * 2.5);
+    this.color = color;
+  }
+  update(dt) {
+    this.vy += 200 * dt;
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+    this.life -= this.decay * dt;
+  }
+  draw(ctx) {
+    if (this.life <= 0) return;
+    ctx.globalAlpha = this.life * 0.6;
+    ctx.fillStyle = this.color;
+    ctx.fillRect(this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
+    ctx.globalAlpha = 1;
+  }
+}
+
+function spawnDust(x, y, color, count = 8) {
+  for (let i = 0; i < count; i++) {
+    particles.push(new Particle(x, y, color));
+  }
+}
+
+// Tiny pebble particles that fall from cracks during pre-collapse tension
+function spawnPebble(x, y) {
+  particles.push(new Particle(x, y, 'rgba(250,249,246,0.3)', {
+    vx: (Math.random() - 0.5) * 20,
+    vy: Math.random() * 10,
+    decay: 0.4 + Math.random() * 0.4,
+    size: 1 + Math.random() * 1.5,
+  }));
+}
+
+// -- Screen shake --
+let shakeAmount = 0;
+let shakeDecay = 0.9;
+
+// -- Word bodies --
+const bodies = [];
+let wordCount = 0;
+let collapseTimer = 0;
+let collapseCooldown = 0;
+
+// -- Tension state (pre-collapse) --
+let tensionLevel = 0; // 0 = calm, builds toward 1 = imminent collapse
+let tensionSwayMultiplier = 1;
+let collapseImminent = false;
+
+ctx.font = `${FONT_SIZE}px Literata, Georgia, serif`;
+
+class WordBody {
+  constructor(text, lang, x) {
+    this.text = text;
+    this.lang = lang;
+    this.color = LANG_COLORS[lang] || LANG_COLORS.english;
+    ctx.font = `${FONT_SIZE}px Literata, Georgia, serif`;
+    const m = ctx.measureText(text);
+    this.width = m.width + 12;
+    this.height = FONT_SIZE + 6;
+    this.mass = Math.max(this.width / 10, 1);
+    this.x = x;
+    this.y = -this.height - Math.random() * 40;
+    this.vx = (Math.random() - 0.5) * 2; // near-zero horizontal drift
+    this.vy = 60 + Math.random() * 20;
+    this.rotation = (Math.random() - 0.5) * 0.04; // very slight initial rotation
+    this.angularVel = (Math.random() - 0.5) * 0.08; // minimal spin
+    this.grounded = false;
+    this.restFrames = 0;
+    this.sleeping = false;
+    this.opacity = 0;
+    this.landed = false;
+  }
+
+  get left() { return this.x - this.width / 2; }
+  get right() { return this.x + this.width / 2; }
+  get top() { return this.y - this.height / 2; }
+  get bottom() { return this.y + this.height / 2; }
+
+  update(dt, time) {
+    this.opacity = Math.min(1, this.opacity + dt * 3);
+
+    if (this.sleeping) return;
+
+    // Gravity
+    this.vy += GRAVITY * dt;
+
+    // Apply velocity
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+    this.rotation += this.angularVel * dt;
+
+    // Clamp rotation while falling (not during collapse)
+    if (!this.isCollapsing) {
+      this.rotation = Math.max(-MAX_ROTATION, Math.min(MAX_ROTATION, this.rotation));
+    }
+
+    // Heavy angular damping — tumble should settle fast
+    this.angularVel *= Math.pow(ANGULAR_DAMPING, dt * 20);
+
+    // Damping on horizontal movement
+    this.vx *= Math.pow(FRICTION, dt * 10);
+
+    // Wall bounds
+    if (this.left < 0) {
+      this.x = this.width / 2;
+      this.vx = Math.abs(this.vx) * WALL_BOUNCE;
+    }
+    if (this.right > W) {
+      this.x = W - this.width / 2;
+      this.vx = -Math.abs(this.vx) * WALL_BOUNCE;
+    }
+
+    // Ground collision
+    if (this.bottom >= groundY) {
+      this.y = groundY - this.height / 2;
+      if (Math.abs(this.vy) > 30) {
+        spawnDust(this.x, groundY, this.color, 5);
+        shakeAmount = Math.min(2, Math.abs(this.vy) / 300);
+      }
+      this.vy = -Math.abs(this.vy) * RESTITUTION;
+      if (Math.abs(this.vy) < 15) this.vy = 0;
+      this.vx *= FRICTION;
+      this.grounded = true;
+      this.landed = true;
+
+      // Snap rotation toward zero on landing
+      this.rotation *= 0.3;
+      this.angularVel *= 0.2;
+    }
+
+    // Check if resting
+    if (this.grounded && Math.abs(this.vx) < 2 && Math.abs(this.vy) < 2 && Math.abs(this.angularVel) < 0.01) {
+      this.restFrames++;
+      if (this.restFrames > 20) {
+        this.sleeping = true;
+        this.vx = 0;
+        this.vy = 0;
+        this.rotation = 0;
+        this.angularVel = 0;
+        this.isCollapsing = false;
+      }
+    } else {
+      this.restFrames = 0;
+    }
+  }
+
+  wake() {
+    this.sleeping = false;
+    this.grounded = false;
+    this.restFrames = 0;
+  }
+
+  draw(ctx, time) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    // No sway — tower stands still when stable
+
+    ctx.rotate(this.rotation);
+    ctx.globalAlpha = this.opacity;
+    ctx.font = `${FONT_SIZE}px Literata, Georgia, serif`;
+    ctx.fillStyle = this.color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Subtle glow
+    ctx.shadowColor = this.color;
+    ctx.shadowBlur = 4;
+    ctx.fillText(this.text, 0, 0);
+    ctx.shadowBlur = 0;
+
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+}
+
+// -- Collision detection --
+function aabbOverlap(a, b) {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
+function resolveCollisions() {
+  for (let i = 0; i < bodies.length; i++) {
+    const a = bodies[i];
+    if (a.sleeping && a.y > groundY - 10) continue;
+
+    for (let j = i + 1; j < bodies.length; j++) {
+      const b = bodies[j];
+      if (a.sleeping && b.sleeping) continue;
+      if (!aabbOverlap(a, b)) continue;
+
+      const overlapX = Math.min(a.right - b.left, b.right - a.left);
+      const overlapY = Math.min(a.bottom - b.top, b.bottom - a.top);
+
+      if (overlapX <= 0 || overlapY <= 0) continue;
+
+      if (overlapY < overlapX) {
+        // Vertical collision
+        const totalMass = a.mass + b.mass;
+        if (a.y < b.y) {
+          // a is above b
+          const pushA = b.sleeping ? overlapY : overlapY * (b.mass / totalMass);
+          const pushB = a.sleeping ? overlapY : overlapY * (a.mass / totalMass);
+          if (!a.sleeping) a.y -= pushA;
+          if (!b.sleeping) b.y += pushB;
+
+          if (!a.sleeping) {
+            if (Math.abs(a.vy) > 20) {
+              spawnDust(a.x, a.bottom, a.color, 3);
+              shakeAmount = Math.max(shakeAmount, Math.abs(a.vy) / 400);
+            }
+            a.vy = -Math.abs(a.vy) * RESTITUTION;
+            if (Math.abs(a.vy) < 10) a.vy = 0;
+            a.grounded = true;
+            a.landed = true;
+
+            // Snap rotation toward zero on stacking
+            a.rotation *= 0.3;
+            a.angularVel *= 0.15;
+          }
+          if (!b.sleeping && !a.sleeping) {
+            b.vy += a.mass / totalMass * 10;
+            b.wake();
+          }
+          if (!a.sleeping) a.vx *= FRICTION;
+
+          // Very slight angular impulse from offset
+          const offset = (a.x - b.x) / b.width;
+          if (!a.sleeping) a.angularVel += offset * 0.05;
+
+          // Guide word toward center of support (stacking neatly)
+          if (!a.sleeping && b.landed) {
+            const centerPull = (b.x - a.x) * 0.08;
+            a.vx += centerPull;
+          }
+        } else {
+          // b is above a
+          const pushA = b.sleeping ? overlapY : overlapY * (b.mass / totalMass);
+          const pushB = a.sleeping ? overlapY : overlapY * (a.mass / totalMass);
+          if (!a.sleeping) a.y += pushA;
+          if (!b.sleeping) b.y -= pushB;
+
+          if (!b.sleeping) {
+            if (Math.abs(b.vy) > 20) {
+              spawnDust(b.x, b.bottom, b.color, 3);
+              shakeAmount = Math.max(shakeAmount, Math.abs(b.vy) / 400);
+            }
+            b.vy = -Math.abs(b.vy) * RESTITUTION;
+            if (Math.abs(b.vy) < 10) b.vy = 0;
+            b.grounded = true;
+            b.landed = true;
+
+            b.rotation *= 0.3;
+            b.angularVel *= 0.15;
+          }
+          if (!a.sleeping && !b.sleeping) {
+            a.vy += b.mass / totalMass * 10;
+            a.wake();
+          }
+          if (!b.sleeping) b.vx *= FRICTION;
+
+          const offset = (b.x - a.x) / a.width;
+          if (!b.sleeping) b.angularVel += offset * 0.05;
+
+          if (!b.sleeping && a.landed) {
+            const centerPull = (a.x - b.x) * 0.08;
+            b.vx += centerPull;
+          }
+        }
+      } else {
+        // Horizontal collision
+        const totalMass = a.mass + b.mass;
+        if (a.x < b.x) {
+          if (!a.sleeping) a.x -= overlapX * (b.mass / totalMass);
+          if (!b.sleeping) b.x += overlapX * (a.mass / totalMass);
+        } else {
+          if (!a.sleeping) a.x += overlapX * (b.mass / totalMass);
+          if (!b.sleeping) b.x -= overlapX * (a.mass / totalMass);
+        }
+
+        const relVx = a.vx - b.vx;
+        if (!a.sleeping) {
+          a.vx -= relVx * (b.mass / totalMass) * (1 + RESTITUTION);
+          a.wake();
+        }
+        if (!b.sleeping) {
+          b.vx += relVx * (a.mass / totalMass) * (1 + RESTITUTION);
+          b.wake();
+        }
+      }
+    }
+  }
+}
+
+// -- Tower stability --
+function getTowerMetrics() {
+  const groundedBodies = bodies.filter(b => b.landed);
+  if (groundedBodies.length < 5) return null;
+
+  let totalMass = 0;
+  let comX = 0;
+  let minX = Infinity, maxX = -Infinity;
+  let minY = Infinity;
+
+  for (const b of groundedBodies) {
+    comX += b.x * b.mass;
+    totalMass += b.mass;
+    if (b.bottom >= groundY - 5) {
+      minX = Math.min(minX, b.left);
+      maxX = Math.max(maxX, b.right);
+    }
+    minY = Math.min(minY, b.top);
+  }
+
+  if (totalMass === 0) return null;
+  comX /= totalMass;
+
+  const baseWidth = maxX - minX;
+  const baseCenterX = (minX + maxX) / 2;
+  const towerHeight = groundY - minY;
+
+  if (baseWidth < 20) return null;
+
+  const heightRatio = towerHeight / baseWidth;
+  const comOffset = Math.abs(comX - baseCenterX) / (baseWidth / 2);
+
+  return { comX, baseCenterX, baseWidth, towerHeight, heightRatio, comOffset, groundedBodies };
+}
+
+function checkStability() {
+  if (collapseCooldown > 0) return;
+
+  const metrics = getTowerMetrics();
+  if (!metrics) { tensionLevel = 0; return; }
+
+  const { comX, baseCenterX, heightRatio, comOffset, groundedBodies } = metrics;
+
+  // Calculate tension — how close are we to collapse?
+  let t = 0;
+  if (heightRatio > 2.0) t = Math.max(t, (heightRatio - 2.0) / 1.5);
+  if (comOffset > 0.2) t = Math.max(t, (comOffset - 0.2) / 0.18);
+  if (groundedBodies.length > 40) t = Math.max(t, (groundedBodies.length - 40) / 20);
+
+  tensionLevel = Math.min(1, t);
+  tensionSwayMultiplier = 1; // sway disabled
+
+  // Collapse conditions
+  if ((comOffset > COLLAPSE_RATIO && heightRatio > 0.8) || heightRatio > 3.5 || groundedBodies.length > 60) {
+    collapseImminent = true;
+  }
+}
+
+function triggerCollapse(comX, baseCenterX) {
+  collapseCooldown = 5;
+  tensionLevel = 0;
+  tensionSwayMultiplier = 1;
+  collapseImminent = false;
+  shakeAmount = 10;
+
+  const dir = comX > baseCenterX ? 1 : -1;
+
+  for (const b of bodies) {
+    if (!b.sleeping && !b.landed) continue;
+    b.wake();
+    b.isCollapsing = true;
+
+    const heightFactor = 1 - (b.y / groundY);
+    const pushForce = 80 + heightFactor * 250;
+
+    b.vx += dir * pushForce * (0.5 + Math.random());
+    b.vy -= 50 + Math.random() * 100 * heightFactor;
+    b.angularVel += (Math.random() - 0.5) * 4;
+    b.grounded = false;
+
+    spawnDust(b.x, b.y, b.color, 4);
+  }
+
+  // Big dust cloud at base
+  for (let i = 0; i < 40; i++) {
+    particles.push(new Particle(
+      baseCenterX + (Math.random() - 0.5) * 200,
+      groundY - Math.random() * 30,
+      'rgba(250,249,246,0.4)'
+    ));
+  }
+
+  // Pause before rebuilding — schedule a post-collapse cooldown
+  postCollapsePause = 2.5;
+}
+
+let postCollapsePause = 0;
+
+// -- Word dropping --
+function dropWord(text, lang) {
+  // Tighter spread — words land closer to center for tower shape
+  const spread = W * 0.2;
+  const centerX = W / 2 + (Math.random() - 0.5) * spread;
+  const body = new WordBody(text, lang, centerX);
+  bodies.push(body);
+  wordCount++;
+}
+
+function dropRandomWord() {
+  const lang = LANG_KEYS[Math.floor(Math.random() * LANG_KEYS.length)];
+  const pool = WORD_POOLS[lang];
+  const word = pool[Math.floor(Math.random() * pool.length)];
+  dropWord(word, lang);
+}
+
+// -- Input --
+const input = document.getElementById('word-input');
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && input.value.trim()) {
+    dropWord(input.value.trim(), 'user');
+    input.value = '';
+  }
+});
+
+// -- Startup sequence --
+// Drop foundation words immediately, then rapid-fire the first batch
+let startupPhase = true;
+let startupDropCount = 0;
+const STARTUP_RAPID_COUNT = 10;
+const STARTUP_RAPID_INTERVAL = 500; // ms
+const NORMAL_DROP_MIN = 2000;
+const NORMAL_DROP_MAX = 3000;
+
+// Drop foundation (3-5 wider words simultaneously)
+function dropFoundation() {
+  for (const fw of FOUNDATION_WORDS.slice(0, 3 + Math.floor(Math.random() * 2))) {
+    const spread = W * 0.15;
+    const centerX = W / 2 + (Math.random() - 0.5) * spread;
+    const body = new WordBody(fw.text, fw.lang, centerX);
+    bodies.push(body);
+    wordCount++;
+  }
+  startupDropCount += FOUNDATION_WORDS.length;
+}
+
+dropFoundation();
+
+// -- Auto drop timer --
+let autoDropAccum = 0;
+let nextAutoDrop = STARTUP_RAPID_INTERVAL;
+
+function scheduleAutoDrop() {
+  if (startupPhase && startupDropCount < STARTUP_RAPID_COUNT) {
+    nextAutoDrop = STARTUP_RAPID_INTERVAL;
+  } else {
+    startupPhase = false;
+    nextAutoDrop = NORMAL_DROP_MIN + Math.random() * (NORMAL_DROP_MAX - NORMAL_DROP_MIN);
+  }
+}
+
+// -- Cleanup off-screen bodies --
+function cleanup() {
+  for (let i = bodies.length - 1; i >= 0; i--) {
+    const b = bodies[i];
+    if (b.y > H + 200 || b.x < -300 || b.x > W + 300) {
+      bodies.splice(i, 1);
+    }
+  }
+}
+
+// -- HUD update --
+function updateHUD() {
+  const groundedBodies = bodies.filter(b => b.landed);
+  let minY = groundY;
+  for (const b of groundedBodies) {
+    minY = Math.min(minY, b.top);
+  }
+  const towerPx = groundY - minY;
+  const stories = Math.floor(towerPx / (FONT_SIZE * 1.5));
+  hudHeight.textContent = `${stories} ${stories === 1 ? 'story' : 'stories'}`;
+  hudWords.textContent = `${bodies.length} ${bodies.length === 1 ? 'word' : 'words'}`;
+}
+
+// -- Draw ground --
+function drawGround() {
+  ctx.strokeStyle = 'rgba(250,249,246,0.1)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, groundY);
+  ctx.lineTo(W, groundY);
+  ctx.stroke();
+
+  const grd = ctx.createLinearGradient(0, groundY, 0, H);
+  grd.addColorStop(0, 'rgba(250,249,246,0.03)');
+  grd.addColorStop(1, 'rgba(8,8,14,0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, groundY, W, H - groundY);
+}
+
+// -- Collapse tension effects --
+let tensionPebbleTimer = 0;
+
+function updateTension(dt) {
+  if (tensionLevel <= 0 || collapseCooldown > 0) return;
+
+  // Spawn pebble particles from "cracks" in the tower
+  tensionPebbleTimer += dt;
+  const pebbleRate = 0.3 - tensionLevel * 0.25; // faster as tension builds
+  if (tensionPebbleTimer > pebbleRate && tensionLevel > 0.3) {
+    tensionPebbleTimer = 0;
+    // Pick a random sleeping body in the tower
+    const towerBodies = bodies.filter(b => b.sleeping && b.y < groundY - 30);
+    if (towerBodies.length > 0) {
+      const b = towerBodies[Math.floor(Math.random() * towerBodies.length)];
+      spawnPebble(b.x + (Math.random() - 0.5) * b.width, b.bottom);
+    }
+  }
+
+  // If collapse is imminent, give a brief dramatic pause then collapse
+  if (collapseImminent) {
+    const metrics = getTowerMetrics();
+    if (metrics) {
+      triggerCollapse(metrics.comX, metrics.baseCenterX);
+    } else {
+      collapseImminent = false;
+    }
+  }
+}
+
+// -- Main loop --
+let lastTime = 0;
+
+function loop(timestamp) {
+  requestAnimationFrame(loop);
+
+  const dt = Math.min((timestamp - lastTime) / 1000, 0.033);
+  lastTime = timestamp;
+  const time = timestamp / 1000;
+
+  // Post-collapse pause — don't drop new words right after a collapse
+  if (postCollapsePause > 0) {
+    postCollapsePause -= dt;
+  }
+
+  // Auto drop (skip during post-collapse pause)
+  if (postCollapsePause <= 0) {
+    autoDropAccum += dt * 1000;
+    if (autoDropAccum >= nextAutoDrop) {
+      autoDropAccum = 0;
+      dropRandomWord();
+      startupDropCount++;
+      scheduleAutoDrop();
+    }
+  }
+
+  // Collapse cooldown
+  if (collapseCooldown > 0) collapseCooldown -= dt;
+
+  // Update bodies
+  for (const b of bodies) {
+    b.update(dt, time);
+  }
+
+  // Resolve collisions (multiple passes for stability)
+  for (let pass = 0; pass < 4; pass++) {
+    resolveCollisions();
+  }
+
+  // Check tower stability
+  collapseTimer += dt;
+  if (collapseTimer > 0.5) {
+    collapseTimer = 0;
+    checkStability();
+  }
+
+  // Tension effects
+  updateTension(dt);
+
+  // Update particles
+  for (let i = particles.length - 1; i >= 0; i--) {
+    particles[i].update(dt);
+    if (particles[i].life <= 0) particles.splice(i, 1);
+  }
+
+  // Cleanup
+  if (Math.random() < 0.02) cleanup();
+
+  // Screen shake
+  shakeAmount *= shakeDecay;
+  if (shakeAmount < 0.1) shakeAmount = 0;
+
+  // -- Draw --
+  ctx.clearRect(0, 0, W, H);
+
+  ctx.save();
+  if (shakeAmount > 0) {
+    ctx.translate(
+      (Math.random() - 0.5) * shakeAmount * 2,
+      (Math.random() - 0.5) * shakeAmount * 2
+    );
+  }
+
+  drawGround();
+
+  for (const b of bodies) {
+    b.draw(ctx, time);
+  }
+
+  for (const p of particles) {
+    p.draw(ctx);
+  }
+
+  ctx.restore();
+
+  // HUD
+  updateHUD();
+}
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Babel Drift</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,700;1,9..144,400&family=Literata:opsz,wght@7..72,400;7..72,500&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #08080e; }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  #intro {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: #08080e; z-index: 30;
+    transition: opacity 1.4s ease-out;
+    cursor: pointer;
+  }
+  #intro.hidden { opacity: 0; pointer-events: none; }
+  #intro h1 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 300; font-size: 42px;
+    color: #e8e4dc; letter-spacing: -0.01em;
+    margin-bottom: 16px;
+  }
+  #intro p {
+    font-family: 'Literata', Georgia, serif;
+    font-size: 17px; color: #998877;
+    max-width: 400px; text-align: center;
+    line-height: 1.6; margin-bottom: 32px;
+  }
+  #intro .start-hint {
+    font-family: 'Literata', Georgia, serif;
+    font-size: 13px; color: #665544;
+    letter-spacing: 0.06em;
+    animation: pulse 2.5s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.9; }
+  }
+
+  #controls {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 16px; align-items: center;
+    background: rgba(8, 8, 14, 0.85); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px; padding: 10px 18px;
+    font: 13px 'Literata', Georgia, serif; color: #665544; z-index: 10;
+    backdrop-filter: blur(8px);
+  }
+
+  #controls label { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+
+  #controls input[type="range"] {
+    width: 80px; accent-color: #C2714F;
+  }
+
+  #controls select {
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+    color: #998877; font: 12px 'Literata', Georgia, serif; padding: 4px 6px; border-radius: 4px;
+  }
+
+  #controls input[type="text"] {
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+    color: #c8c0b8; font: 12px 'Literata', Georgia, serif; padding: 4px 8px; border-radius: 4px;
+    width: 160px;
+  }
+
+  #controls button {
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
+    color: #998877; font: 12px 'Literata', Georgia, serif; padding: 4px 10px; border-radius: 4px;
+    cursor: pointer;
+  }
+  #controls button:hover { background: rgba(255,255,255,0.12); }
+
+  #loading {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: #665544; font: 15px 'Literata', Georgia, serif; letter-spacing: 0.04em;
+    background: #08080e; z-index: 40; transition: opacity 0.8s;
+  }
+  #loading.hidden { opacity: 0; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="loading">tongues drifting...</div>
+<div id="intro">
+  <h1>Babel Drift</h1>
+  <p>Languages drift. When they collide, something new is born.</p>
+  <span class="start-hint">click anywhere to begin</span>
+</div>
+<canvas id="canvas"></canvas>
+<div id="controls">
+  <label>speed <input type="range" id="speed" min="0" max="3" step="0.1" value="0.6"></label>
+  <select id="streamSelect">
+    <option value="0">English</option>
+    <option value="1">Arabic</option>
+    <option value="2">Chinese</option>
+    <option value="3">Spanish</option>
+  </select>
+  <input type="text" id="userText" placeholder="type into stream...">
+  <button id="injectBtn">inject</button>
+</div>
+<script type="module">
+import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
+
+// --- Text content ---
+
+const englishText = `Language is the oldest technology. Before wheels, before fire pits lined with stone, humans shaped breath into meaning. Every sentence is an act of compression — centuries of shared experience packed into vibrations that cross the air between two people. Writing pushed that further. Marks on clay, ink on paper, pixels on glass: each leap let us speak across time. Typography is how we give that impulse a body. The word carries the weight of every mouth that has spoken it, every hand that has written it, every eye that has read it. And still we keep talking, keep writing, keep reaching.`
+
+const arabicText = `اللغة هي أقدم تقنية عرفها الإنسان. قبل العجلات وقبل مواقد النار، صاغ البشر أنفاسهم في معانٍ. كل جملة هي فعل ضغط — قرون من التجارب المشتركة مكثفة في اهتزازات تعبر الهواء بين شخصين. والكتابة دفعت ذلك أبعد. علامات على الطين وحبر على الورق وبكسلات على الزجاج: كل قفزة أتاحت لنا أن نتحدث عبر الزمن. فن الخط هو كيف نمنح ذلك الدافع جسداً. الكلمة تحمل ثقل كل فم نطقها وكل يد كتبتها وكل عين قرأتها. ومع ذلك نستمر في الكلام والكتابة والتواصل.`
+
+const chineseText = `语言是人类最古老的技术。在车轮之前，在石砌火坑之前，人类就将呼吸塑造成意义。每一个句子都是一次压缩——几个世纪的共同经验被浓缩在两个人之间穿越空气的振动中。书写将这一切推得更远。泥板上的刻痕、纸上的墨迹、玻璃上的像素：每一次飞跃都让我们跨越时间说话。字体排印，就是我们赋予这种冲动以形体的方式。文字承载着每一张说过它的嘴、每一只写过它的手、每一双读过它的眼的重量。而我们仍在说，仍在写，仍在伸出手去。`
+
+const spanishText = `El lenguaje es la tecnología más antigua. Antes de las ruedas, antes de los fogones de piedra, los humanos daban forma al aliento en significado. Cada oración es un acto de compresión — siglos de experiencia compartida empaquetados en vibraciones que cruzan el aire entre dos personas. La escritura fue más lejos. Marcas en arcilla, tinta en papel, píxeles en cristal: cada salto nos permitió hablar a través del tiempo. La tipografía es cómo le damos cuerpo a ese impulso. La palabra lleva el peso de cada boca que la ha pronunciado, cada mano que la ha escrito, cada ojo que la ha leído. Y seguimos hablando, escribiendo, alcanzando.`
+
+// --- Config ---
+
+const FONT_SIZE = 18
+const LINE_HEIGHT = 28
+const STREAM_WIDTH = 360
+const BG = '#08080e'
+const PIDGIN_COLOR = '#C49A3C'  // ochre/gold for pidgin text
+
+const COLORS = {
+  english: '#C2714F',   // terracotta
+  arabic:  '#C49A3C',   // ochre
+  chinese: '#8B9E7E',   // sage
+  spanish: '#9B8EA8'    // lavender-dried
+}
+
+const LABEL_NAMES = {
+  english: 'English',
+  arabic: 'العربية',
+  chinese: '中文',
+  spanish: 'Español'
+}
+
+// --- Canvas ---
+
+const canvas = document.getElementById('canvas')
+const ctx = canvas.getContext('2d')
+let W, H, dpr
+
+function resize() {
+  dpr = window.devicePixelRatio || 1
+  W = window.innerWidth
+  H = window.innerHeight
+  canvas.width = W * dpr
+  canvas.height = H * dpr
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+}
+resize()
+window.addEventListener('resize', resize)
+
+// --- Stream state ---
+
+const streamFont = `${FONT_SIZE}px 'Literata', Georgia, serif`
+const labelFont = `500 13px 'Fraunces', Georgia, serif`
+const pidginFont = `500 ${FONT_SIZE + 2}px 'Literata', Georgia, serif`
+const contactLabelFont = `italic 14px 'Fraunces', Georgia, serif`
+
+const defaultTexts = [englishText, arabicText, chineseText, spanishText]
+const colorKeys = ['english', 'arabic', 'chinese', 'spanish']
+
+const streams = []
+
+// --- Phased introduction ---
+// Phase 0: Only English + Arabic, moving head-on
+// Phase 1: After first collision settles, introduce Chinese
+// Phase 2: Then Spanish
+let phase = 0
+let phaseTimer = 0
+const PHASE_1_DELAY = 480  // frames after first collision to add stream 2
+const PHASE_2_DELAY = 360  // frames after phase 1 to add stream 3
+let firstCollisionFrame = -1
+let streamsActive = [true, true, false, false]
+
+function initStreams() {
+  const texts = defaultTexts.slice()
+
+  // Stream 0: English, enters from left, moves right
+  streams[0] = {
+    x: -STREAM_WIDTH - 40, y: H * 0.38,
+    vx: 0.35, vy: 0,
+    color: COLORS.english,
+    font: streamFont,
+    text: texts[0],
+    prepared: null,
+    lines: null,
+    name: 'english',
+    opacity: 1
+  }
+
+  // Stream 1: Arabic, enters from right, moves left — HEAD-ON collision
+  streams[1] = {
+    x: W + 40, y: H * 0.38,
+    vx: -0.35, vy: 0,
+    color: COLORS.arabic,
+    font: streamFont,
+    text: texts[1],
+    prepared: null,
+    lines: null,
+    name: 'arabic',
+    opacity: 1
+  }
+
+  // Stream 2: Chinese, enters from top — delayed
+  streams[2] = {
+    x: W * 0.55, y: -300,
+    vx: 0, vy: 0.3,
+    color: COLORS.chinese,
+    font: streamFont,
+    text: texts[2],
+    prepared: null,
+    lines: null,
+    name: 'chinese',
+    opacity: 0
+  }
+
+  // Stream 3: Spanish, enters from bottom — delayed
+  streams[3] = {
+    x: W * 0.18, y: H + 40,
+    vx: 0, vy: -0.3,
+    color: COLORS.spanish,
+    font: streamFont,
+    text: texts[3],
+    prepared: null,
+    lines: null,
+    name: 'spanish',
+    opacity: 0
+  }
+}
+
+function prepareStream(s) {
+  s.prepared = prepareWithSegments(s.text, s.font)
+  s.lines = layoutAllLines(s.prepared)
+}
+
+function layoutAllLines(prepared) {
+  const lines = []
+  let cursor = { segmentIndex: 0, graphemeIndex: 0 }
+  while (true) {
+    const line = layoutNextLine(prepared, cursor, STREAM_WIDTH)
+    if (!line) break
+    lines.push(line)
+    cursor = line.end
+  }
+  return lines
+}
+
+// --- Spark particles at collision ---
+
+const sparkParticles = []
+
+function spawnSpark(x, y, colorA, colorB) {
+  if (sparkParticles.length > 300) return
+  const count = 2 + Math.floor(Math.random() * 3)
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2
+    const speed = 0.5 + Math.random() * 2
+    const isPidgin = Math.random() > 0.5
+    sparkParticles.push({
+      x: x + (Math.random() - 0.5) * 20,
+      y: y + (Math.random() - 0.5) * 16,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 40 + Math.random() * 80,
+      maxLife: 40 + Math.random() * 80,
+      size: isPidgin ? 2 + Math.random() * 3 : 1 + Math.random() * 2,
+      color: isPidgin ? PIDGIN_COLOR : (Math.random() > 0.5 ? colorA : colorB)
+    })
+  }
+}
+
+function updateSparkParticles() {
+  for (let i = sparkParticles.length - 1; i >= 0; i--) {
+    const p = sparkParticles[i]
+    p.x += p.vx
+    p.y += p.vy
+    p.vx *= 0.98
+    p.vy *= 0.98
+    p.life--
+    if (p.life <= 0) sparkParticles.splice(i, 1)
+  }
+}
+
+function drawSparkParticles() {
+  for (const p of sparkParticles) {
+    const t = p.life / p.maxLife
+    const alpha = t * 0.8
+    ctx.globalAlpha = alpha
+    ctx.fillStyle = p.color
+
+    // Draw a small glow around each spark
+    ctx.shadowColor = p.color
+    ctx.shadowBlur = 6 * t
+    ctx.beginPath()
+    ctx.arc(p.x, p.y, p.size * t, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.shadowBlur = 0
+  ctx.globalAlpha = 1
+}
+
+// --- Collision detection ---
+
+function getStreamBounds(s) {
+  const lineCount = s.lines ? s.lines.length : 0
+  return {
+    x: s.x,
+    y: s.y,
+    w: STREAM_WIDTH,
+    h: lineCount * LINE_HEIGHT
+  }
+}
+
+function overlapRect(a, b) {
+  const x = Math.max(a.x, b.x)
+  const y = Math.max(a.y, b.y)
+  const x2 = Math.min(a.x + a.w, b.x + b.w)
+  const y2 = Math.min(a.y + a.h, b.y + b.h)
+  if (x2 <= x || y2 <= y) return null
+  return { x, y, w: x2 - x, h: y2 - y }
+}
+
+// --- Interleave characters for pidgin effect ---
+
+function interleaveStrings(a, b) {
+  let result = ''
+  const len = Math.max(a.length, b.length)
+  for (let i = 0; i < len; i++) {
+    if (i < a.length) result += a[i]
+    if (i < b.length) result += b[i]
+  }
+  return result
+}
+
+// --- Speed control ---
+
+const speedSlider = document.getElementById('speed')
+let speedMul = 0.6
+
+speedSlider.addEventListener('input', () => {
+  speedMul = parseFloat(speedSlider.value)
+})
+
+// --- User text injection ---
+
+const streamSelect = document.getElementById('streamSelect')
+const userTextInput = document.getElementById('userText')
+const injectBtn = document.getElementById('injectBtn')
+
+injectBtn.addEventListener('click', () => {
+  const idx = parseInt(streamSelect.value)
+  const txt = userTextInput.value.trim()
+  if (!txt || !streamsActive[idx]) return
+  streams[idx].text = txt + ' ' + streams[idx].text
+  prepareStream(streams[idx])
+  userTextInput.value = ''
+})
+
+userTextInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') injectBtn.click()
+})
+
+// --- Toroidal wrapping ---
+
+function wrapStream(s) {
+  const bounds = getStreamBounds(s)
+  if (s.vx > 0 && s.x > W + 20) s.x = -bounds.w - 20
+  if (s.vx < 0 && s.x + bounds.w < -20) s.x = W + 20
+  if (s.vy > 0 && s.y > H + 20) s.y = -bounds.h - 20
+  if (s.vy < 0 && s.y + bounds.h < -20) s.y = H + 20
+}
+
+// --- Draw stream label ---
+
+function drawStreamLabel(s) {
+  const label = LABEL_NAMES[s.name]
+  if (!label) return
+
+  ctx.save()
+  ctx.font = labelFont
+  ctx.globalAlpha = 0.7 * s.opacity
+  ctx.fillStyle = s.color
+  ctx.letterSpacing = '0.08em'
+
+  // Position label above the stream block
+  const lx = s.x
+  const ly = s.y - 10
+  ctx.fillText(label, lx, ly)
+  ctx.restore()
+}
+
+// --- Draw collision zone glow and label ---
+
+function drawCollisionGlow(ov, t) {
+  // Outer warm glow
+  const shimmer = 0.25 + Math.sin(t * 0.002) * 0.1
+  const cx = ov.x + ov.w / 2
+  const cy = ov.y + ov.h / 2
+  const radius = Math.max(ov.w, ov.h) * 0.9
+
+  // Layer 1: broad warm glow
+  const glow1 = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius)
+  glow1.addColorStop(0, `rgba(196, 154, 60, ${shimmer * 0.35})`)  // ochre center
+  glow1.addColorStop(0.4, `rgba(194, 113, 79, ${shimmer * 0.15})`)  // terracotta mid
+  glow1.addColorStop(1, `rgba(194, 113, 79, 0)`)
+  ctx.fillStyle = glow1
+  ctx.fillRect(ov.x - radius, ov.y - radius, ov.w + radius * 2, ov.h + radius * 2)
+
+  // Layer 2: brighter inner core
+  const glow2 = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius * 0.5)
+  glow2.addColorStop(0, `rgba(255, 230, 180, ${shimmer * 0.2})`)
+  glow2.addColorStop(1, `rgba(196, 154, 60, 0)`)
+  ctx.fillStyle = glow2
+  ctx.fillRect(ov.x - radius * 0.5, ov.y - radius * 0.5, ov.w + radius, ov.h + radius)
+
+  // "contact zone" label
+  ctx.save()
+  ctx.font = contactLabelFont
+  ctx.globalAlpha = 0.5 + Math.sin(t * 0.003) * 0.15
+  ctx.fillStyle = PIDGIN_COLOR
+  ctx.fillText('contact zone', cx - 38, ov.y - 14)
+  ctx.restore()
+}
+
+// --- Render ---
+
+let frameCount = 0
+let started = false
+
+function render(t) {
+  requestAnimationFrame(render)
+  if (!started) return
+  frameCount++
+
+  ctx.clearRect(0, 0, W, H)
+
+  // Background
+  ctx.fillStyle = BG
+  ctx.fillRect(0, 0, W, H)
+
+  // Update phase: introduce streams over time
+  if (phase === 0 && firstCollisionFrame > 0 && frameCount - firstCollisionFrame > PHASE_1_DELAY) {
+    phase = 1
+    phaseTimer = frameCount
+    streamsActive[2] = true
+  }
+  if (phase === 1 && frameCount - phaseTimer > PHASE_2_DELAY) {
+    phase = 2
+    streamsActive[3] = true
+  }
+
+  // Fade in newly activated streams
+  for (let i = 2; i < 4; i++) {
+    if (streamsActive[i] && streams[i].opacity < 1) {
+      streams[i].opacity = Math.min(1, streams[i].opacity + 0.005)
+    }
+  }
+
+  // Update stream positions
+  for (let i = 0; i < 4; i++) {
+    if (!streamsActive[i]) continue
+    const s = streams[i]
+    s.x += s.vx * speedMul
+    s.y += s.vy * speedMul
+    wrapStream(s)
+  }
+
+  // Find all collision pairs
+  const collisions = []
+  for (let i = 0; i < 4; i++) {
+    if (!streamsActive[i]) continue
+    for (let j = i + 1; j < 4; j++) {
+      if (!streamsActive[j]) continue
+      if (!streams[i].lines || !streams[j].lines) continue
+      const boundsA = getStreamBounds(streams[i])
+      const boundsB = getStreamBounds(streams[j])
+      const overlap = overlapRect(boundsA, boundsB)
+      if (overlap) {
+        collisions.push({ i, j, overlap })
+        // Track first collision for phasing
+        if (firstCollisionFrame < 0) {
+          firstCollisionFrame = frameCount
+        }
+      }
+    }
+  }
+
+  // Draw each stream's text and label
+  for (let i = 0; i < 4; i++) {
+    if (!streamsActive[i]) continue
+    const s = streams[i]
+    if (!s.lines) continue
+
+    ctx.font = s.font
+    ctx.fillStyle = s.color
+    ctx.globalAlpha = 0.85 * s.opacity
+
+    for (let l = 0; l < s.lines.length; l++) {
+      const ly = s.y + l * LINE_HEIGHT + FONT_SIZE
+      ctx.fillText(s.lines[l].text, s.x, ly)
+    }
+
+    ctx.globalAlpha = 1
+    drawStreamLabel(s)
+  }
+
+  // Draw collision zones with pidgin interleaving
+  for (const col of collisions) {
+    const sA = streams[col.i]
+    const sB = streams[col.j]
+    const ov = col.overlap
+
+    // Draw the glow behind
+    drawCollisionGlow(ov, t)
+
+    // Clip to overlap zone
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(ov.x, ov.y, ov.w, ov.h)
+    ctx.clip()
+
+    // Collect text lines from each stream in the overlap region
+    const linesA = []
+    for (let l = 0; l < sA.lines.length; l++) {
+      const ly = sA.y + l * LINE_HEIGHT + FONT_SIZE
+      if (ly + LINE_HEIGHT > ov.y && ly - LINE_HEIGHT < ov.y + ov.h) {
+        linesA.push({ text: sA.lines[l].text, y: ly })
+      }
+    }
+
+    const linesB = []
+    for (let l = 0; l < sB.lines.length; l++) {
+      const ly = sB.y + l * LINE_HEIGHT + FONT_SIZE
+      if (ly + LINE_HEIGHT > ov.y && ly - LINE_HEIGHT < ov.y + ov.h) {
+        linesB.push({ text: sB.lines[l].text, y: ly })
+      }
+    }
+
+    // Draw interleaved pidgin text in the collision zone
+    ctx.font = pidginFont
+
+    for (let la = 0; la < linesA.length; la++) {
+      const lineA = linesA[la]
+      let closestB = linesB[0]
+      let closestDist = Infinity
+      for (const lb of linesB) {
+        const d = Math.abs(lb.y - lineA.y)
+        if (d < closestDist) { closestDist = d; closestB = lb }
+      }
+
+      if (closestB) {
+        const pidgin = interleaveStrings(lineA.text, closestB.text)
+        const pidginChars = [...pidgin]
+        let cx = ov.x
+        for (let c = 0; c < pidginChars.length; c++) {
+          const phase = Math.sin(t * 0.004 + c * 0.25) * 0.5 + 0.5
+          // Pidgin characters alternate between source colors and gold
+          if (c % 3 === 0) {
+            ctx.fillStyle = PIDGIN_COLOR  // gold pidgin color
+          } else if (c % 3 === 1) {
+            ctx.fillStyle = sA.color
+          } else {
+            ctx.fillStyle = sB.color
+          }
+          ctx.globalAlpha = 0.75 + phase * 0.25
+          ctx.shadowColor = PIDGIN_COLOR
+          ctx.shadowBlur = 4 + phase * 4
+          const charW = ctx.measureText(pidginChars[c]).width
+          if (cx + charW > ov.x + ov.w) break
+          ctx.fillText(pidginChars[c], cx, lineA.y)
+          cx += charW
+        }
+      }
+    }
+
+    ctx.restore()
+    ctx.shadowBlur = 0
+    ctx.globalAlpha = 1
+
+    // Spawn spark particles at collision boundary edges
+    if (frameCount % 4 === 0) {
+      // Top edge sparks
+      spawnSpark(ov.x + Math.random() * ov.w, ov.y, sA.color, sB.color)
+      // Bottom edge sparks
+      spawnSpark(ov.x + Math.random() * ov.w, ov.y + ov.h, sA.color, sB.color)
+      // Left/right edge sparks
+      spawnSpark(ov.x, ov.y + Math.random() * ov.h, sA.color, sB.color)
+      spawnSpark(ov.x + ov.w, ov.y + Math.random() * ov.h, sA.color, sB.color)
+    }
+  }
+
+  // Draw spark particles
+  updateSparkParticles()
+  drawSparkParticles()
+
+  // Subtle vignette
+  const vignette = ctx.createRadialGradient(W / 2, H / 2, W * 0.25, W / 2, H / 2, W * 0.7)
+  vignette.addColorStop(0, 'rgba(8, 8, 14, 0)')
+  vignette.addColorStop(1, 'rgba(8, 8, 14, 0.4)')
+  ctx.fillStyle = vignette
+  ctx.fillRect(0, 0, W, H)
+}
+
+// --- Init ---
+
+initStreams()
+
+// Prepare all streams then start
+Promise.all(streams.map(s => {
+  return new Promise(resolve => {
+    try {
+      prepareStream(s)
+    } catch(e) {
+      console.warn('Failed to prepare stream:', s.name, e)
+    }
+    resolve()
+  })
+})).then(() => {
+  const loading = document.getElementById('loading')
+  loading.classList.add('hidden')
+  setTimeout(() => loading.remove(), 800)
+  requestAnimationFrame(render)
+
+  // Wait for user to click the intro to start
+  const intro = document.getElementById('intro')
+  intro.addEventListener('click', () => {
+    intro.classList.add('hidden')
+    started = true
+    setTimeout(() => intro.remove(), 1500)
+  })
+})
+
+</script>
+</body>
+</html>

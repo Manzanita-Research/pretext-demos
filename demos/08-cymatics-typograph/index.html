@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cymatics Typograph</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600&family=Literata:opsz,wght@7..72,300;7..72,400&family=JetBrains+Mono:wght@300&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #08080e;
+    --fg: #e8e4dc;
+    --dim: #e8e4dc44;
+    --accent: #C2714F;
+    --sage: #8B9E7E;
+    --ochre: #C49A3C;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: 'JetBrains Mono', monospace;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  canvas {
+    display: block;
+  }
+
+  #input-panel {
+    position: absolute;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+
+  #input-panel.hidden { display: none; }
+
+  .input-btn {
+    background: transparent;
+    border: 1px solid #C2714F66;
+    color: var(--fg);
+    font-family: 'Fraunces', 'EB Garamond', serif;
+    font-size: 1.1rem;
+    padding: 14px 32px;
+    cursor: pointer;
+    letter-spacing: 0.08em;
+    transition: border-color 0.4s, opacity 0.4s;
+    width: 260px;
+    text-align: center;
+  }
+
+  .input-btn:hover {
+    border-color: var(--accent);
+  }
+
+  .input-divider {
+    font: 0.75rem Literata, Georgia, serif;
+    color: #e8e4dc44;
+    letter-spacing: 0.08em;
+  }
+
+  #file-input { display: none; }
+
+  #freq-display {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    font-weight: 300;
+    color: var(--ochre);
+    opacity: 0.5;
+    letter-spacing: 0.1em;
+  }
+
+  #mode-display {
+    position: fixed;
+    bottom: 1.5rem;
+    left: 1.5rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    font-weight: 300;
+    color: var(--sage);
+    opacity: 0.5;
+    letter-spacing: 0.1em;
+  }
+
+  #title {
+    position: fixed;
+    top: 1.5rem;
+    left: 1.5rem;
+    font-family: 'Fraunces', 'EB Garamond', serif;
+    font-weight: 400;
+    font-size: 0.9rem;
+    color: #C2714F88;
+    letter-spacing: 0.05em;
+  }
+
+  #status-msg {
+    position: fixed;
+    top: 1.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    font: 0.75rem Literata, Georgia, serif;
+    color: #8B9E7Eaa;
+    letter-spacing: 0.04em;
+    z-index: 10;
+    opacity: 0;
+    transition: opacity 0.6s;
+    text-align: center;
+    max-width: 80vw;
+  }
+  #status-msg.visible { opacity: 1; }
+
+  #playback-controls {
+    position: fixed;
+    bottom: 3.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 10;
+    opacity: 0;
+    transition: opacity 0.4s;
+    pointer-events: none;
+  }
+
+  #playback-controls.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  #play-pause-btn {
+    background: transparent;
+    border: 1px solid #C2714F55;
+    color: var(--fg);
+    font: 0.8rem Literata, Georgia, serif;
+    padding: 6px 16px;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+    transition: border-color 0.3s;
+  }
+  #play-pause-btn:hover { border-color: #C2714Fcc; }
+
+  #progress-bar {
+    width: 180px;
+    height: 2px;
+    background: #e8e4dc15;
+    border-radius: 1px;
+    position: relative;
+    cursor: pointer;
+  }
+
+  #progress-fill {
+    height: 100%;
+    background: #C2714F88;
+    border-radius: 1px;
+    width: 0%;
+    transition: width 0.1s linear;
+  }
+
+  #progress-time {
+    font: 0.65rem 'JetBrains Mono', monospace;
+    color: #e8e4dc55;
+    letter-spacing: 0.04em;
+    min-width: 40px;
+  }
+
+  #drop-overlay {
+    position: fixed;
+    inset: 0;
+    background: #08080ecc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+
+  #drop-overlay.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  #drop-overlay span {
+    font: 1.1rem Fraunces, Georgia, serif;
+    color: #C2714Faa;
+    letter-spacing: 0.05em;
+    border: 1px dashed #C2714F44;
+    padding: 40px 60px;
+  }
+</style>
+</head>
+<body>
+
+<div id="title">Cymatics Typograph</div>
+<canvas id="canvas"></canvas>
+
+<div id="input-panel">
+  <button class="input-btn" id="mic-btn">Use Microphone</button>
+  <span class="input-divider">or</span>
+  <button class="input-btn" id="file-btn">Play Audio File</button>
+  <span class="input-divider">or</span>
+  <button class="input-btn" id="demo-btn">Play Demo Tone</button>
+</div>
+
+<input type="file" id="file-input" accept="audio/*">
+<div id="freq-display"></div>
+<div id="mode-display"></div>
+<div id="status-msg"></div>
+
+<div id="playback-controls">
+  <button id="play-pause-btn">pause</button>
+  <div id="progress-bar"><div id="progress-fill"></div></div>
+  <span id="progress-time">0:00</span>
+</div>
+
+<div id="drop-overlay"><span>Drop audio file here</span></div>
+
+<script type="module">
+import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
+
+const canvas = document.getElementById('canvas')
+const ctx = canvas.getContext('2d')
+const inputPanel = document.getElementById('input-panel')
+const micBtn = document.getElementById('mic-btn')
+const fileBtn = document.getElementById('file-btn')
+const demoBtn = document.getElementById('demo-btn')
+const fileInput = document.getElementById('file-input')
+const freqDisplay = document.getElementById('freq-display')
+const modeDisplay = document.getElementById('mode-display')
+const statusMsg = document.getElementById('status-msg')
+const playbackControls = document.getElementById('playback-controls')
+const playPauseBtn = document.getElementById('play-pause-btn')
+const progressFill = document.getElementById('progress-fill')
+const progressTime = document.getElementById('progress-time')
+const dropOverlay = document.getElementById('drop-overlay')
+
+// --- Text content: fragments on sound and vibration ---
+const poem = `In the beginning was the word, and the word was vibration. Every form is frozen music. The universe is not made of atoms but of stories told at frequencies we have yet to name. Sand remembers what the plate forgets. A tone passes through matter and matter answers with geometry. What we call silence is only a frequency below hearing. The body is a resonant cavity. Speech is breath shaped by intention, carved by tongue and teeth into meaning. Before language there was humming. Before humming there was the pulse. The nodal line is where stillness lives inside motion. Stand at the node and feel the world vibrate around you while you remain still. Every surface is a drum. Every room a cathedral of standing waves. The bones conduct. The skull rings. We are instruments played by the air. Pattern is the signature of energy moving through a medium. Symmetry breaks and reforms. The plate does not choose its geometry — the frequency chooses for it. To speak is to set the world vibrating in sympathy. Your voice is not yours alone; it belongs to every surface it touches. The sand finds the silence. It migrates to the places where cancellation lives — where two waves meet and agree to be still. This is how form emerges: not from force, but from the absence of force. The calm zones. The nodal rest. Matter settling into the negative space of energy. Listen. The pattern is listening back.`
+
+const FONT_SIZE = 14
+const FONT = `${FONT_SIZE}px Literata, Georgia`
+const LINE_HEIGHT = FONT_SIZE * 1.6
+const MIN_WIDTH = FONT_SIZE * 3
+
+let canvasW, canvasH
+let audioCtx = null
+let analyser = null
+let freqData = null
+let inputMode = 'none' // 'mic', 'file', 'demo', or 'none'
+
+// Smoothed Chladni parameters
+let currentN = 2
+let currentM = 3
+let targetN = 2
+let targetM = 3
+let currentAmplitude = 0
+
+// Audio file playback state
+let audioSource = null
+let audioBuffer = null
+let audioStartTime = 0
+let audioPauseOffset = 0
+let audioPlaying = false
+let oscillatorNode = null
+
+function showStatus(msg) {
+  statusMsg.textContent = msg
+  statusMsg.classList.add('visible')
+}
+
+function hideStatus() {
+  statusMsg.classList.remove('visible')
+}
+
+function formatTime(seconds) {
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+// --- Resize ---
+function resize() {
+  const dpr = window.devicePixelRatio || 1
+  canvasW = window.innerWidth
+  canvasH = window.innerHeight
+  canvas.width = canvasW * dpr
+  canvas.height = canvasH * dpr
+  canvas.style.width = canvasW + 'px'
+  canvas.style.height = canvasH + 'px'
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+}
+resize()
+window.addEventListener('resize', resize)
+
+// --- Chladni pattern ---
+function chladni(x, y, n, m) {
+  const px = Math.PI * x
+  const py = Math.PI * y
+  return Math.cos(n * px) * Math.cos(m * py) - Math.cos(m * px) * Math.cos(n * py)
+}
+
+// For a given y-row, find the x-ranges where |chladni| < threshold (nodal zones)
+function getNodalRanges(yNorm, n, m, threshold) {
+  const ranges = []
+  const resolution = 200
+  let inRange = false
+  let rangeStart = 0
+
+  for (let i = 0; i <= resolution; i++) {
+    const xNorm = i / resolution
+    const val = Math.abs(chladni(xNorm, yNorm, n, m))
+    const isNodal = val < threshold
+
+    if (isNodal && !inRange) {
+      rangeStart = xNorm
+      inRange = true
+    } else if (!isNodal && inRange) {
+      ranges.push({ start: rangeStart, end: xNorm })
+      inRange = false
+    }
+  }
+  if (inRange) {
+    ranges.push({ start: rangeStart, end: 1.0 })
+  }
+
+  return ranges
+}
+
+// --- Ensure AudioContext + AnalyserNode exist ---
+function ensureAudioContext() {
+  if (!audioCtx) {
+    audioCtx = new AudioContext()
+    analyser = audioCtx.createAnalyser()
+    analyser.fftSize = 2048
+    analyser.smoothingTimeConstant = 0.8
+    freqData = new Uint8Array(analyser.frequencyBinCount)
+  }
+}
+
+// --- Audio setup (microphone) ---
+async function startAudio() {
+  try {
+    ensureAudioContext()
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    const source = audioCtx.createMediaStreamSource(stream)
+    source.connect(analyser)
+    inputMode = 'mic'
+    return true
+  } catch (e) {
+    console.warn('Microphone not available:', e)
+    return false
+  }
+}
+
+// Stop any current audio file / demo playback
+function stopPlayback() {
+  if (audioSource) {
+    try { audioSource.stop() } catch (e) { /* */ }
+    audioSource.disconnect()
+    audioSource = null
+  }
+  if (oscillatorNode) {
+    try { oscillatorNode.stop() } catch (e) { /* */ }
+    oscillatorNode.disconnect()
+    oscillatorNode = null
+  }
+  audioPlaying = false
+  audioBuffer = null
+  audioPauseOffset = 0
+  playbackControls.classList.remove('visible')
+}
+
+// Play an audio file buffer
+function playAudioBuffer(buffer) {
+  ensureAudioContext()
+  stopPlayback()
+
+  audioBuffer = buffer
+  inputMode = 'file'
+  audioSource = audioCtx.createBufferSource()
+  audioSource.buffer = buffer
+  audioSource.connect(analyser)
+  analyser.connect(audioCtx.destination)
+
+  audioSource.onended = () => {
+    if (audioPlaying) {
+      audioPlaying = false
+      playPauseBtn.textContent = 'play'
+      audioPauseOffset = 0
+      progressFill.style.width = '0%'
+      progressTime.textContent = formatTime(0)
+    }
+  }
+
+  audioStartTime = audioCtx.currentTime - audioPauseOffset
+  audioSource.start(0, audioPauseOffset)
+  audioPlaying = true
+  playPauseBtn.textContent = 'pause'
+  playbackControls.classList.add('visible')
+  showStatus('playing audio file')
+}
+
+// Handle file selection
+async function handleAudioFile(file) {
+  if (!file || !file.type.startsWith('audio/')) {
+    showStatus('Please select an audio file')
+    return
+  }
+  ensureAudioContext()
+  showStatus('decoding audio...')
+  try {
+    const arrayBuf = await file.arrayBuffer()
+    const decoded = await audioCtx.decodeAudioData(arrayBuf)
+    audioPauseOffset = 0
+    playAudioBuffer(decoded)
+  } catch (e) {
+    console.error('Failed to decode audio:', e)
+    showStatus('Could not decode that audio file')
+  }
+}
+
+// Demo tone: oscillator sweep 200Hz -> 2000Hz over 10 seconds
+function playDemoTone() {
+  ensureAudioContext()
+  stopPlayback()
+
+  inputMode = 'demo'
+  oscillatorNode = audioCtx.createOscillator()
+  const gainNode = audioCtx.createGain()
+  gainNode.gain.value = 0.3
+
+  oscillatorNode.type = 'sine'
+  oscillatorNode.frequency.setValueAtTime(200, audioCtx.currentTime)
+  oscillatorNode.frequency.exponentialRampToValueAtTime(2000, audioCtx.currentTime + 10)
+
+  oscillatorNode.connect(gainNode)
+  gainNode.connect(analyser)
+  analyser.connect(audioCtx.destination)
+
+  audioStartTime = audioCtx.currentTime
+  audioPlaying = true
+  oscillatorNode.start()
+  oscillatorNode.stop(audioCtx.currentTime + 10)
+
+  oscillatorNode.onended = () => {
+    audioPlaying = false
+    inputMode = 'none'
+    playbackControls.classList.remove('visible')
+    showStatus('Demo tone finished. Drop an audio file or use the microphone.')
+  }
+
+  playbackControls.classList.add('visible')
+  playPauseBtn.textContent = 'stop'
+  showStatus('playing demo tone — 200 Hz to 2000 Hz sweep')
+}
+
+// --- Get dominant frequency and amplitude ---
+function getAudioParams() {
+  if (!analyser || !freqData) return { frequency: 0, amplitude: 0 }
+
+  analyser.getByteFrequencyData(freqData)
+
+  let maxVal = 0
+  let maxIndex = 0
+  let totalEnergy = 0
+  for (let i = 2; i < freqData.length; i++) {
+    totalEnergy += freqData[i]
+    if (freqData[i] > maxVal) {
+      maxVal = freqData[i]
+      maxIndex = i
+    }
+  }
+
+  const sampleRate = analyser.context.sampleRate
+  const frequency = maxIndex * sampleRate / analyser.fftSize
+  const amplitude = totalEnergy / freqData.length / 255
+
+  return { frequency, amplitude }
+}
+
+// Map frequency to Chladni mode numbers
+function frequencyToModes(frequency, amplitude) {
+  if (amplitude < 0.04) {
+    return { n: 2, m: 3 } // quiet default
+  }
+
+  const freqNorm = Math.max(0, Math.min(1, (frequency - 80) / (2000 - 80)))
+
+  const n = Math.round(1 + freqNorm * 5) + 1
+  const m = Math.round(1 + (1 - freqNorm) * 4) + 1
+
+  if (n === m) return { n, m: m + 1 }
+  return { n, m }
+}
+
+// --- Draw background Chladni pattern ---
+function drawChladniBackground(n, m, amplitude) {
+  const step = 3
+  const bgAlpha = 0.03 + amplitude * 0.04
+  const imgW = Math.ceil(canvasW / step)
+  const imgH = Math.ceil(canvasH / step)
+  const offscreen = new OffscreenCanvas(imgW, imgH)
+  const offCtx = offscreen.getContext('2d')
+  const imageData = offCtx.createImageData(imgW, imgH)
+  const data = imageData.data
+
+  for (let py = 0; py < imgH; py++) {
+    const yNorm = (py * step) / canvasH
+    for (let px = 0; px < imgW; px++) {
+      const xNorm = (px * step) / canvasW
+      const val = Math.abs(chladni(xNorm, yNorm, n, m))
+
+      if (val < 0.15) {
+        const intensity = (1 - val / 0.15) * bgAlpha
+        const idx = (py * imgW + px) * 4
+        // Use terracotta tint for the pattern
+        data[idx] = 194
+        data[idx + 1] = 113
+        data[idx + 2] = 79
+        data[idx + 3] = Math.round(intensity * 255)
+      }
+    }
+  }
+
+  offCtx.putImageData(imageData, 0, 0)
+  ctx.imageSmoothingEnabled = false
+  ctx.drawImage(offscreen, 0, 0, canvasW, canvasH)
+}
+
+// Update playback progress
+function updateProgress() {
+  if (inputMode === 'file' && audioBuffer && audioPlaying) {
+    const elapsed = audioCtx.currentTime - audioStartTime
+    const duration = audioBuffer.duration
+    const pct = Math.min(100, (elapsed / duration) * 100)
+    progressFill.style.width = pct + '%'
+    progressTime.textContent = formatTime(elapsed)
+  } else if (inputMode === 'demo' && audioPlaying) {
+    const elapsed = audioCtx.currentTime - audioStartTime
+    const pct = Math.min(100, (elapsed / 10) * 100)
+    progressFill.style.width = pct + '%'
+    progressTime.textContent = formatTime(elapsed)
+  }
+}
+
+// --- Prepare text once ---
+const repeatedText = (poem + ' ').repeat(8)
+let prepared = null
+try {
+  prepared = prepareWithSegments(repeatedText, FONT)
+} catch (e) {
+  console.error('Failed to prepare text:', e)
+}
+
+// --- Main render ---
+function render() {
+  ctx.clearRect(0, 0, canvasW, canvasH)
+
+  if (!prepared) {
+    requestAnimationFrame(render)
+    return
+  }
+
+  // Get parameters from active input mode
+  let frequency = 0
+  let amplitude = 0
+  if (inputMode !== 'none') {
+    ({ frequency, amplitude } = getAudioParams())
+  }
+
+  const modes = frequencyToModes(frequency, amplitude)
+
+  // Smooth parameter transitions
+  const smoothing = 0.08
+  targetN = modes.n
+  targetM = modes.m
+  currentN += (targetN - currentN) * smoothing
+  currentM += (targetM - currentM) * smoothing
+  currentAmplitude += (amplitude - currentAmplitude) * 0.12
+
+  const n = currentN
+  const m = currentM
+
+  const threshold = 0.12 + currentAmplitude * 0.25
+
+  // Draw faint Chladni pattern in background
+  drawChladniBackground(n, m, currentAmplitude)
+
+  ctx.font = FONT
+
+  let cursor = { segmentIndex: 0, graphemeIndex: 0 }
+  const margin = 40
+
+  for (let y = margin; y < canvasH - margin; y += LINE_HEIGHT) {
+    const yNorm = y / canvasH
+    const ranges = getNodalRanges(yNorm, n, m, threshold)
+
+    for (const range of ranges) {
+      const xStart = range.start * canvasW
+      const xEnd = range.end * canvasW
+      const availableWidth = xEnd - xStart - margin
+
+      if (availableWidth < MIN_WIDTH) continue
+
+      const line = layoutNextLine(prepared, cursor, availableWidth)
+      if (!line) break
+
+      const rangeWidth = range.end - range.start
+      const text = line.text
+
+      const textWidth = ctx.measureText(text).width
+      const centeredX = xStart + (xEnd - xStart - textWidth) / 2
+
+      let charX = centeredX
+      for (let c = 0; c < text.length; c++) {
+        const ch = text[c]
+        const charWidth = ctx.measureText(ch).width
+        const charXNorm = (charX + charWidth / 2) / canvasW
+
+        const distFromStart = (charXNorm - range.start) / rangeWidth
+        const distFromEnd = (range.end - charXNorm) / rangeWidth
+        const edgeDist = Math.min(distFromStart, distFromEnd)
+
+        const edgeFade = Math.min(1, edgeDist * 5)
+        const nodalVal = Math.abs(chladni(charXNorm, yNorm, n, m))
+        const nodalFade = Math.max(0.3, 1 - nodalVal / threshold)
+
+        const alpha = edgeFade * nodalFade * (0.6 + currentAmplitude * 0.4)
+
+        ctx.fillStyle = `rgba(232, 228, 220, ${Math.max(0.05, alpha)})`
+        ctx.fillText(ch, charX, y)
+        charX += charWidth
+      }
+
+      cursor = line.end
+    }
+
+    if (!cursor || (cursor.segmentIndex === 0 && cursor.graphemeIndex === 0)) continue
+  }
+
+  updateProgress()
+
+  // Update displays
+  if (inputMode !== 'none') {
+    freqDisplay.textContent = `${Math.round(frequency)} Hz`
+    modeDisplay.textContent = `mode ${Math.round(targetN)},${Math.round(targetM)}`
+  } else {
+    freqDisplay.textContent = ''
+    modeDisplay.textContent = `mode ${Math.round(currentN)},${Math.round(currentM)}`
+  }
+
+  requestAnimationFrame(render)
+}
+
+requestAnimationFrame(render)
+
+// --- Event handlers ---
+
+micBtn.addEventListener('click', async () => {
+  const micWorked = await startAudio()
+  if (micWorked) {
+    inputPanel.classList.add('hidden')
+    showStatus('listening...')
+  } else {
+    showStatus('Microphone not available. Try an audio file, or use HTTPS for mic access.')
+  }
+})
+
+fileBtn.addEventListener('click', () => {
+  fileInput.click()
+})
+
+fileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0]
+  if (file) {
+    inputPanel.classList.add('hidden')
+    handleAudioFile(file)
+  }
+})
+
+demoBtn.addEventListener('click', () => {
+  inputPanel.classList.add('hidden')
+  playDemoTone()
+})
+
+// Play/pause for audio file playback
+playPauseBtn.addEventListener('click', () => {
+  if (inputMode === 'demo') {
+    stopPlayback()
+    inputMode = 'none'
+    showStatus('Drop an audio file here, or use HTTPS for microphone access')
+    return
+  }
+
+  if (!audioBuffer) return
+
+  if (audioPlaying) {
+    // Pause
+    audioPauseOffset = audioCtx.currentTime - audioStartTime
+    if (audioSource) {
+      try { audioSource.stop() } catch (e) { /* */ }
+      audioSource.disconnect()
+      audioSource = null
+    }
+    audioPlaying = false
+    playPauseBtn.textContent = 'play'
+  } else {
+    // Resume
+    playAudioBuffer(audioBuffer)
+  }
+})
+
+// Drag and drop
+let dragCounter = 0
+
+document.addEventListener('dragenter', (e) => {
+  e.preventDefault()
+  dragCounter++
+  dropOverlay.classList.add('visible')
+})
+
+document.addEventListener('dragleave', (e) => {
+  e.preventDefault()
+  dragCounter--
+  if (dragCounter <= 0) {
+    dragCounter = 0
+    dropOverlay.classList.remove('visible')
+  }
+})
+
+document.addEventListener('dragover', (e) => {
+  e.preventDefault()
+})
+
+document.addEventListener('drop', (e) => {
+  e.preventDefault()
+  dragCounter = 0
+  dropOverlay.classList.remove('visible')
+  const file = e.dataTransfer.files[0]
+  if (file) {
+    inputPanel.classList.add('hidden')
+    handleAudioFile(file)
+  }
+})
+</script>
+</body>
+</html>

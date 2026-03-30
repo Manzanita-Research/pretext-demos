@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Text Choreography — Labanotation</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,300;1,9..144,400&family=Literata:ital,opsz,wght@0,7..72,300;0,7..72,400;1,7..72,300;1,7..72,400&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: #1a1410;
+    font-family: 'Literata', Georgia, serif;
+    color: #e8e4dc;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  #controls {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 16px 40px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    background: linear-gradient(to top, rgba(26,20,16,1) 0%, rgba(26,20,16,0.97) 50%, rgba(26,20,16,0) 100%);
+    z-index: 10;
+  }
+
+  #move-label {
+    font-family: 'Literata', Georgia, serif;
+    font-size: 13px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: #C2714F;
+    min-height: 18px;
+    transition: opacity 0.3s;
+  }
+
+  #sequence-label {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 36px;
+    font-weight: 300;
+    color: #e8e4dc;
+    line-height: 1;
+    letter-spacing: 0.04em;
+    font-style: italic;
+  }
+
+  #btn-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 4px;
+  }
+
+  button {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 13px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    background: none;
+    border: 1px solid #3a352e;
+    color: #a89a88;
+    padding: 7px 18px;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all 0.25s;
+  }
+
+  button:hover {
+    border-color: #C2714F;
+    color: #e8e4dc;
+  }
+
+  button.active {
+    border-color: #C2714F;
+    color: #e8dcc8;
+    background: rgba(194, 113, 79, 0.1);
+  }
+
+  #play-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    letter-spacing: 0;
+    border-color: #C49A3C;
+  }
+
+  #timeline {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    max-width: 600px;
+  }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    flex: 1;
+    height: 2px;
+    background: #2a2824;
+    outline: none;
+    cursor: pointer;
+    border-radius: 1px;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #C49A3C;
+    border: 2px solid #1a1410;
+    box-shadow: 0 0 0 1px rgba(196, 154, 60, 0.3);
+    cursor: pointer;
+  }
+
+  #time-display {
+    font-size: 13px;
+    color: #5a564e;
+    min-width: 32px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Laban staff */
+  #laban-staff {
+    position: fixed;
+    right: 28px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 42px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    opacity: 0.6;
+    z-index: 5;
+  }
+
+  .laban-col {
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 2px;
+    width: 18px;
+  }
+
+  .laban-cell {
+    width: 18px;
+    height: 24px;
+    border: 1px solid #3a3830;
+    border-radius: 1px;
+    transition: background 0.3s, border-color 0.3s;
+  }
+
+  .laban-center-line {
+    width: 1px;
+    background: #8B9E7E40;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+  }
+
+  #laban-label {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #8B9E7E;
+    writing-mode: vertical-rl;
+    position: fixed;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 5;
+  }
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<!-- Laban staff notation (simplified) -->
+<div id="laban-staff">
+  <div style="display:flex;gap:4px;position:relative;">
+    <div class="laban-center-line"></div>
+    <div class="laban-col" id="laban-left">
+      <div class="laban-cell" data-level="low"></div>
+      <div class="laban-cell" data-level="mid"></div>
+      <div class="laban-cell" data-level="high"></div>
+    </div>
+    <div class="laban-col" id="laban-right">
+      <div class="laban-cell" data-level="low"></div>
+      <div class="laban-cell" data-level="mid"></div>
+      <div class="laban-cell" data-level="high"></div>
+    </div>
+  </div>
+</div>
+<div id="laban-label">staff</div>
+
+<div id="controls">
+  <div id="move-label"></div>
+  <div id="sequence-label">Waltz</div>
+  <div id="btn-row">
+    <button id="play-btn">&#9654;</button>
+    <button class="seq-btn active" data-seq="waltz">Waltz</button>
+    <button class="seq-btn" data-seq="leap">Leap</button>
+    <button class="seq-btn" data-seq="pirouette">Pirouette</button>
+    <button class="seq-btn" data-seq="pasDeDeux">Pas de deux</button>
+  </div>
+  <div id="timeline">
+    <input type="range" id="scrubber" min="0" max="1000" value="0">
+    <span id="time-display">0.0s</span>
+  </div>
+</div>
+
+<script type="module">
+import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
+
+// --- Text content: dance, the body, movement ---
+const DANCE_TEXT_A = `The body knows before the mind does. A shift of weight, a falling into trust — that is what dance is. Not the steps. The steps are only the bones of it. The flesh is breath, the skin is timing. When a dancer leaps, they do not think about gravity. They think about the air. About the space between the floor and the ceiling that belongs, for one breath, entirely to them. Muscles remember patterns the conscious mind has long forgotten. The ankle rolls, the spine curves, the arms open like a question the body already knows the answer to. This is what it means to move with intention: every gesture a word, every phrase a sentence written in space.`
+
+const DANCE_TEXT_B = `Two bodies in space create a grammar. The distance between them is punctuation — a pause, a comma, a held breath before the next phrase begins. When one reaches forward the other answers backward. Mirror and echo, call and response. The pas de deux is a conversation older than language: weight shared, trust tested, falling caught. In the best partnerships the follower is not following at all. They are listening with their skeleton, anticipating with their ribs. Space between dancers is not empty. It is taut with possibility, humming with the tension of what might happen next.`
+
+const FONT_SIZE = 15
+const FONT = `${FONT_SIZE}px Literata, Georgia, serif`
+const LINE_HEIGHT = 22
+
+const canvas = document.getElementById('canvas')
+const ctx = canvas.getContext('2d')
+
+let W, H, dpr
+
+function resize() {
+  dpr = window.devicePixelRatio || 1
+  W = window.innerWidth
+  H = window.innerHeight
+  canvas.width = W * dpr
+  canvas.height = H * dpr
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+}
+resize()
+window.addEventListener('resize', resize)
+
+// Prepare text
+const preparedA = prepareWithSegments(DANCE_TEXT_A, FONT)
+const preparedB = prepareWithSegments(DANCE_TEXT_B, FONT)
+
+// --- Easing functions ---
+function easeInOutSine(t) {
+  return -(Math.cos(Math.PI * t) - 1) / 2
+}
+
+function easeInOutCubic(t) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+}
+
+function easeOutCubic(t) {
+  return 1 - Math.pow(1 - t, 3)
+}
+
+function easeInCubic(t) {
+  return t * t * t
+}
+
+function easeOutElastic(t) {
+  if (t === 0 || t === 1) return t
+  return Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * (2 * Math.PI / 3)) + 1
+}
+
+function easeInOutQuad(t) {
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
+}
+
+// --- Interpolation ---
+function lerp(a, b, t) {
+  return a + (b - a) * t
+}
+
+function interpolateKeyframes(keyframes, time, duration, easeFn) {
+  const totalKeys = keyframes.length
+  if (totalKeys === 0) return { x: 0, y: 0, width: 300, rotation: 0, scale: 1, opacity: 1, label: '' }
+  if (totalKeys === 1) return { ...keyframes[0] }
+
+  // Clamp time into [0, duration) — JS modulo can go negative
+  const clampedTime = ((time % duration) + duration) % duration
+  const normalizedTime = Math.min(clampedTime / duration, 0.999999)
+  const segmentCount = totalKeys - 1
+  const segment = normalizedTime * segmentCount
+  const idx = Math.max(0, Math.min(Math.floor(segment), segmentCount - 1))
+  const localT = Math.max(0, Math.min(1, segment - idx))
+
+  const from = keyframes[idx]
+  const to = keyframes[Math.min(idx + 1, totalKeys - 1)]
+  if (!from || !to) return { ...keyframes[0] }
+
+  const eased = (from.ease || easeFn || easeInOutSine)(localT)
+  const result = {}
+
+  for (const key of Object.keys(to)) {
+    if (key === 'ease' || key === 'label') continue
+    if (typeof to[key] === 'number' && typeof from[key] === 'number') {
+      result[key] = lerp(from[key], to[key], eased)
+    } else {
+      result[key] = from[key]
+    }
+  }
+  // Carry forward label from 'from' keyframe
+  result.label = from.label || ''
+  return result
+}
+
+// --- Dance Sequences ---
+// Each sequence defines keyframes for one or two dancers
+// Properties: x, y (relative to center), width, rotation (radians), scale, opacity, label
+
+const centerX = () => W / 2
+const centerY = () => H / 2 - 60
+
+const sequences = {
+  waltz: {
+    name: 'Waltz',
+    duration: 8000,
+    dancers: 1,
+    getKeyframes: () => {
+      const cx = centerX(), cy = centerY()
+      return [[
+        { x: cx - 80, y: cy, width: 340, rotation: -0.04, scale: 1, opacity: 1, label: 'sway left', ease: easeInOutSine },
+        { x: cx + 80, y: cy - 10, width: 280, rotation: 0.04, scale: 1.02, opacity: 1, label: 'breathe in', ease: easeInOutSine },
+        { x: cx - 40, y: cy + 20, width: 380, rotation: -0.02, scale: 0.98, opacity: 1, label: 'breathe out', ease: easeInOutSine },
+        { x: cx + 60, y: cy - 15, width: 300, rotation: 0.03, scale: 1.01, opacity: 1, label: 'sway right', ease: easeInOutSine },
+        { x: cx - 80, y: cy, width: 340, rotation: -0.04, scale: 1, opacity: 1, label: 'return', ease: easeInOutSine },
+      ]]
+    },
+    laban: (t) => ({
+      left: { low: 0.3, mid: 0.5 + 0.3 * Math.sin(t * 0.8), high: 0.2 },
+      right: { low: 0.3, mid: 0.5 + 0.3 * Math.cos(t * 0.8), high: 0.2 }
+    })
+  },
+
+  leap: {
+    name: 'Leap',
+    duration: 6000,
+    dancers: 1,
+    getKeyframes: () => {
+      const cx = centerX(), cy = centerY()
+      return [[
+        { x: cx - 100, y: cy + 40, width: 380, rotation: 0, scale: 1, opacity: 1, label: 'prepare', ease: easeInCubic },
+        { x: cx - 40, y: cy + 60, width: 400, rotation: -0.02, scale: 0.97, opacity: 1, label: 'plie', ease: easeOutCubic },
+        { x: cx + 20, y: cy - 120, width: 220, rotation: 0.06, scale: 1.08, opacity: 1, label: 'leap', ease: easeOutElastic },
+        { x: cx + 80, y: cy - 80, width: 260, rotation: 0.03, scale: 1.04, opacity: 1, label: 'suspend', ease: easeInCubic },
+        { x: cx + 100, y: cy + 40, width: 400, rotation: -0.01, scale: 0.98, opacity: 1, label: 'land', ease: easeOutCubic },
+        { x: cx - 100, y: cy + 40, width: 380, rotation: 0, scale: 1, opacity: 1, label: 'recover', ease: easeInOutSine },
+      ]]
+    },
+    laban: (t) => {
+      const phase = (t % 6) / 6
+      const leapPhase = phase > 0.25 && phase < 0.6
+      return {
+        left: { low: leapPhase ? 0.1 : 0.6, mid: 0.3, high: leapPhase ? 0.9 : 0.2 },
+        right: { low: leapPhase ? 0.1 : 0.6, mid: 0.3, high: leapPhase ? 0.9 : 0.2 }
+      }
+    }
+  },
+
+  pirouette: {
+    name: 'Pirouette',
+    duration: 7000,
+    dancers: 1,
+    getKeyframes: () => {
+      const cx = centerX(), cy = centerY()
+      return [[
+        { x: cx, y: cy, width: 380, rotation: 0, scale: 1, opacity: 1, label: 'fourth position', ease: easeInOutCubic },
+        { x: cx + 10, y: cy - 20, width: 300, rotation: Math.PI * 0.5, scale: 1.02, opacity: 1, label: 'releve', ease: easeInOutCubic },
+        { x: cx, y: cy - 30, width: 200, rotation: Math.PI, scale: 1.05, opacity: 0.95, label: 'turn', ease: easeInOutSine },
+        { x: cx - 10, y: cy - 25, width: 180, rotation: Math.PI * 1.5, scale: 1.06, opacity: 0.9, label: 'spotting', ease: easeInOutSine },
+        { x: cx, y: cy - 20, width: 240, rotation: Math.PI * 2, scale: 1.03, opacity: 0.95, label: 'decelerate', ease: easeOutCubic },
+        { x: cx, y: cy, width: 380, rotation: Math.PI * 2.05, scale: 1, opacity: 1, label: 'finish', ease: easeOutCubic },
+      ]]
+    },
+    laban: (t) => {
+      const spin = Math.sin(t * 1.2)
+      return {
+        left: { low: 0.2, mid: 0.4 + 0.4 * Math.abs(spin), high: 0.6 + 0.3 * spin },
+        right: { low: 0.2, mid: 0.4 + 0.4 * Math.abs(spin), high: 0.6 - 0.3 * spin }
+      }
+    }
+  },
+
+  pasDeDeux: {
+    name: 'Pas de deux',
+    duration: 10000,
+    dancers: 2,
+    getKeyframes: () => {
+      const cx = centerX(), cy = centerY()
+      const offsetX = 160
+      return [
+        // Dancer A (left)
+        [
+          { x: cx - offsetX - 100, y: cy - 20, width: 280, rotation: 0.02, scale: 1, opacity: 1, label: 'approach', ease: easeInOutSine },
+          { x: cx - offsetX + 20, y: cy, width: 260, rotation: 0.01, scale: 1.01, opacity: 1, label: 'reach', ease: easeInOutCubic },
+          { x: cx - offsetX + 60, y: cy - 40, width: 240, rotation: -0.03, scale: 1.03, opacity: 1, label: 'lift', ease: easeOutCubic },
+          { x: cx - offsetX + 40, y: cy - 60, width: 220, rotation: -0.05, scale: 1.05, opacity: 1, label: 'suspend', ease: easeInOutSine },
+          { x: cx - offsetX + 20, y: cy - 20, width: 250, rotation: -0.02, scale: 1.02, opacity: 1, label: 'lower', ease: easeInOutCubic },
+          { x: cx - offsetX - 60, y: cy + 10, width: 280, rotation: 0.03, scale: 0.99, opacity: 1, label: 'retreat', ease: easeInOutSine },
+          { x: cx - offsetX - 100, y: cy - 20, width: 280, rotation: 0.02, scale: 1, opacity: 1, label: 'reset', ease: easeInOutSine },
+        ],
+        // Dancer B (right) — mirrors A
+        [
+          { x: cx + offsetX + 100, y: cy - 20, width: 280, rotation: -0.02, scale: 1, opacity: 1, label: 'approach', ease: easeInOutSine },
+          { x: cx + offsetX - 20, y: cy, width: 260, rotation: -0.01, scale: 1.01, opacity: 1, label: 'receive', ease: easeInOutCubic },
+          { x: cx + offsetX - 60, y: cy - 40, width: 240, rotation: 0.03, scale: 1.03, opacity: 1, label: 'rise', ease: easeOutCubic },
+          { x: cx + offsetX - 40, y: cy - 60, width: 220, rotation: 0.05, scale: 1.05, opacity: 1, label: 'float', ease: easeInOutSine },
+          { x: cx + offsetX - 20, y: cy - 20, width: 250, rotation: 0.02, scale: 1.02, opacity: 1, label: 'descend', ease: easeInOutCubic },
+          { x: cx + offsetX + 60, y: cy + 10, width: 280, rotation: -0.03, scale: 0.99, opacity: 1, label: 'withdraw', ease: easeInOutSine },
+          { x: cx + offsetX + 100, y: cy - 20, width: 280, rotation: -0.02, scale: 1, opacity: 1, label: 'reset', ease: easeInOutSine },
+        ]
+      ]
+    },
+    laban: (t) => {
+      const phase = Math.sin(t * 0.7)
+      return {
+        left: { low: 0.4 - 0.2 * phase, mid: 0.5 + 0.3 * phase, high: 0.3 + 0.4 * phase },
+        right: { low: 0.4 + 0.2 * phase, mid: 0.5 - 0.3 * phase, high: 0.3 - 0.4 * phase }
+      }
+    }
+  }
+}
+
+// --- State ---
+let currentSequence = 'waltz'
+let playing = true
+let startTime = performance.now()
+let pausedAt = 0
+
+// --- Controls ---
+const playBtn = document.getElementById('play-btn')
+const scrubber = document.getElementById('scrubber')
+const timeDisplay = document.getElementById('time-display')
+const seqLabel = document.getElementById('sequence-label')
+const moveLabel = document.getElementById('move-label')
+const seqBtns = document.querySelectorAll('.seq-btn')
+
+playBtn.addEventListener('click', () => {
+  playing = !playing
+  if (playing) {
+    startTime = performance.now() - pausedAt
+    playBtn.innerHTML = '&#9646;&#9646;'
+  } else {
+    pausedAt = performance.now() - startTime
+    playBtn.innerHTML = '&#9654;'
+  }
+})
+
+// Start as playing
+playBtn.innerHTML = '&#9646;&#9646;'
+
+seqBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    currentSequence = btn.dataset.seq
+    seqBtns.forEach(b => b.classList.remove('active'))
+    btn.classList.add('active')
+    seqLabel.textContent = sequences[currentSequence].name
+    startTime = performance.now()
+    pausedAt = 0
+    if (!playing) {
+      playing = true
+      playBtn.innerHTML = '&#9646;&#9646;'
+    }
+  })
+})
+
+let scrubbing = false
+scrubber.addEventListener('input', () => {
+  scrubbing = true
+  const seq = sequences[currentSequence]
+  const t = (parseFloat(scrubber.value) / 1000) * seq.duration
+  pausedAt = t
+  startTime = performance.now() - t
+})
+scrubber.addEventListener('pointerup', () => { scrubbing = false })
+scrubber.addEventListener('pointerdown', () => { scrubbing = true })
+
+// --- Laban staff rendering ---
+const labanColors = {
+  high: '#8B9E7E',   // sage — high level
+  mid: '#6d8a60',    // deep sage — middle
+  low: '#4a6b4a',    // forest sage — low level
+}
+
+function updateLabanStaff(time) {
+  const seq = sequences[currentSequence]
+  if (!seq.laban) return
+  const elapsed = time / 1000
+  const laban = seq.laban(elapsed)
+
+  const leftCells = document.querySelectorAll('#laban-left .laban-cell')
+  const rightCells = document.querySelectorAll('#laban-right .laban-cell')
+
+  const levels = ['low', 'mid', 'high']
+  leftCells.forEach((cell, i) => {
+    const level = levels[i]
+    const intensity = Math.max(0, Math.min(1, laban.left[level]))
+    const color = labanColors[level]
+    cell.style.background = `${color}${Math.round(intensity * 255).toString(16).padStart(2, '0')}`
+    cell.style.borderColor = intensity > 0.4 ? color : '#3a3830'
+  })
+  rightCells.forEach((cell, i) => {
+    const level = levels[i]
+    const intensity = Math.max(0, Math.min(1, laban.right[level]))
+    const color = labanColors[level]
+    cell.style.background = `${color}${Math.round(intensity * 255).toString(16).padStart(2, '0')}`
+    cell.style.borderColor = intensity > 0.4 ? color : '#3a3830'
+  })
+}
+
+// --- Layout text into lines ---
+function layoutText(prepared, width) {
+  const lines = []
+  let cursor = { segmentIndex: 0, graphemeIndex: 0 }
+  const w = Math.max(60, width)
+  while (true) {
+    const line = layoutNextLine(prepared, cursor, w)
+    if (!line) break
+    lines.push(line)
+    cursor = line.end
+  }
+  return lines
+}
+
+// --- Render a text block ---
+function renderDancer(prepared, state, color, secondaryColor) {
+  const { x, y, width, rotation, scale, opacity } = state
+
+  ctx.save()
+  ctx.globalAlpha = opacity
+  ctx.translate(x, y)
+  ctx.rotate(rotation)
+  ctx.scale(scale, scale)
+
+  const lines = layoutText(prepared, width)
+  const totalHeight = lines.length * LINE_HEIGHT
+  const startY = -totalHeight / 2
+
+  // Subtle text block background
+  const pad = 16
+  ctx.fillStyle = `rgba(30, 22, 16, ${0.4 * opacity})`
+  const bgWidth = width + pad * 2
+  const bgHeight = totalHeight + pad * 2
+  const bgX = -pad
+  const bgY = startY - pad - 2
+  const radius = 3
+
+  ctx.beginPath()
+  ctx.moveTo(bgX + radius, bgY)
+  ctx.lineTo(bgX + bgWidth - radius, bgY)
+  ctx.quadraticCurveTo(bgX + bgWidth, bgY, bgX + bgWidth, bgY + radius)
+  ctx.lineTo(bgX + bgWidth, bgY + bgHeight - radius)
+  ctx.quadraticCurveTo(bgX + bgWidth, bgY + bgHeight, bgX + bgWidth - radius, bgY + bgHeight)
+  ctx.lineTo(bgX + radius, bgY + bgHeight)
+  ctx.quadraticCurveTo(bgX, bgY + bgHeight, bgX, bgY + bgHeight - radius)
+  ctx.lineTo(bgX, bgY + radius)
+  ctx.quadraticCurveTo(bgX, bgY, bgX + radius, bgY)
+  ctx.closePath()
+  ctx.fill()
+
+  // Render text
+  ctx.font = FONT
+  ctx.textBaseline = 'top'
+
+  for (let i = 0; i < lines.length; i++) {
+    const lineY = startY + i * LINE_HEIGHT
+    // Slight color variation per line for depth
+    const lineAlpha = 0.75 + 0.25 * (1 - i / Math.max(lines.length, 1))
+    ctx.fillStyle = color
+    ctx.globalAlpha = opacity * lineAlpha
+    ctx.fillText(lines[i].text, 0, lineY)
+  }
+
+  ctx.restore()
+}
+
+// --- Stage background ---
+function drawStage() {
+  // Warm stage-like gradient
+  const grad = ctx.createRadialGradient(W / 2, H / 2 - 40, 50, W / 2, H / 2, Math.max(W, H) * 0.7)
+  grad.addColorStop(0, '#201810')
+  grad.addColorStop(0.4, '#18120c')
+  grad.addColorStop(1, '#1a1410')
+  ctx.fillStyle = grad
+  ctx.fillRect(0, 0, W, H)
+
+  // Floor line
+  const floorY = H * 0.78
+  const floorGrad = ctx.createLinearGradient(W * 0.15, 0, W * 0.85, 0)
+  floorGrad.addColorStop(0, 'transparent')
+  floorGrad.addColorStop(0.3, 'rgba(194, 113, 79, 0.08)')
+  floorGrad.addColorStop(0.5, 'rgba(194, 113, 79, 0.14)')
+  floorGrad.addColorStop(0.7, 'rgba(194, 113, 79, 0.08)')
+  floorGrad.addColorStop(1, 'transparent')
+  ctx.fillStyle = floorGrad
+  ctx.fillRect(0, floorY, W, 1)
+}
+
+// --- Shadow beneath dancer ---
+function drawShadow(state) {
+  const { x, y, width, scale } = state
+  const floorY = H * 0.78
+  // Shadow is an ellipse on the floor
+  const shadowWidth = width * scale * 0.6
+  const shadowHeight = 4
+  // Shadow opacity decreases as dancer rises (y decreases)
+  const distFromFloor = Math.max(0, floorY - y) / 200
+  const shadowAlpha = Math.max(0, 0.15 - distFromFloor * 0.08)
+
+  ctx.save()
+  ctx.fillStyle = `rgba(0, 0, 0, ${shadowAlpha})`
+  ctx.beginPath()
+  ctx.ellipse(x + width * 0.3, floorY + 2, shadowWidth, shadowHeight, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
+}
+
+// --- Colors ---
+const dancerColorA = '#C2714F'   // terracotta
+const dancerColorSecA = '#9a5a3e'
+const dancerColorB = '#8B9E7E'   // sage
+const dancerColorSecB = '#6d7a62'
+
+// --- Main render loop ---
+function render(timestamp) {
+  const seq = sequences[currentSequence]
+  let elapsed
+
+  if (playing) {
+    elapsed = timestamp - startTime
+  } else {
+    elapsed = pausedAt
+  }
+
+  // Loop the sequence
+  const loopedTime = elapsed % seq.duration
+
+  // Update scrubber
+  if (!scrubbing) {
+    scrubber.value = (loopedTime / seq.duration) * 1000
+  }
+  timeDisplay.textContent = (loopedTime / 1000).toFixed(1) + 's'
+
+  // Clear and draw stage
+  ctx.clearRect(0, 0, W, H)
+  drawStage()
+
+  // Get keyframes fresh (so they respond to resize)
+  const keyframesSets = seq.getKeyframes()
+
+  // Interpolate and render dancer(s)
+  const stateA = interpolateKeyframes(keyframesSets[0], loopedTime, seq.duration, easeInOutSine)
+
+  // Update move label
+  moveLabel.textContent = stateA.label || ''
+
+  // Draw shadow(s) first
+  drawShadow(stateA)
+
+  if (seq.dancers === 2 && keyframesSets[1]) {
+    const stateB = interpolateKeyframes(keyframesSets[1], loopedTime, seq.duration, easeInOutSine)
+    drawShadow(stateB)
+    renderDancer(preparedA, stateA, dancerColorA, dancerColorSecA)
+    renderDancer(preparedB, stateB, dancerColorB, dancerColorSecB)
+  } else {
+    renderDancer(preparedA, stateA, dancerColorA, dancerColorSecA)
+  }
+
+  // Update Laban staff
+  updateLabanStaff(loopedTime)
+
+  requestAnimationFrame(render)
+}
+
+requestAnimationFrame(render)
+</script>
+</body>
+</html>

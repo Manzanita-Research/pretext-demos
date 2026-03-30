@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Gutenberg Variations</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,400;1,600&family=EB+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Literata:ital,opsz,wght@0,7..72,200..900;1,7..72,200..900&family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,800;0,900;1,400;1,600&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #FAF9F6;
+    color: #2C2C2C;
+    font-family: 'Literata', Georgia, serif;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+    display: flex;
+    flex-direction: column;
+  }
+
+  #canvas-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  canvas {
+    display: block;
+  }
+
+  #controls {
+    padding: 20px 40px 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    background: linear-gradient(to top, rgba(250,249,246,1) 0%, rgba(250,249,246,0.97) 60%, rgba(250,249,246,0) 100%);
+    position: relative;
+    z-index: 10;
+  }
+
+  #era-label {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 13px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #6B3A2A;
+    min-height: 20px;
+    font-optical-sizing: auto;
+  }
+
+  #year-display {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 64px;
+    font-weight: 300;
+    color: #2C2C2C;
+    line-height: 1;
+    letter-spacing: 0.02em;
+    font-optical-sizing: auto;
+  }
+
+  #slider-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+    max-width: 720px;
+  }
+
+  .slider-bound {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: #8B9E7E;
+    letter-spacing: 0.05em;
+    min-width: 36px;
+    text-align: center;
+  }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    flex: 1;
+    height: 2px;
+    background: #C49A3C;
+    outline: none;
+    border-radius: 1px;
+    cursor: pointer;
+    opacity: 0.4;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #C2714F;
+    border: 2px solid #FAF9F6;
+    box-shadow: 0 0 0 1px rgba(107,58,42,0.2), 0 2px 8px rgba(107,58,42,0.25);
+    cursor: grab;
+    transition: transform 0.15s ease;
+  }
+
+  input[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+  }
+
+  input[type="range"]::-webkit-slider-thumb:active {
+    cursor: grabbing;
+    transform: scale(1.1);
+  }
+
+  input[type="range"]::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #C2714F;
+    border: 2px solid #FAF9F6;
+    box-shadow: 0 0 0 1px rgba(107,58,42,0.2), 0 2px 8px rgba(107,58,42,0.25);
+    cursor: grab;
+  }
+
+  #title-overlay {
+    position: absolute;
+    top: 20px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  #title-overlay h1 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 13px;
+    font-weight: 400;
+    letter-spacing: 0.35em;
+    text-transform: uppercase;
+    color: #8B9E7E;
+    font-optical-sizing: auto;
+  }
+</style>
+</head>
+<body>
+
+<div id="title-overlay">
+  <h1>The Gutenberg Variations</h1>
+</div>
+
+<div id="canvas-wrap">
+  <canvas id="canvas"></canvas>
+</div>
+
+<div id="controls">
+  <div id="era-label"></div>
+  <div id="year-display">1440</div>
+  <div id="slider-row">
+    <span class="slider-bound">1440</span>
+    <input type="range" id="slider" min="1440" max="2026" value="1440" step="1">
+    <span class="slider-bound">2026</span>
+  </div>
+</div>
+
+<script type="module">
+import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
+
+// --- Article text ---
+const ARTICLE_TEXT = `In the beginning was the Word, and the Word was set in type. For centuries the scribes had labored by candlelight, copying each letter with devotion and fatigue, their hands cramping over vellum as the hours dissolved into years. Every manuscript was singular, irreplaceable, alive with the tremor of a human wrist.
+
+Then came the press. Johannes Gutenberg, a goldsmith from Mainz, saw what others could not: that language might be multiplied without diminishing. That a page, once composed in metal, could speak a thousand times. He cast his letters in lead and antimony, locked them into forms, and pulled the lever. The ink bit into paper. The world shifted on its axis.
+
+What followed was not merely mechanical reproduction but a transformation of thought itself. Ideas that had been confined to monastery walls now traveled roads and rivers. A farmer's son in Lyon could read the same words as a bishop in Rome. The printing press did not just spread knowledge — it changed what knowledge meant. It became democratic, portable, dangerous.
+
+The columns of early printed books mimicked the manuscripts they replaced: wide margins for annotation, generous leading between lines, text blocks that breathed. Aldus Manutius in Venice invented italic type and the pocket book. Robert Estienne numbered the verses of the Bible. Each innovation was a small revolution in how the eye moved across the page.
+
+By the eighteenth century, newspapers had compressed language into narrow columns — information dense as city blocks, headlines shouting above the fold. The broadsheet became the rhythm of daily life. Morning light, coffee, ink-stained fingers turning pages that would be yesterday by noon.
+
+The magazine era brought illustration and white space back into conversation with text. Pull quotes floated in margins like marginalia reborn. Photography arrived and demanded its place alongside words. Layouts became compositional, editorial — every spread a considered arrangement of seeing and reading.
+
+The digital age collapsed the column. Text reflowed to fill whatever vessel held it: a desktop monitor, a laptop screen, a phone in your palm. Typography became responsive, fluid, untethered from the physical page. The reader scrolled instead of turning. The infinite canvas replaced the finite leaf.
+
+And still the fundamental act persists: symbols arranged in sequence, decoded by a mind trained to find meaning in marks. From Gutenberg's press to this glowing rectangle, the work continues — setting words in order, making thought visible, believing that what we write might outlast the vessels that carry it.`
+
+// --- Canvas setup ---
+const canvas = document.getElementById('canvas')
+const ctx = canvas.getContext('2d')
+const slider = document.getElementById('slider')
+const yearDisplay = document.getElementById('year-display')
+const eraLabel = document.getElementById('era-label')
+const dpr = window.devicePixelRatio || 1
+
+function resizeCanvas() {
+  const wrap = document.getElementById('canvas-wrap')
+  const w = wrap.clientWidth
+  const h = wrap.clientHeight
+  canvas.width = w * dpr
+  canvas.height = h * dpr
+  canvas.style.width = w + 'px'
+  canvas.style.height = h + 'px'
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  render()
+}
+
+// --- Era definitions with per-era fonts ---
+// Font families per era:
+//   Incunabula: Cormorant Garamond (heavy serif, blackletter feel)
+//   Renaissance: EB Garamond (refined serif)
+//   Broadsheet: Playfair Display headlines, Literata body
+//   Magazine: Literata body, Fraunces display
+//   Modernist: Inter (sans-serif — the key fix)
+//   Mobile: system sans-serif stack
+const ERAS = [
+  { year: 1440, name: 'Incunabula', columns: 1, fontSize: 19, lineHeight: 30, marginX: 0.2, marginTop: 0.12, colGap: 0, dropCap: true, pullQuote: false, headline: false, imageBlock: false, font: 'Cormorant Garamond', fontFallback: 'Georgia, serif', headlineFont: 'Cormorant Garamond', textColor: '#3a3020', bgColor: '#f0e6d0', ornamentColor: '#6b5c3e', ruleColor: 'rgba(58,48,32,0.12)' },
+  { year: 1500, name: 'Renaissance Print', columns: 2, fontSize: 15, lineHeight: 24, marginX: 0.1, marginTop: 0.08, colGap: 30, dropCap: false, pullQuote: false, headline: false, imageBlock: false, font: 'EB Garamond', fontFallback: 'Georgia, serif', headlineFont: 'EB Garamond', textColor: '#2e2a22', bgColor: '#ede6d6', ornamentColor: '#5a5040', ruleColor: 'rgba(46,42,34,0.1)' },
+  { year: 1700, name: 'The Broadsheet Age', columns: 3, fontSize: 13, lineHeight: 20, marginX: 0.05, marginTop: 0.06, colGap: 20, dropCap: false, pullQuote: false, headline: true, imageBlock: false, font: 'Literata', fontFallback: 'Georgia, serif', headlineFont: 'Playfair Display', textColor: '#1a1a1a', bgColor: '#e8e0d0', ornamentColor: '#4a4438', ruleColor: 'rgba(26,26,26,0.15)' },
+  { year: 1900, name: 'Editorial & Magazine', columns: 2, fontSize: 15, lineHeight: 24, marginX: 0.08, marginTop: 0.08, colGap: 36, dropCap: true, pullQuote: true, headline: false, imageBlock: true, font: 'Literata', fontFallback: 'Georgia, serif', headlineFont: 'Fraunces', textColor: '#2C2C2C', bgColor: '#f5f0e8', ornamentColor: '#6a5a44', ruleColor: 'rgba(44,44,44,0.1)' },
+  { year: 1960, name: 'Modernist Typography', columns: 1, fontSize: 17, lineHeight: 28, marginX: 0.18, marginTop: 0.1, colGap: 0, dropCap: false, pullQuote: false, headline: false, imageBlock: false, font: 'Inter', fontFallback: 'system-ui, sans-serif', headlineFont: 'Inter', textColor: '#1a1a1a', bgColor: '#ffffff', ornamentColor: '#cccccc', ruleColor: 'rgba(0,0,0,0.08)' },
+  { year: 2000, name: 'The Infinite Scroll', columns: 1, fontSize: 20, lineHeight: 34, marginX: 0.25, marginTop: 0.08, colGap: 0, dropCap: false, pullQuote: false, headline: false, imageBlock: false, font: 'system-ui', fontFallback: '-apple-system, Helvetica Neue, sans-serif', headlineFont: 'system-ui', textColor: '#2C2C2C', bgColor: '#FAF9F6', ornamentColor: '#e0ddd8', ruleColor: 'rgba(44,44,44,0.06)' },
+]
+
+function lerp(a, b, t) { return a + (b - a) * t }
+
+function lerpColor(hexA, hexB, t) {
+  const parse = h => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]
+  const [r1,g1,b1] = parse(hexA)
+  const [r2,g2,b2] = parse(hexB)
+  const r = Math.round(lerp(r1,r2,t))
+  const g = Math.round(lerp(g1,g2,t))
+  const b = Math.round(lerp(b1,b2,t))
+  return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`
+}
+
+function getEraParams(year) {
+  let i = 0
+  for (; i < ERAS.length - 1; i++) {
+    if (year < ERAS[i + 1].year) break
+  }
+  if (i >= ERAS.length - 1) return { ...ERAS[ERAS.length - 1] }
+
+  const eraA = ERAS[i]
+  const eraB = ERAS[i + 1]
+  const t = (year - eraA.year) / (eraB.year - eraA.year)
+  const st = t * t * (3 - 2 * t)
+
+  return {
+    columns: Math.round(lerp(eraA.columns, eraB.columns, st)),
+    fontSize: lerp(eraA.fontSize, eraB.fontSize, st),
+    lineHeight: lerp(eraA.lineHeight, eraB.lineHeight, st),
+    marginX: lerp(eraA.marginX, eraB.marginX, st),
+    marginTop: lerp(eraA.marginTop, eraB.marginTop, st),
+    colGap: lerp(eraA.colGap, eraB.colGap, st),
+    dropCap: st < 0.5 ? eraA.dropCap : eraB.dropCap,
+    pullQuote: st < 0.5 ? eraA.pullQuote : eraB.pullQuote,
+    headline: st < 0.5 ? eraA.headline : eraB.headline,
+    imageBlock: st < 0.5 ? eraA.imageBlock : eraB.imageBlock,
+    font: st < 0.5 ? eraA.font : eraB.font,
+    fontFallback: st < 0.5 ? eraA.fontFallback : eraB.fontFallback,
+    headlineFont: st < 0.5 ? eraA.headlineFont : eraB.headlineFont,
+    name: st < 0.5 ? eraA.name : eraB.name,
+    textColor: lerpColor(eraA.textColor, eraB.textColor, st),
+    bgColor: lerpColor(eraA.bgColor, eraB.bgColor, st),
+    ornamentColor: eraA.ornamentColor,
+    ruleColor: st < 0.5 ? eraA.ruleColor : eraB.ruleColor,
+  }
+}
+
+// --- Pretext preparation cache (keyed by font string for per-font caching) ---
+const preparedCache = new Map()
+function getPrepared(text, fontStr) {
+  const key = text.slice(0, 40) + '|' + fontStr
+  if (!preparedCache.has(key)) {
+    preparedCache.set(key, prepareWithSegments(text, fontStr))
+  }
+  return preparedCache.get(key)
+}
+
+// Pull quote text
+const PULL_QUOTE = 'Language might be multiplied without diminishing.'
+const HEADLINE_TEXT = 'THE GUTENBERG PRESS'
+const HEADLINE_SUB = 'How Movable Type Remade the Western World'
+
+// --- Main render ---
+function render() {
+  const w = canvas.width / dpr
+  const h = canvas.height / dpr
+
+  const year = parseInt(slider.value)
+  const p = getEraParams(year)
+
+  // Clear with era-appropriate background color
+  ctx.fillStyle = p.bgColor
+  ctx.fillRect(0, 0, w, h)
+
+  // Subtle vignette (warm-tinted, never pure black)
+  const vg = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.3, w / 2, h / 2, Math.max(w, h) * 0.75)
+  vg.addColorStop(0, 'rgba(107,58,42,0)')
+  vg.addColorStop(1, 'rgba(107,58,42,0.06)')
+  ctx.fillStyle = vg
+  ctx.fillRect(0, 0, w, h)
+
+  const marginX = Math.round(w * p.marginX)
+  const marginTop = Math.round(h * p.marginTop)
+  const contentWidth = w - marginX * 2
+  const contentHeight = h - marginTop - 40
+  const colWidth = (contentWidth - p.colGap * (p.columns - 1)) / p.columns
+  const fontSize = Math.round(p.fontSize)
+  const lineHeight = Math.round(p.lineHeight)
+  const fontStr = `${fontSize}px "${p.font}", ${p.fontFallback}`
+
+  // Decorative rule lines at margins
+  ctx.strokeStyle = p.ruleColor
+  ctx.lineWidth = 0.5
+  for (let c = 0; c < p.columns; c++) {
+    const colX = marginX + c * (colWidth + p.colGap)
+    if (c > 0) {
+      const ruleX = colX - p.colGap / 2
+      ctx.beginPath()
+      ctx.moveTo(ruleX, marginTop)
+      ctx.lineTo(ruleX, marginTop + contentHeight)
+      ctx.stroke()
+    }
+  }
+
+  // Top decorative rule
+  ctx.strokeStyle = p.ruleColor
+  ctx.lineWidth = 0.5
+  ctx.beginPath()
+  ctx.moveTo(marginX, marginTop - 8)
+  ctx.lineTo(w - marginX, marginTop - 8)
+  ctx.stroke()
+
+  // Headline for newspaper era
+  let headlineOffset = 0
+  if (p.headline) {
+    const headFontSize = Math.round(fontSize * 2.2)
+    const headFont = `700 ${headFontSize}px "${p.headlineFont}", ${p.fontFallback}`
+    ctx.font = headFont
+    ctx.fillStyle = p.textColor
+    ctx.textAlign = 'center'
+    ctx.fillText(HEADLINE_TEXT, w / 2, marginTop + headFontSize)
+
+    const subFontSize = Math.round(fontSize * 1.1)
+    ctx.font = `italic ${subFontSize}px "${p.font}", ${p.fontFallback}`
+    ctx.fillStyle = p.textColor
+    ctx.globalAlpha = 0.55
+    ctx.fillText(HEADLINE_SUB, w / 2, marginTop + headFontSize + subFontSize + 8)
+    ctx.globalAlpha = 1.0
+    ctx.textAlign = 'left'
+
+    // Rule under headline
+    ctx.strokeStyle = p.ruleColor
+    ctx.lineWidth = 1
+    const ruleY = marginTop + headFontSize + subFontSize + 20
+    ctx.beginPath()
+    ctx.moveTo(marginX, ruleY)
+    ctx.lineTo(w - marginX, ruleY)
+    ctx.stroke()
+
+    headlineOffset = headFontSize + subFontSize + 32
+  }
+
+  // Prepare text with pretext (cached per font string)
+  const prepared = getPrepared(ARTICLE_TEXT, fontStr)
+
+  // Layout text into columns
+  let cursor = { segmentIndex: 0, graphemeIndex: 0 }
+  let currentCol = 0
+  const maxY = contentHeight - lineHeight
+
+  // Image block placement (magazine era)
+  let imageBlock = null
+  if (p.imageBlock) {
+    imageBlock = {
+      col: 1,
+      top: 60,
+      width: colWidth,
+      height: Math.round(colWidth * 0.6),
+    }
+  }
+
+  // Pull quote placement
+  let pullQuoteArea = null
+  if (p.pullQuote) {
+    pullQuoteArea = {
+      col: 0,
+      topLine: 8,
+      lines: 5,
+    }
+  }
+
+  // Drop cap state
+  let isFirstLine = true
+  let dropCapDone = false
+
+  ctx.fillStyle = p.textColor
+  ctx.font = fontStr
+
+  for (let col = 0; col < p.columns; col++) {
+    const colX = marginX + col * (colWidth + p.colGap)
+    let y = marginTop + headlineOffset
+
+    // Draw image block
+    if (imageBlock && col === imageBlock.col) {
+      const imgX = colX
+      const imgY = marginTop + headlineOffset + imageBlock.top
+      const grad = ctx.createLinearGradient(imgX, imgY, imgX + imageBlock.width, imgY + imageBlock.height)
+      grad.addColorStop(0, 'rgba(44,44,44,0.06)')
+      grad.addColorStop(0.5, 'rgba(44,44,44,0.1)')
+      grad.addColorStop(1, 'rgba(44,44,44,0.06)')
+      ctx.fillStyle = grad
+      ctx.fillRect(imgX, imgY, imageBlock.width, imageBlock.height)
+
+      // Border
+      ctx.strokeStyle = p.ruleColor
+      ctx.lineWidth = 0.5
+      ctx.strokeRect(imgX, imgY, imageBlock.width, imageBlock.height)
+
+      // Caption text
+      ctx.fillStyle = p.textColor
+      ctx.globalAlpha = 0.4
+      ctx.font = `italic ${Math.round(fontSize * 0.75)}px "${p.font}", ${p.fontFallback}`
+      ctx.fillText('A compositor at his type case, circa 1900', imgX + 8, imgY + imageBlock.height + 14)
+      ctx.globalAlpha = 1.0
+      ctx.font = fontStr
+      ctx.fillStyle = p.textColor
+    }
+
+    // Draw pull quote
+    if (pullQuoteArea && col === pullQuoteArea.col) {
+      const pqFontSize = Math.round(fontSize * 1.6)
+      const pqLineH = Math.round(pqFontSize * 1.45)
+      const pqY = marginTop + headlineOffset + pullQuoteArea.topLine * lineHeight
+      const pqHeight = pullQuoteArea.lines * lineHeight
+      const pqFontStr = `italic ${pqFontSize}px "${p.headlineFont}", ${p.fontFallback}`
+
+      // Pull quote rule
+      ctx.strokeStyle = p.textColor
+      ctx.globalAlpha = 0.25
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.moveTo(colX, pqY - 4)
+      ctx.lineTo(colX, pqY + pqHeight + 4)
+      ctx.stroke()
+      ctx.lineWidth = 0.5
+      ctx.globalAlpha = 1.0
+
+      // Pull quote text
+      ctx.fillStyle = p.textColor
+      ctx.globalAlpha = 0.65
+      ctx.font = pqFontStr
+      const pqPrepared = getPrepared(PULL_QUOTE, pqFontStr)
+      let pqCursor = { segmentIndex: 0, graphemeIndex: 0 }
+      let pqY2 = pqY + pqFontSize
+      while (true) {
+        const line = layoutNextLine(pqPrepared, pqCursor, colWidth - 16)
+        if (!line) break
+        ctx.fillText(line.text, colX + 12, pqY2)
+        pqCursor = line.end
+        pqY2 += pqLineH
+      }
+
+      ctx.globalAlpha = 1.0
+      ctx.font = fontStr
+      ctx.fillStyle = p.textColor
+    }
+
+    let lineIndex = 0
+
+    while (y < marginTop + maxY + headlineOffset) {
+      let effectiveWidth = colWidth
+      let xOffset = 0
+      let skipLine = false
+
+      if (pullQuoteArea && col === pullQuoteArea.col) {
+        const pqY = marginTop + headlineOffset + pullQuoteArea.topLine * lineHeight
+        const pqHeight = pullQuoteArea.lines * lineHeight
+        if (y >= pqY - lineHeight && y < pqY + pqHeight + lineHeight) {
+          skipLine = true
+        }
+      }
+
+      if (imageBlock && col === imageBlock.col) {
+        const imgY = marginTop + headlineOffset + imageBlock.top
+        const imgBottom = imgY + imageBlock.height + 24
+        if (y + lineHeight > imgY && y < imgBottom) {
+          skipLine = true
+        }
+      }
+
+      if (skipLine) {
+        y += lineHeight
+        lineIndex++
+        continue
+      }
+
+      const line = layoutNextLine(prepared, cursor, effectiveWidth)
+      if (!line) break
+
+      // Drop cap
+      if (p.dropCap && isFirstLine && !dropCapDone && col === 0) {
+        dropCapDone = true
+        isFirstLine = false
+
+        const dcChar = line.text.charAt(0)
+        const dcFontSize = Math.round(fontSize * 3.8)
+        const dcFont = `600 ${dcFontSize}px "${p.font}", ${p.fontFallback}`
+        ctx.font = dcFont
+        ctx.fillStyle = p.textColor
+        ctx.globalAlpha = 0.85
+        const dcMetrics = ctx.measureText(dcChar)
+        const dcWidth = dcMetrics.width + 6
+
+        ctx.fillText(dcChar, colX, y + dcFontSize * 0.78)
+        ctx.globalAlpha = 1.0
+
+        ctx.font = fontStr
+        ctx.fillStyle = p.textColor
+        const restText = line.text.substring(1).trimStart()
+        ctx.fillText(restText, colX + dcWidth, y + fontSize)
+
+        cursor = line.end
+        y += lineHeight
+        const dcLines = 3
+        for (let dl = 0; dl < dcLines && y < marginTop + maxY + headlineOffset; dl++) {
+          const indentLine = layoutNextLine(prepared, cursor, effectiveWidth - dcWidth)
+          if (!indentLine) break
+          ctx.fillText(indentLine.text, colX + dcWidth, y + fontSize)
+          cursor = indentLine.end
+          y += lineHeight
+        }
+        lineIndex += dcLines + 1
+        continue
+      }
+
+      isFirstLine = false
+      ctx.font = fontStr
+      ctx.fillStyle = p.textColor
+      ctx.fillText(line.text, colX + xOffset, y + fontSize)
+      cursor = line.end
+      y += lineHeight
+      lineIndex++
+    }
+  }
+
+  // Bottom margin decorative rule
+  ctx.strokeStyle = p.ruleColor
+  ctx.lineWidth = 0.5
+  ctx.beginPath()
+  ctx.moveTo(marginX, marginTop + contentHeight + 4)
+  ctx.lineTo(w - marginX, marginTop + contentHeight + 4)
+  ctx.stroke()
+
+  // Corner ornaments for early eras (before 1600)
+  if (year < 1600) {
+    const ornAlpha = Math.max(0, 1 - (year - 1440) / 160)
+    drawOrnament(ctx, marginX - 4, marginTop - 16, ornAlpha, p.ornamentColor)
+    drawOrnament(ctx, w - marginX + 4, marginTop - 16, ornAlpha, p.ornamentColor, true)
+  }
+}
+
+function drawOrnament(ctx, x, y, alpha, color, flip = false) {
+  ctx.save()
+  ctx.globalAlpha = alpha * 0.3
+  ctx.strokeStyle = color
+  ctx.lineWidth = 1
+  ctx.translate(x, y)
+  if (flip) ctx.scale(-1, 1)
+
+  ctx.beginPath()
+  ctx.moveTo(0, 0)
+  ctx.bezierCurveTo(8, -4, 16, -2, 20, 4)
+  ctx.bezierCurveTo(24, 10, 18, 14, 12, 10)
+  ctx.bezierCurveTo(6, 6, 10, 2, 14, 4)
+  ctx.stroke()
+
+  ctx.beginPath()
+  ctx.moveTo(0, 0)
+  ctx.bezierCurveTo(6, 2, 12, 8, 10, 14)
+  ctx.stroke()
+
+  ctx.restore()
+}
+
+// --- Event handling with rAF throttle ---
+let renderPending = false
+function scheduleRender() {
+  if (!renderPending) {
+    renderPending = true
+    requestAnimationFrame(() => {
+      renderPending = false
+      render()
+    })
+  }
+}
+
+slider.addEventListener('input', () => {
+  const year = parseInt(slider.value)
+  yearDisplay.textContent = year
+  eraLabel.textContent = getEraParams(year).name
+  scheduleRender()
+})
+
+// Initialize era label
+eraLabel.textContent = getEraParams(parseInt(slider.value)).name
+
+// Keyboard support
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+    slider.value = Math.min(2026, parseInt(slider.value) + 1)
+    slider.dispatchEvent(new Event('input'))
+  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+    slider.value = Math.max(1440, parseInt(slider.value) - 1)
+    slider.dispatchEvent(new Event('input'))
+  }
+})
+
+// Resize handling
+window.addEventListener('resize', resizeCanvas)
+
+// Wait for fonts to load before first render
+document.fonts.ready.then(() => {
+  preparedCache.clear()
+  resizeCanvas()
+})
+resizeCanvas()
+</script>
+</body>
+</html>
