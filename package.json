@@ -1,0 +1,13 @@
+{
+	"name": "late-feather-0e6a",
+	"version": "0.0.0",
+	"private": true,
+	"scripts": {
+		"deploy": "wrangler deploy",
+		"dev": "wrangler dev --ip 0.0.0.0",
+		"start": "wrangler dev"
+	},
+	"devDependencies": {
+		"wrangler": "^4.78.0"
+	}
+}
