@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Perfect Paragraph</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,400&family=Commit+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%; min-height: 100vh;
+    background: #FAF9F6;
+    color: #2C2C2C;
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Paper grain overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.03;
+    background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 200px 200px;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    padding: 2.5rem 1.5rem 1rem;
+    border-bottom: 1px solid #E8E5DF;
+  }
+  .header h1 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 300;
+    font-size: 1.75rem;
+    font-variation-settings: 'WONK' 1, 'SOFT' 100;
+    color: #2C2C2C;
+    margin-bottom: 0.25rem;
+  }
+  .header p {
+    color: #5C5C5C;
+    font-family: 'Commit Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  /* Main layout */
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 3rem;
+  }
+
+  /* Paragraph stats */
+  .para-stats {
+    display: flex;
+    align-items: baseline;
+    gap: 1.5rem;
+    margin-bottom: 1rem;
+    font-family: 'Commit Mono', monospace;
+    font-size: 11px;
+    color: #8A8A8A;
+    letter-spacing: 0.03em;
+  }
+  .para-stats .stat-value {
+    color: #2C2C2C;
+    font-weight: 500;
+  }
+  .para-stats .stat-optimal {
+    color: #C49A3C;
+    font-weight: 500;
+  }
+  .para-stats .stat-score-good {
+    color: #8B9E7E;
+    font-weight: 500;
+  }
+  .para-stats .stat-score-bad {
+    color: #C2714F;
+    font-weight: 500;
+  }
+
+  /* Paragraph display */
+  .para-wrap {
+    position: relative;
+    margin: 0 auto 2rem;
+    transition: box-shadow 0.4s ease;
+  }
+  .para-wrap.optimal {
+    box-shadow: 0 0 30px rgba(196, 154, 60, 0.12);
+  }
+  .para-line {
+    position: relative;
+    white-space: pre;
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 17px;
+    line-height: 1.65;
+    color: #2C2C2C;
+  }
+  .rag-mark {
+    position: absolute;
+    right: 0;
+    height: 2px;
+    top: 50%;
+    transform: translateY(-1px);
+    border-radius: 1px;
+    transition: width 0.15s ease, background 0.15s ease;
+    pointer-events: none;
+  }
+
+  /* Width explorer */
+  .explorer {
+    margin-top: 1.5rem;
+    padding: 1.25rem 0;
+    border-top: 1px solid #E8E5DF;
+  }
+  .explorer-label {
+    font-family: 'Commit Mono', monospace;
+    font-size: 10px;
+    color: #8A8A8A;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 0.75rem;
+  }
+  .slider-wrap {
+    position: relative;
+    height: 36px;
+    display: flex;
+    align-items: center;
+  }
+  .slider-track {
+    position: absolute;
+    left: 0; right: 0;
+    height: 2px;
+    background: #E8E5DF;
+    border-radius: 1px;
+  }
+  .optimal-marker {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #C49A3C;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 8px rgba(196, 154, 60, 0.4);
+    pointer-events: none;
+    transition: left 0.3s ease;
+  }
+  .optimal-marker::after {
+    content: 'optimal';
+    position: absolute;
+    top: -18px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'Commit Mono', monospace;
+    font-size: 9px;
+    color: #C49A3C;
+    white-space: nowrap;
+    letter-spacing: 0.05em;
+  }
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 36px;
+    background: transparent;
+    position: relative;
+    z-index: 2;
+    cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #2C2C2C;
+    border: 2px solid #FAF9F6;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    cursor: grab;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #2C2C2C;
+    border: 2px solid #FAF9F6;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    cursor: grab;
+  }
+  input[type="range"]:active::-webkit-slider-thumb { cursor: grabbing; }
+  input[type="range"]:active::-moz-range-thumb { cursor: grabbing; }
+
+  /* Controls row */
+  .controls-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 0.75rem;
+  }
+  .btn-find {
+    font-family: 'Commit Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    padding: 0.5rem 1.25rem;
+    background: #2C2C2C;
+    color: #FAF9F6;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s ease, box-shadow 0.3s ease;
+  }
+  .btn-find:hover {
+    background: #3D3D3D;
+  }
+  .btn-find.glow {
+    box-shadow: 0 0 16px rgba(196, 154, 60, 0.3);
+  }
+  .perf-counter {
+    font-family: 'Commit Mono', monospace;
+    font-size: 11px;
+    color: #8A8A8A;
+    letter-spacing: 0.03em;
+  }
+  .perf-counter .perf-value {
+    color: #C49A3C;
+    font-weight: 500;
+  }
+
+  /* Text input */
+  .input-section {
+    margin-top: 1.5rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid #E8E5DF;
+  }
+  .input-label {
+    font-family: 'Commit Mono', monospace;
+    font-size: 10px;
+    color: #8A8A8A;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+  }
+  textarea {
+    width: 100%;
+    min-height: 100px;
+    padding: 0.75rem 1rem;
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #2C2C2C;
+    background: #F5F3EE;
+    border: 1px solid #E0DDD7;
+    border-radius: 4px;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.2s ease;
+  }
+  textarea:focus {
+    border-color: #C49A3C;
+  }
+  textarea::placeholder {
+    color: #B0ADA6;
+  }
+
+  /* Loading state */
+  .loading {
+    text-align: center;
+    padding: 4rem 0;
+    font-family: 'Commit Mono', monospace;
+    font-size: 12px;
+    color: #8A8A8A;
+    letter-spacing: 0.05em;
+  }
+
+  @media (max-width: 640px) {
+    .container { padding: 1.25rem 1rem 2rem; }
+    .header { padding: 1.5rem 1rem 0.75rem; }
+    .header h1 { font-size: 1.35rem; }
+    .para-stats { flex-wrap: wrap; gap: 0.75rem; }
+    .controls-row { flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>The Perfect Paragraph</h1>
+  <p>pretext demo 28</p>
+</div>
+
+<div class="container">
+  <!-- Stats -->
+  <div class="para-stats">
+    <span>width: <span class="stat-value" id="stat-width">--</span>px</span>
+    <span>rag score: <span id="stat-score" class="stat-value">--</span></span>
+    <span>lines: <span class="stat-value" id="stat-lines">--</span></span>
+  </div>
+
+  <!-- Paragraph display -->
+  <div class="para-wrap" id="para-wrap">
+    <div class="loading" id="loading-msg">loading pretext...</div>
+  </div>
+
+  <!-- Width explorer -->
+  <div class="explorer">
+    <div class="explorer-label">Container width</div>
+    <div class="slider-wrap">
+      <div class="slider-track"></div>
+      <div class="optimal-marker" id="optimal-marker"></div>
+      <input type="range" id="width-slider" min="200" max="800" value="600" step="1">
+    </div>
+    <div class="controls-row">
+      <button class="btn-find" id="btn-find">Find shape</button>
+      <span class="perf-counter" id="perf-counter"></span>
+    </div>
+  </div>
+
+  <!-- Text input -->
+  <div class="input-section">
+    <div class="input-label">Your text</div>
+    <textarea id="text-input" placeholder="Type or paste text here..."></textarea>
+  </div>
+</div>
+
+<script type="module">
+import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
+
+// --- Config ---
+const FONT_SIZE = 17
+const LINE_HEIGHT = 1.65
+const FONT_STR = `${FONT_SIZE}px Fraunces, Georgia, serif`
+const MIN_WIDTH = 200
+const MAX_WIDTH = 800
+const SEARCH_STEPS = 60
+
+const DEFAULT_TEXT = `Every paragraph on the web lives inside a box it didn\u2019t choose. The container was designed for the layout, not the text. So some lines stretch too far. Others break too early. The last word dangles alone at the bottom, an orphan nobody planned for. We\u2019ve accepted this because measuring text is expensive \u2014 it means rendering, reflowing, measuring, re-rendering. But what if measurement was free? What if you could test a hundred container widths in the time it takes to render one? The paragraph could choose its own box. Not too wide, not too narrow. Every line roughly the same length. No orphan at the end. The container shaped by the content, not the other way around.`
+
+// --- DOM refs ---
+const paraWrap = document.getElementById('para-wrap')
+const loadingMsg = document.getElementById('loading-msg')
+const widthSlider = document.getElementById('width-slider')
+const optimalMarkerEl = document.getElementById('optimal-marker')
+const btnFind = document.getElementById('btn-find')
+const perfCounter = document.getElementById('perf-counter')
+const textInput = document.getElementById('text-input')
+const statWidth = document.getElementById('stat-width')
+const statScore = document.getElementById('stat-score')
+const statLines = document.getElementById('stat-lines')
+
+// --- State ---
+let prepared = null
+let currentWidth = 600
+let optimalWidth = 600
+let optimalScore = 0
+let animFrame = null
+
+// --- Helpers ---
+function getLines(prep, width) {
+  const lines = []
+  let cursor = { segmentIndex: 0, graphemeIndex: 0 }
+  while (true) {
+    const line = layoutNextLine(prep, cursor, width)
+    if (!line) break
+    cursor = line.end
+    lines.push({
+      text: line.text,
+      width: line.width,
+      ascent: line.ascent,
+      descent: line.descent,
+    })
+  }
+  return lines
+}
+
+function getLineWidths(prep, width) {
+  const widths = []
+  let cursor = { segmentIndex: 0, graphemeIndex: 0 }
+  while (true) {
+    const line = layoutNextLine(prep, cursor, width)
+    if (!line) break
+    cursor = line.end
+    widths.push(line.width)
+  }
+  return widths
+}
+
+function computeRagScore(lineWidths, containerWidth) {
+  if (lineWidths.length < 2) return 0
+
+  // Rag score: coefficient of variation of line widths (exclude last line)
+  const bodyWidths = lineWidths.slice(0, -1)
+  const mean = bodyWidths.reduce((a, b) => a + b, 0) / bodyWidths.length
+  if (mean === 0) return 0
+  const variance = bodyWidths.reduce((a, b) => a + (b - mean) ** 2, 0) / bodyWidths.length
+  const ragScore = Math.sqrt(variance) / mean
+
+  // Orphan penalty: last line very short
+  const lastRatio = lineWidths[lineWidths.length - 1] / containerWidth
+  const orphanPenalty = lastRatio < 0.15 ? 0.3 : lastRatio < 0.25 ? 0.1 : 0
+
+  return ragScore + orphanPenalty
+}
+
+function findOptimalWidth(prep, maxW, minW) {
+  let bestWidth = maxW
+  let bestScore = Infinity
+
+  for (let i = 0; i <= SEARCH_STEPS; i++) {
+    const w = minW + (maxW - minW) * (i / SEARCH_STEPS)
+    const lineWidths = getLineWidths(prep, w)
+
+    if (lineWidths.length < 2) continue
+
+    const score = computeRagScore(lineWidths, w)
+    if (score < bestScore) {
+      bestScore = score
+      bestWidth = w
+    }
+  }
+
+  return { width: Math.round(bestWidth), score: bestScore }
+}
+
+// --- Rendering ---
+function renderParagraph(lines, width) {
+  paraWrap.innerHTML = ''
+  paraWrap.style.width = width + 'px'
+
+  const lineH = FONT_SIZE * LINE_HEIGHT
+
+  lines.forEach((line, i) => {
+    const lineEl = document.createElement('div')
+    lineEl.className = 'para-line'
+    lineEl.textContent = line.text
+    lineEl.style.height = lineH + 'px'
+    lineEl.style.lineHeight = lineH + 'px'
+
+    // Rag mark
+    const gap = width - line.width
+    const isLast = i === lines.length - 1
+
+    if (!isLast && gap > 1) {
+      const mark = document.createElement('div')
+      mark.className = 'rag-mark'
+
+      const maxGap = width * 0.3
+      const t = Math.min(gap / maxGap, 1)
+      // sage to terracotta
+      const r = Math.round(139 + (194 - 139) * t)
+      const g = Math.round(158 + (113 - 158) * t)
+      const b = Math.round(126 + (79 - 126) * t)
+      mark.style.background = `rgb(${r}, ${g}, ${b})`
+      mark.style.width = Math.max(2, gap) + 'px'
+      mark.style.opacity = 0.7 + 0.3 * t
+
+      lineEl.appendChild(mark)
+    }
+
+    paraWrap.appendChild(lineEl)
+  })
+}
+
+function updateStats(width, score, lineCount) {
+  statWidth.textContent = Math.round(width)
+  statLines.textContent = lineCount
+
+  const scoreStr = score.toFixed(4)
+  statScore.textContent = scoreStr
+
+  // Color the score
+  const isGood = score < 0.02
+  statScore.className = isGood ? 'stat-score-good' : score < 0.05 ? 'stat-value' : 'stat-score-bad'
+
+  // Glow on optimal
+  const nearOptimal = Math.abs(width - optimalWidth) < 5
+  paraWrap.classList.toggle('optimal', nearOptimal)
+}
+
+function updateOptimalMarker() {
+  const pct = (optimalWidth - MIN_WIDTH) / (MAX_WIDTH - MIN_WIDTH) * 100
+  optimalMarkerEl.style.left = pct + '%'
+}
+
+function relayout(width) {
+  if (!prepared) return
+  currentWidth = width
+  const lines = getLines(prepared, width)
+  const lineWidths = lines.map(l => l.width)
+  const score = computeRagScore(lineWidths, width)
+  renderParagraph(lines, width)
+  updateStats(width, score, lines.length)
+}
+
+// --- Search + animate ---
+function runSearch() {
+  if (!prepared) return
+
+  const maxW = Math.min(MAX_WIDTH, window.innerWidth - 40)
+  const t0 = performance.now()
+  const result = findOptimalWidth(prepared, maxW, MIN_WIDTH)
+  const dt = performance.now() - t0
+
+  optimalWidth = result.width
+  optimalScore = result.score
+  updateOptimalMarker()
+
+  const dtStr = dt < 1 ? (dt * 1000).toFixed(0) + '\u00b5s' : dt.toFixed(1) + 'ms'
+  perfCounter.innerHTML = `<span class="perf-value">${SEARCH_STEPS + 1}</span> widths tested in <span class="perf-value">${dtStr}</span>`
+
+  return result
+}
+
+function animateToOptimal() {
+  if (!prepared) return
+  if (animFrame) cancelAnimationFrame(animFrame)
+
+  const startWidth = currentWidth
+  const endWidth = optimalWidth
+  const duration = 800
+  const startTime = performance.now()
+
+  btnFind.classList.add('glow')
+
+  function tick(now) {
+    const elapsed = now - startTime
+    const t = Math.min(elapsed / duration, 1)
+    // ease-out cubic
+    const eased = 1 - Math.pow(1 - t, 3)
+    const w = startWidth + (endWidth - startWidth) * eased
+
+    widthSlider.value = Math.round(w)
+    relayout(Math.round(w))
+
+    if (t < 1) {
+      animFrame = requestAnimationFrame(tick)
+    } else {
+      animFrame = null
+      setTimeout(() => btnFind.classList.remove('glow'), 600)
+    }
+  }
+
+  animFrame = requestAnimationFrame(tick)
+}
+
+// --- Prepare text ---
+function prepareText(text) {
+  if (!text.trim()) {
+    paraWrap.innerHTML = '<div class="loading" style="padding:2rem 0">type some text below</div>'
+    perfCounter.innerHTML = ''
+    statWidth.textContent = '--'
+    statScore.textContent = '--'
+    statLines.textContent = '--'
+    prepared = null
+    return
+  }
+  prepared = prepareWithSegments(text.trim(), FONT_STR)
+  runSearch()
+  relayout(currentWidth)
+}
+
+// --- Events ---
+widthSlider.addEventListener('input', () => {
+  if (animFrame) {
+    cancelAnimationFrame(animFrame)
+    animFrame = null
+    btnFind.classList.remove('glow')
+  }
+  relayout(Number(widthSlider.value))
+})
+
+btnFind.addEventListener('click', () => {
+  runSearch()
+  animateToOptimal()
+})
+
+let inputTimer = null
+textInput.addEventListener('input', () => {
+  clearTimeout(inputTimer)
+  inputTimer = setTimeout(() => {
+    prepareText(textInput.value || DEFAULT_TEXT)
+  }, 150)
+})
+
+let resizeTimer = null
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer)
+  resizeTimer = setTimeout(() => {
+    if (prepared) {
+      runSearch()
+      relayout(currentWidth)
+    }
+  }, 200)
+})
+
+// --- Init ---
+async function init() {
+  textInput.value = DEFAULT_TEXT
+
+  // Set slider max based on viewport
+  const maxW = Math.min(MAX_WIDTH, window.innerWidth - 40)
+  widthSlider.max = maxW
+
+  // Prepare + search
+  prepareText(DEFAULT_TEXT)
+
+  // Auto-animate to optimal after a beat
+  setTimeout(() => {
+    animateToOptimal()
+  }, 400)
+}
+
+// Wait for fonts, then init
+document.fonts.ready.then(init)
+</script>
+
+</body>
+</html>
