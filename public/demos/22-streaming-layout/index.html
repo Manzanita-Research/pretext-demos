@@ -217,7 +217,7 @@
     50% { opacity: 0; }
   }
 
-  /* Below-chat interactive element — the key demo */
+  /* Below-chat interactive element */
   .below-chat {
     margin-top: 1rem;
     padding: 0.9rem;
@@ -292,6 +292,26 @@
   }
   .shift-counter-value.warning { color: #C49A3C; }
   .shift-counter-value.good { color: #8B9E7E; }
+
+  /* Height label for pretext container */
+  .height-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem;
+    color: #8B9E7E;
+    letter-spacing: 0.04em;
+    padding: 0.2rem 0.5rem;
+    background: rgba(139, 158, 126, 0.08);
+    border-radius: 0 0 6px 6px;
+    border: 1px solid rgba(139, 158, 126, 0.12);
+    border-top: none;
+    display: inline-block;
+    margin-left: 0.9rem;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .height-label.visible {
+    opacity: 1;
+  }
 
   /* Info button */
   .info-btn {
@@ -400,16 +420,6 @@
     }
     .header h1 { font-size: 1.35rem; }
   }
-
-  /* Pretext canvas container */
-  .pretext-chat-body {
-    padding: 0.9rem;
-    position: relative;
-    overflow: hidden;
-  }
-  .pretext-chat-body canvas {
-    display: block;
-  }
 </style>
 </head>
 <body>
@@ -424,6 +434,7 @@
     <h2>Why We Built This</h2>
     <p>Every AI chat interface in 2026 has the same problem: streaming text pushes the page around. The content below the response jumps. Your scroll position fights you. CSS overflow-anchor mostly works until it doesn't — and in virtualized lists, it doesn't.</p>
     <p>We built this because pretext knows how tall text will be before it renders. So the container grows to its final height on the first token, and nothing below it ever moves. No hacks, no anchoring tricks. The layout is just correct.</p>
+    <p>Both panels here render real DOM text — selectable, accessible, copy-pasteable. The only difference is that the right panel uses pretext to pre-compute the container height before streaming begins. That's the whole trick. Pure arithmetic, no canvas, no magic.</p>
   </div>
 </div>
 
@@ -485,10 +496,11 @@
         <div class="chat-avatar">AI</div>
         <span class="chat-name">Assistant</span>
       </div>
-      <div class="pretext-chat-body" id="pretextChatBody">
-        <canvas id="pretextCanvas"></canvas>
+      <div class="chat-body" id="pretextChatBody">
+        <div class="chat-text" id="pretextText"><span class="chat-cursor" id="pretextCursor" style="display:none;"></span></div>
       </div>
     </div>
+    <span class="height-label" id="heightLabel"></span>
     <div class="below-chat" id="pretextBelowChat">
       <div class="below-chat-label">Reply</div>
       <div class="message-input-row">
@@ -504,7 +516,7 @@
 </div>
 
 <script type="module">
-import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
+import { prepare, layout } from 'https://esm.sh/@chenglou/pretext'
 
 // --- Streaming text ---
 const STREAM_TEXT = `Right now, this text is streaming into both panels. Each word arrives one at a time, like every AI chat you've used. But look at the content below this response — on the right side, it isn't moving. The container already knows how tall I'll be. On the left, watch the paragraph below. See it jump? That's layout shift. Every chat interface you've ever used does that. This one doesn't. The difference is that pretext predicts the height of text before it renders. So the container grows to its final size on the first token. Nothing below ever moves. No scroll anchoring hacks. No overflow tricks. Just correct layout, computed in pure arithmetic, sixty times a second.`
@@ -514,10 +526,9 @@ const TOKENS = STREAM_TEXT.split(/(\s+)/).filter(Boolean)
 // --- Config ---
 const FONT_SIZE = 14.4
 const LINE_HEIGHT_MULT = 1.65
+const LINE_HEIGHT = FONT_SIZE * LINE_HEIGHT_MULT
 const FONT_FAMILY = "'Literata', Georgia, serif"
 const FONT_STR = `${FONT_SIZE}px ${FONT_FAMILY}`
-const TEXT_COLOR = '#2C2C2C'
-const CURSOR_COLOR = '#C2714F'
 
 // --- DOM refs ---
 const streamBtn = document.getElementById('streamBtn')
@@ -526,13 +537,14 @@ const speedSlider = document.getElementById('speedSlider')
 const speedValue = document.getElementById('speedValue')
 const domText = document.getElementById('domText')
 const domCursor = document.getElementById('domCursor')
-const domChatBody = document.getElementById('domChatBody')
 const domBelowChat = document.getElementById('domBelowChat')
 const domShiftValue = document.getElementById('domShiftValue')
 const pretextChatBody = document.getElementById('pretextChatBody')
-const pretextCanvas = document.getElementById('pretextCanvas')
+const pretextText = document.getElementById('pretextText')
+const pretextCursor = document.getElementById('pretextCursor')
 const pretextBelowChat = document.getElementById('pretextBelowChat')
 const pretextShiftValue = document.getElementById('pretextShiftValue')
+const heightLabel = document.getElementById('heightLabel')
 const infoBtn = document.getElementById('infoBtn')
 const modalOverlay = document.getElementById('modalOverlay')
 const modalClose = document.getElementById('modalClose')
@@ -554,82 +566,27 @@ speedSlider.addEventListener('input', () => {
 // --- State ---
 let streaming = false
 let tokenIndex = 0
-let domTextContent = ''
 let lastDomBelowY = null
 let lastPretextBelowY = null
 let domShiftTotal = 0
 let pretextShiftTotal = 0
-let streamTimer = null
 let pretextFinalHeight = 0
-let cursorVisible = false
-
-// --- Canvas setup ---
-const ctx = pretextCanvas.getContext('2d')
-const dpr = window.devicePixelRatio || 1
-
-function resizeCanvas(height) {
-  const containerWidth = pretextChatBody.clientWidth
-  pretextCanvas.style.width = containerWidth + 'px'
-  pretextCanvas.style.height = height + 'px'
-  pretextCanvas.width = Math.round(containerWidth * dpr)
-  pretextCanvas.height = Math.round(height * dpr)
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-}
 
 // --- Pretext: compute full layout height for the complete text ---
 function computePretextHeight(text, width) {
   if (!text.trim()) return 0
-  const prepared = prepareWithSegments(text, FONT_STR)
-  let cursor = { segmentIndex: 0, graphemeIndex: 0 }
-  let y = 0
-  while (true) {
-    const line = layoutNextLine(prepared, cursor, width)
-    if (!line) break
-    y += line.ascent + line.descent
-    cursor = line.end
-  }
-  return y
-}
-
-// --- Pretext: render current partial text onto canvas ---
-function renderPretextText(text, width) {
-  if (!text.trim()) return
-  const prepared = prepareWithSegments(text, FONT_STR)
-  ctx.clearRect(0, 0, pretextCanvas.width / dpr, pretextCanvas.height / dpr)
-  ctx.font = FONT_STR
-  ctx.fillStyle = TEXT_COLOR
-  ctx.textBaseline = 'alphabetic'
-
-  let y = 0
-  let cursor = { segmentIndex: 0, graphemeIndex: 0 }
-  let lastLineY = 0
-  while (true) {
-    const line = layoutNextLine(prepared, cursor, width)
-    if (!line) break
-    const baseline = y + line.ascent
-    ctx.fillText(line.text, 0, baseline)
-    lastLineY = y
-    y += line.ascent + line.descent
-    cursor = line.end
-  }
-
-  // Draw cursor after last line
-  if (y > 0 && cursorVisible) {
-    const lastPrepared = prepareWithSegments(text, FONT_STR)
-    // Approximate cursor position at end of last visible text
-    const cursorX = ctx.measureText(text.slice(0, text.length)).width % width
-    const baseline = lastLineY + FONT_SIZE * 0.85
-    ctx.fillStyle = CURSOR_COLOR
-    ctx.fillRect(Math.min(cursorX, width - 4), baseline - FONT_SIZE * 0.7, 2, FONT_SIZE)
-    ctx.fillStyle = TEXT_COLOR
-  }
+  const prepared = prepare(text, FONT_STR)
+  const result = layout(prepared, width, LINE_HEIGHT)
+  return result.height
 }
 
 // --- Set pretext container to predicted final height ---
 function setFinalHeight() {
-  const padW = pretextChatBody.clientWidth
-  pretextFinalHeight = computePretextHeight(STREAM_TEXT, padW)
-  resizeCanvas(pretextFinalHeight)
+  const containerWidth = pretextChatBody.clientWidth - 18 // subtract padding (0.9rem * 2)
+  pretextFinalHeight = computePretextHeight(STREAM_TEXT, containerWidth)
+  pretextText.style.minHeight = pretextFinalHeight + 'px'
+  heightLabel.textContent = `pre-computed height: ${pretextFinalHeight.toFixed(1)}px`
+  heightLabel.classList.add('visible')
 }
 
 // --- Track layout shift ---
@@ -656,21 +613,6 @@ function measureShift() {
   lastPretextBelowY = pretextRect.top
 }
 
-// --- Cursor blink ---
-let cursorBlinkInterval = null
-function startCursorBlink() {
-  cursorVisible = true
-  domCursor.style.display = 'inline-block'
-  cursorBlinkInterval = setInterval(() => {
-    cursorVisible = !cursorVisible
-  }, 400)
-}
-function stopCursorBlink() {
-  clearInterval(cursorBlinkInterval)
-  cursorVisible = false
-  domCursor.style.display = 'none'
-}
-
 // --- Emit one token ---
 function emitToken() {
   if (tokenIndex >= TOKENS.length) {
@@ -680,14 +622,11 @@ function emitToken() {
   const token = TOKENS[tokenIndex]
   tokenIndex++
 
-  // DOM side: just append text node before cursor
-  domTextContent += token
+  // DOM side: append text node before cursor
   domText.insertBefore(document.createTextNode(token), domCursor)
 
-  // Pretext side: re-render with full text so far
-  const currentText = TOKENS.slice(0, tokenIndex).join('')
-  const padW = pretextChatBody.clientWidth
-  renderPretextText(currentText, padW)
+  // Pretext side: append text node before cursor (same as DOM — it's just DOM text)
+  pretextText.insertBefore(document.createTextNode(token), pretextCursor)
 
   // Track shift
   measureShift()
@@ -730,15 +669,19 @@ function startStreaming() {
   lastDomBelowY = domBelowChat.getBoundingClientRect().top
   lastPretextBelowY = pretextBelowChat.getBoundingClientRect().top
 
-  // Set pretext final height immediately
+  // Set pretext final height immediately — the whole point of this demo
   setFinalHeight()
 
-  // Re-record pretext below position AFTER height is set
-  // This is the key: the pretext side sets its height once, so the
-  // below-chat element shifts once, and then never again
+  // Re-record pretext below position AFTER height is set.
+  // The pretext side sets its height once, so the below-chat element
+  // shifts once, and then never again during streaming.
   requestAnimationFrame(() => {
     lastPretextBelowY = pretextBelowChat.getBoundingClientRect().top
-    startCursorBlink()
+
+    // Show cursors
+    domCursor.style.display = 'inline-block'
+    pretextCursor.style.display = 'inline-block'
+
     animFrame = requestAnimationFrame(streamLoop)
   })
 }
@@ -746,30 +689,40 @@ function startStreaming() {
 function stopStreaming() {
   streaming = false
   streamBtn.disabled = false
-  stopCursorBlink()
   cancelAnimationFrame(animFrame)
 
-  // Final render without cursor
-  const currentText = TOKENS.slice(0, tokenIndex).join('')
-  const padW = pretextChatBody.clientWidth
-  renderPretextText(currentText, padW)
+  // Hide cursors
+  domCursor.style.display = 'none'
+  pretextCursor.style.display = 'none'
 }
 
 function resetDemo() {
   stopStreaming()
   tokenIndex = 0
-  domTextContent = ''
+
+  // Clear DOM side
   domText.textContent = ''
   domText.appendChild(domCursor)
   domCursor.style.display = 'none'
+
+  // Clear pretext side
+  pretextText.textContent = ''
+  pretextText.appendChild(pretextCursor)
+  pretextCursor.style.display = 'none'
+  pretextText.style.minHeight = ''
+
+  // Reset shift counters
   domShiftTotal = 0
   pretextShiftTotal = 0
   domShiftValue.textContent = '0.0px'
   pretextShiftValue.textContent = '0.0px'
   lastDomBelowY = null
   lastPretextBelowY = null
-  resizeCanvas(0)
-  ctx.clearRect(0, 0, pretextCanvas.width, pretextCanvas.height)
+
+  // Hide height label
+  heightLabel.classList.remove('visible')
+  heightLabel.textContent = ''
+
   resetBtn.disabled = true
   streamBtn.disabled = false
 }
@@ -778,18 +731,14 @@ function resetDemo() {
 streamBtn.addEventListener('click', startStreaming)
 resetBtn.addEventListener('click', resetDemo)
 
-// --- Initial canvas size ---
-resizeCanvas(0)
-
-// Handle window resize
+// Handle window resize — recompute pretext height if mid-stream
 window.addEventListener('resize', () => {
   if (streaming || tokenIndex > 0) {
-    const padW = pretextChatBody.clientWidth
-    const currentText = TOKENS.slice(0, tokenIndex).join('')
+    const containerWidth = pretextChatBody.clientWidth - 18
     if (tokenIndex > 0) {
-      pretextFinalHeight = computePretextHeight(STREAM_TEXT, padW)
-      resizeCanvas(pretextFinalHeight)
-      renderPretextText(currentText, padW)
+      pretextFinalHeight = computePretextHeight(STREAM_TEXT, containerWidth)
+      pretextText.style.minHeight = pretextFinalHeight + 'px'
+      heightLabel.textContent = `pre-computed height: ${pretextFinalHeight.toFixed(1)}px`
     }
   }
 })

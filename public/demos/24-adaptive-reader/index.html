@@ -66,15 +66,14 @@
     letter-spacing: 0.05em;
   }
 
-  #canvas-container {
-    position: relative;
-    width: 100%;
-    display: flex;
-    justify-content: center;
-  }
-
-  canvas {
-    display: block;
+  /* The text itself — just a styled div */
+  #text-display {
+    font-family: 'Literata', Georgia, serif;
+    color: #2C2C2C;
+    transition: max-width 0.08s ease, font-size 0.08s ease, line-height 0.08s ease, letter-spacing 0.08s ease;
+    white-space: pre-wrap;
+    word-break: normal;
+    overflow-wrap: break-word;
   }
 
   /* Performance counter */
@@ -421,9 +420,7 @@
     <h1>The Adaptive Reader</h1>
     <p>drag the sliders. find what feels right.</p>
   </div>
-  <div id="canvas-container">
-    <canvas id="canvas"></canvas>
-  </div>
+  <div id="text-display"></div>
 </div>
 
 <div id="controls">
@@ -481,18 +478,18 @@
   <button id="why-link">Why we built this</button>
 </div>
 
-<div id="perf-counter">layout: --</div>
+<div id="perf-counter">pretext: --</div>
 
 <div id="why-overlay">
   <div id="why-modal">
     <button id="why-close">&times;</button>
     <h3>Why We Built This</h3>
-    <p>Reading is physical. Your eyes have preferences your conscious mind has never met. We built this because accessibility tools give you three presets and a reload &mdash; but comfort is a spectrum, not a menu. Drag a slider and watch the text reflow in real time, at 60 frames per second, until it feels right. That's what a text engine should do.</p>
+    <p>Reading is physical. Your eyes have preferences your conscious mind has never met. We built this because accessibility tools give you three presets and a reload &mdash; but comfort is a spectrum, not a menu. Drag a slider and watch the text reflow in real time until it feels right. The text here is real DOM &mdash; selectable, accessible, copy-pasteable. Pretext runs in the background measuring layout in microseconds, proving that JS-side text measurement is fast enough to power real-time UI without ever touching the DOM layout engine.</p>
   </div>
 </div>
 
 <script type="module">
-import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
+import { prepare, layout } from 'https://esm.sh/@chenglou/pretext'
 
 // --- Default text ---
 const DEFAULT_TEXT = `We have almost lost the ability to read slowly. Every interface we use rewards skimming \u2014 bold keywords, bullet points, highlighted passages that spare us the trouble of finding meaning ourselves. But some writing exists specifically to resist that speed. It asks you to sit with a sentence, to let the rhythm of the words set the pace rather than your anxiety about what comes next.
@@ -503,18 +500,13 @@ These are not aesthetic preferences. They are physical facts about how human vis
 
 let currentText = DEFAULT_TEXT
 
-// --- Canvas setup ---
-const canvas = document.getElementById('canvas')
-const ctx = canvas.getContext('2d')
-const dpr = window.devicePixelRatio || 1
+// --- DOM refs ---
+const textDisplay = document.getElementById('text-display')
 const perfCounter = document.getElementById('perf-counter')
-
-// --- Slider elements ---
 const lineWidthSlider = document.getElementById('line-width')
 const lineHeightSlider = document.getElementById('line-height')
 const fontSizeSlider = document.getElementById('font-size')
 const letterSpacingSlider = document.getElementById('letter-spacing')
-
 const lineWidthVal = document.getElementById('line-width-val')
 const lineHeightVal = document.getElementById('line-height-val')
 const fontSizeVal = document.getElementById('font-size-val')
@@ -528,7 +520,6 @@ let state = {
   letterSpacing: 0,
 }
 
-// Animated state (for smooth transitions)
 let animState = { ...state }
 let animTarget = null
 let animStart = null
@@ -543,85 +534,41 @@ const PRESETS = {
   dense: { lineWidthCh: 95, lineHeight: 1.2, fontSize: 14, letterSpacing: -0.01 },
 }
 
-// --- Measure ch width for current font ---
-function measureChWidth(fontSize) {
-  ctx.font = `${fontSize}px 'Literata', Georgia, serif`
-  return ctx.measureText('0').width
+// --- Set text content ---
+textDisplay.textContent = currentText
+
+// --- Apply styles to text display ---
+function applyStyles() {
+  const s = animState
+  textDisplay.style.fontSize = s.fontSize + 'px'
+  textDisplay.style.lineHeight = s.lineHeight.toFixed(3)
+  textDisplay.style.letterSpacing = s.letterSpacing.toFixed(4) + 'em'
+  textDisplay.style.maxWidth = s.lineWidthCh + 'ch'
 }
 
-// --- Layout + Render ---
-function render() {
+// --- Measure with pretext (for perf display) ---
+function measureWithPretext() {
   const s = animState
-  const container = document.getElementById('reading-area')
-  const containerWidth = container.clientWidth
-  const containerHeight = container.clientHeight
-
-  // Compute pixel width from ch units
-  const chPx = measureChWidth(s.fontSize)
-  const textWidthPx = Math.min(s.lineWidthCh * chPx, containerWidth - 60)
-
-  // Canvas sizing
-  const canvasW = Math.max(textWidthPx + 40, 200)
-  const canvasH = containerHeight - 120
-
-  canvas.width = canvasW * dpr
-  canvas.height = canvasH * dpr
-  canvas.style.width = canvasW + 'px'
-  canvas.style.height = canvasH + 'px'
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-
-  // Clear
-  ctx.clearRect(0, 0, canvasW, canvasH)
-
-  // Font string for pretext
-  const fontString = `${s.fontSize}px 'Literata', Georgia, serif`
-
-  // Performance timing start
-  const t0 = performance.now()
-
-  // Prepare text for layout (must be called fresh each render since
-  // layoutNextLine consumes state from the prepared object)
-  const prepared = prepareWithSegments(currentText, fontString)
-
-  // Layout lines: layoutNextLine(prepared, cursor, width) returns { text, ascent, descent, width, end }
-  const marginX = (canvasW - textWidthPx) / 2
+  const fontStr = `${s.fontSize}px 'Literata', Georgia, serif`
   const lineHeightPx = s.fontSize * s.lineHeight
-  let y = 20
-  let cursor = { segmentIndex: 0, graphemeIndex: 0 }
-  const lines = []
-  let safetyCount = 0
 
-  while (y + lineHeightPx < canvasH && safetyCount < 2000) {
-    const line = layoutNextLine(prepared, cursor, textWidthPx)
-    if (!line) break
-    lines.push({ text: line.text, ascent: line.ascent, descent: line.descent, lineY: y })
-    cursor = line.end
-    y += lineHeightPx
-    safetyCount++
-  }
+  // Approximate max-width in pixels using ch units
+  // We measure '0' width to convert ch to px
+  const measureEl = document.createElement('span')
+  measureEl.style.cssText = `font: ${s.fontSize}px 'Literata', Georgia, serif; position:absolute; visibility:hidden;`
+  measureEl.textContent = '0'
+  document.body.appendChild(measureEl)
+  const chPx = measureEl.getBoundingClientRect().width
+  document.body.removeChild(measureEl)
 
-  const t1 = performance.now()
-  const layoutUs = ((t1 - t0) * 1000).toFixed(0)
-  perfCounter.textContent = `layout: ${layoutUs}\u03BCs`
+  const textWidthPx = Math.min(s.lineWidthCh * chPx, document.getElementById('reading-area').clientWidth - 60)
 
-  // Render text
-  ctx.font = fontString
-  ctx.fillStyle = '#2C2C2C'
-  ctx.textBaseline = 'alphabetic'
-
-  for (const line of lines) {
-    const baseline = line.lineY + line.ascent
-    // Apply letter spacing by drawing character by character
-    if (Math.abs(s.letterSpacing) > 0.001) {
-      let cx = marginX
-      for (let i = 0; i < line.text.length; i++) {
-        ctx.fillText(line.text[i], cx, baseline)
-        cx += ctx.measureText(line.text[i]).width + (s.letterSpacing * s.fontSize)
-      }
-    } else {
-      ctx.fillText(line.text, marginX, baseline)
-    }
-  }
+  const t0 = performance.now()
+  const prepared = prepare(currentText, fontStr)
+  const result = layout(prepared, textWidthPx, lineHeightPx)
+  const elapsed = performance.now() - t0
+  const us = (elapsed * 1000).toFixed(0)
+  perfCounter.textContent = `pretext: ${us}\u03BCs \u00B7 ${result.lineCount} lines`
 }
 
 // --- Animation loop ---
@@ -662,7 +609,8 @@ function animate(timestamp) {
   }
 
   if (changed || needsRender) {
-    render()
+    applyStyles()
+    measureWithPretext()
     needsRender = false
   }
 
@@ -675,7 +623,6 @@ function updateSliderDisplays() {
   fontSizeVal.textContent = `${animState.fontSize.toFixed(1)}px`
   letterSpacingVal.textContent = `${animState.letterSpacing.toFixed(2)}em`
 
-  // Update slider positions during animation
   lineWidthSlider.value = animState.lineWidthCh
   lineHeightSlider.value = animState.lineHeight * 100
   fontSizeSlider.value = animState.fontSize
@@ -684,7 +631,6 @@ function updateSliderDisplays() {
 
 // --- Slider handlers ---
 function onSliderInput() {
-  // Cancel any animation
   animTarget = null
   animStart = null
   animStartState = null
@@ -713,10 +659,8 @@ function clearActivePreset() {
 function applyPreset(name) {
   const preset = PRESETS[name]
   if (!preset) return
-
   clearActivePreset()
   document.querySelector(`[data-preset="${name}"]`)?.classList.add('active')
-
   animTarget = { ...preset }
   animStart = null
   animDuration = 400
@@ -754,6 +698,7 @@ applyTextBtn.addEventListener('click', () => {
   const text = customTextArea.value.trim()
   if (text) {
     currentText = text
+    textDisplay.textContent = currentText
     needsRender = true
   }
 })
@@ -776,7 +721,6 @@ window.addEventListener('resize', () => {
 })
 
 // --- Auto-animate on load ---
-// After 2 seconds, sweep line width from too-wide (88) to comfortable (65) over 1.5s
 setTimeout(() => {
   animTarget = { ...state, lineWidthCh: 65 }
   animStart = null
@@ -784,6 +728,7 @@ setTimeout(() => {
 }, 2000)
 
 // --- Start ---
+applyStyles()
 updateSliderDisplays()
 requestAnimationFrame(animate)
 </script>

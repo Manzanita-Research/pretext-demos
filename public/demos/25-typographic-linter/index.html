@@ -66,7 +66,7 @@
     position: relative;
   }
 
-  .canvas-area {
+  .text-area {
     flex: 1;
     display: flex;
     justify-content: center;
@@ -75,9 +75,101 @@
     position: relative;
   }
 
-  .canvas-container {
+  .text-container-wrapper {
     position: relative;
     flex-shrink: 0;
+  }
+
+  .text-container {
+    position: relative;
+    border: 1px solid #E8E5DF;
+    border-radius: 4px;
+    background: #fff;
+    overflow: hidden;
+  }
+
+  .text-lines {
+    position: relative;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  .text-line {
+    font-family: 'Literata', Georgia, serif;
+    font-size: 17px;
+    color: #2C2C2C;
+    white-space: pre;
+    pointer-events: auto;
+    position: relative;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .text-line.para-gap {
+    height: 0;
+  }
+
+  .annotations-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  .annotation {
+    position: absolute;
+    pointer-events: auto;
+    cursor: help;
+  }
+
+  /* Orphan / short last line: dashed underline + light background */
+  .annotation--orphan,
+  .annotation--shortLast {
+    border-bottom: 2px dashed;
+    border-radius: 2px;
+  }
+  .annotation--orphan {
+    background: rgba(194, 113, 79, 0.07);
+    border-bottom-color: rgba(194, 113, 79, 0.6);
+  }
+  .annotation--shortLast {
+    background: rgba(160, 82, 45, 0.07);
+    border-bottom-color: rgba(160, 82, 45, 0.6);
+  }
+
+  /* Awkward break: highlight on trailing word + dashed underline */
+  .annotation--awkwardBreak {
+    background: rgba(155, 142, 168, 0.15);
+    border-bottom: 1.5px dashed rgba(155, 142, 168, 0.6);
+    border-radius: 2px;
+  }
+
+  /* Bad rag: right-side bracket */
+  .annotation--badRag-bracket {
+    border-right: 2px solid rgba(196, 154, 60, 0.5);
+    border-top: 2px solid rgba(196, 154, 60, 0.5);
+    border-bottom: 2px solid rgba(196, 154, 60, 0.5);
+    border-left: none;
+    border-radius: 0 3px 3px 0;
+  }
+
+  /* Bad rag: line-end tick marks */
+  .annotation--badRag-tick {
+    width: 1px;
+    border-right: 1.5px solid rgba(196, 154, 60, 0.35);
+  }
+
+  /* Margin dots */
+  .margin-dot {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    pointer-events: auto;
+    cursor: help;
+    z-index: 3;
   }
 
   .drag-handle {
@@ -116,13 +208,6 @@
     white-space: nowrap;
     opacity: 0.7;
     pointer-events: none;
-  }
-
-  canvas {
-    display: block;
-    border: 1px solid #E8E5DF;
-    border-radius: 4px;
-    background: #fff;
   }
 
   .sidebar {
@@ -353,9 +438,12 @@
   </div>
 
   <div class="main">
-    <div class="canvas-area">
-      <div class="canvas-container" id="canvas-container">
-        <canvas id="canvas"></canvas>
+    <div class="text-area">
+      <div class="text-container-wrapper" id="text-container-wrapper">
+        <div class="text-container" id="text-container">
+          <div class="text-lines" id="text-lines"></div>
+          <div class="annotations-layer" id="annotations-layer"></div>
+        </div>
         <div class="drag-handle" id="drag-handle"></div>
         <div class="drag-hint" id="drag-hint">&larr; drag to resize &rarr;</div>
         <div class="width-label" id="width-label"></div>
@@ -399,11 +487,8 @@ import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pr
 
 // --- Config ---
 const FONT_SIZE = 17
-const LINE_HEIGHT = 1.55
 const FONT_STR = `${FONT_SIZE}px Literata, Georgia, serif`
-const TEXT_COLOR = '#2C2C2C'
 const MARGIN = 28
-const dpr = window.devicePixelRatio || 1
 
 const COLORS = {
   orphan:       { fill: '#C2714F', label: 'terracotta' },
@@ -426,9 +511,10 @@ It was fall when she finally admitted they wouldn't. She was standing in the kit
 The apartment had good light in the mornings. She'd give it that.`
 
 // --- DOM refs ---
-const canvas = document.getElementById('canvas')
-const ctx = canvas.getContext('2d')
-const container = document.getElementById('canvas-container')
+const textContainerWrapper = document.getElementById('text-container-wrapper')
+const textContainer = document.getElementById('text-container')
+const textLinesEl = document.getElementById('text-lines')
+const annotationsLayer = document.getElementById('annotations-layer')
 const handle = document.getElementById('drag-handle')
 const hint = document.getElementById('drag-hint')
 const widthLabel = document.getElementById('width-label')
@@ -446,8 +532,10 @@ let containerWidth = 520
 let issues = []
 let lineData = []
 let paragraphMeta = []
-let animating = false
-let animFrame = null
+
+// We need a hidden canvas just to measure text widths for annotation placement
+const measureCanvas = document.createElement('canvas')
+const measureCtx = measureCanvas.getContext('2d')
 
 // --- Init ---
 input.value = DEFAULT_TEXT
@@ -484,7 +572,8 @@ function layoutAndLint() {
   const width = containerWidth - MARGIN * 2
 
   if (width < 40 || !text.trim()) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    textLinesEl.innerHTML = ''
+    annotationsLayer.innerHTML = ''
     issues = []
     lineData = []
     updateSummary()
@@ -509,20 +598,20 @@ function layoutAndLint() {
       const line = layoutNextLine(prepared, cursor, width)
       if (!line) break
       cursor = line.end
-      const baseline = y + line.ascent
+      const lineH = line.ascent + line.descent
       const lineInfo = {
         x: MARGIN,
-        baseline,
-        y: y,
+        y,
+        baseline: y + line.ascent,
         width: line.width,
         ascent: line.ascent,
         descent: line.descent,
+        height: lineH,
         paraIndex: pi,
         text: line.text,
       }
       paraLines.push(lineInfo)
       lineData.push(lineInfo)
-      const lineH = line.ascent + line.descent
       y += lineH
     }
 
@@ -530,13 +619,10 @@ function layoutAndLint() {
     y += FONT_SIZE * 0.6 // paragraph gap
   }
 
-  // Resize canvas
+  // Set container dimensions
   const totalH = y + MARGIN
-  canvas.width = containerWidth * dpr
-  canvas.height = totalH * dpr
-  canvas.style.width = containerWidth + 'px'
-  canvas.style.height = totalH + 'px'
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  textContainer.style.width = containerWidth + 'px'
+  textContainer.style.height = totalH + 'px'
 
   // Analyze issues
   issues = []
@@ -596,144 +682,176 @@ function layoutAndLint() {
         issues.push({
           type: 'awkwardBreak',
           line: lines[li],
+          word: lastWord,
           desc: `Line ends with "${lastWord}" \u2014 a tiny word left at the break`,
         })
       }
     }
   }
 
-  // Render
-  render()
+  // Render DOM
+  renderLines()
+  renderAnnotations()
   updateSummary()
 
   const elapsed = performance.now() - t0
   perfEl.textContent = `layout + lint: ${elapsed.toFixed(1)}ms`
 }
 
-function render() {
-  ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr)
-  const width = containerWidth - MARGIN * 2
+function renderLines() {
+  textLinesEl.innerHTML = ''
 
-  // Draw annotations first (behind text)
+  let lastParaIndex = -1
+  for (const line of lineData) {
+    // Insert paragraph gap spacer
+    if (line.paraIndex !== lastParaIndex && lastParaIndex !== -1) {
+      const gap = document.createElement('div')
+      gap.className = 'text-line para-gap'
+      gap.style.height = (FONT_SIZE * 0.6) + 'px'
+      textLinesEl.appendChild(gap)
+    }
+    lastParaIndex = line.paraIndex
+
+    const div = document.createElement('div')
+    div.className = 'text-line'
+    div.textContent = line.text
+    div.style.height = line.height + 'px'
+    div.style.lineHeight = line.height + 'px'
+    div.style.paddingLeft = MARGIN + 'px'
+    div.style.paddingRight = MARGIN + 'px'
+    textLinesEl.appendChild(div)
+  }
+
+  // Top and bottom padding via the container's own padding
+  textLinesEl.style.paddingTop = MARGIN + 'px'
+  textLinesEl.style.paddingBottom = MARGIN + 'px'
+}
+
+function renderAnnotations() {
+  annotationsLayer.innerHTML = ''
+  measureCtx.font = FONT_STR
+  const colWidth = containerWidth - MARGIN * 2
+
   for (const issue of issues) {
     const color = COLORS[issue.type].fill
 
     if (issue.type === 'orphan' || issue.type === 'shortLast') {
       const line = issue.line
-      // Underline
-      ctx.save()
-      ctx.strokeStyle = color
-      ctx.lineWidth = 2
-      ctx.globalAlpha = 0.6
-      ctx.setLineDash([3, 2])
-      const uy = line.baseline + 3
-      ctx.beginPath()
-      ctx.moveTo(line.x, uy)
-      ctx.lineTo(line.x + line.width, uy)
-      ctx.stroke()
-      ctx.restore()
 
-      // Highlight background
-      ctx.save()
-      ctx.fillStyle = color
-      ctx.globalAlpha = 0.07
-      ctx.fillRect(line.x - 2, line.y, line.width + 4, line.ascent + line.descent)
-      ctx.restore()
+      // Highlight + dashed underline over the line
+      const el = document.createElement('div')
+      el.className = `annotation annotation--${issue.type}`
+      el.style.left = (line.x - 2) + 'px'
+      el.style.top = line.y + 'px'
+      el.style.width = (line.width + 4) + 'px'
+      el.style.height = line.height + 'px'
+      el.dataset.issueType = issue.type
+      el.dataset.issueDesc = issue.desc
+      el.addEventListener('mouseenter', showTooltip)
+      el.addEventListener('mousemove', moveTooltip)
+      el.addEventListener('mouseleave', hideTooltip)
+      annotationsLayer.appendChild(el)
 
-      // Right margin marker
-      ctx.save()
-      ctx.fillStyle = color
-      ctx.globalAlpha = 0.5
-      ctx.beginPath()
-      ctx.arc(MARGIN + width + 10, line.baseline - line.ascent / 2 + line.descent, 3, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.restore()
+      // Margin dot
+      const dot = document.createElement('div')
+      dot.className = 'margin-dot'
+      dot.style.background = color
+      dot.style.opacity = '0.5'
+      dot.style.left = (MARGIN + colWidth + 7) + 'px'
+      dot.style.top = (line.baseline - line.ascent / 2 + line.descent - 3) + 'px'
+      dot.dataset.issueType = issue.type
+      dot.dataset.issueDesc = issue.desc
+      dot.addEventListener('mouseenter', showTooltip)
+      dot.addEventListener('mousemove', moveTooltip)
+      dot.addEventListener('mouseleave', hideTooltip)
+      annotationsLayer.appendChild(dot)
     }
 
     if (issue.type === 'badRag') {
-      // Side bracket on the right margin
       const firstLine = issue.paraLines[0]
       const lastLine = issue.paraLines[issue.paraLines.length - 1]
       const topY = firstLine.y
-      const botY = lastLine.y + lastLine.ascent + lastLine.descent
-      const rx = MARGIN + width + 10
+      const botY = lastLine.y + lastLine.height
+      const rx = MARGIN + colWidth + 7
 
-      ctx.save()
-      ctx.strokeStyle = color
-      ctx.lineWidth = 2
-      ctx.globalAlpha = 0.5
-      ctx.beginPath()
-      ctx.moveTo(rx - 3, topY + 2)
-      ctx.lineTo(rx + 3, topY + 2)
-      ctx.lineTo(rx + 3, botY - 2)
-      ctx.lineTo(rx - 3, botY - 2)
-      ctx.stroke()
-      ctx.restore()
+      // Right bracket
+      const bracket = document.createElement('div')
+      bracket.className = 'annotation annotation--badRag-bracket'
+      bracket.style.left = rx + 'px'
+      bracket.style.top = (topY + 2) + 'px'
+      bracket.style.width = '8px'
+      bracket.style.height = (botY - topY - 4) + 'px'
+      bracket.dataset.issueType = issue.type
+      bracket.dataset.issueDesc = issue.desc
+      bracket.addEventListener('mouseenter', showTooltip)
+      bracket.addEventListener('mousemove', moveTooltip)
+      bracket.addEventListener('mouseleave', hideTooltip)
+      annotationsLayer.appendChild(bracket)
 
-      // Draw small ticks at each line end
+      // Line-end tick marks
       for (const line of issue.lines) {
-        ctx.save()
-        ctx.strokeStyle = color
-        ctx.lineWidth = 1.5
-        ctx.globalAlpha = 0.35
-        const lineEndX = line.x + line.width
-        ctx.beginPath()
-        ctx.moveTo(lineEndX, line.baseline - 3)
-        ctx.lineTo(lineEndX, line.baseline + 3)
-        ctx.stroke()
-        ctx.restore()
+        const tick = document.createElement('div')
+        tick.className = 'annotation annotation--badRag-tick'
+        tick.style.left = (line.x + line.width) + 'px'
+        tick.style.top = (line.baseline - 3) + 'px'
+        tick.style.height = '6px'
+        annotationsLayer.appendChild(tick)
       }
     }
 
     if (issue.type === 'awkwardBreak') {
       const line = issue.line
       const lineText = line.text.trim()
-      const words = lineText.split(/\s+/)
-      const lastWord = words[words.length - 1]
-      if (lastWord) {
-        ctx.font = FONT_STR
-        const fullWidth = ctx.measureText(lineText).width
-        const withoutLast = lineText.slice(0, lineText.lastIndexOf(lastWord))
-        const sx = line.x + ctx.measureText(withoutLast).width
-        const sw = ctx.measureText(lastWord).width
-        // Highlight the short word
-        ctx.save()
-        ctx.fillStyle = color
-        ctx.globalAlpha = 0.15
-        ctx.fillRect(sx - 1, line.y, sw + 2, line.ascent + line.descent)
-        ctx.restore()
+      const lastWord = issue.word
+      const withoutLast = lineText.slice(0, lineText.lastIndexOf(lastWord))
+      const sx = line.x + measureCtx.measureText(withoutLast).width
+      const sw = measureCtx.measureText(lastWord).width
 
-        // Underline
-        ctx.save()
-        ctx.strokeStyle = color
-        ctx.lineWidth = 1.5
-        ctx.globalAlpha = 0.6
-        ctx.setLineDash([2, 2])
-        ctx.beginPath()
-        ctx.moveTo(sx, line.baseline + 2)
-        ctx.lineTo(sx + sw, line.baseline + 2)
-        ctx.stroke()
-        ctx.restore()
+      // Highlight on the trailing word
+      const el = document.createElement('div')
+      el.className = 'annotation annotation--awkwardBreak'
+      el.style.left = (sx - 1) + 'px'
+      el.style.top = line.y + 'px'
+      el.style.width = (sw + 2) + 'px'
+      el.style.height = line.height + 'px'
+      el.dataset.issueType = issue.type
+      el.dataset.issueDesc = issue.desc
+      el.addEventListener('mouseenter', showTooltip)
+      el.addEventListener('mousemove', moveTooltip)
+      el.addEventListener('mouseleave', hideTooltip)
+      annotationsLayer.appendChild(el)
 
-        // Margin dot
-        ctx.save()
-        ctx.fillStyle = color
-        ctx.globalAlpha = 0.5
-        ctx.beginPath()
-        ctx.arc(MARGIN + (containerWidth - MARGIN * 2) + 10, line.baseline - line.ascent / 2 + line.descent, 3, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.restore()
-      }
+      // Margin dot
+      const dot = document.createElement('div')
+      dot.className = 'margin-dot'
+      dot.style.background = color
+      dot.style.opacity = '0.5'
+      dot.style.left = (MARGIN + colWidth + 7) + 'px'
+      dot.style.top = (line.baseline - line.ascent / 2 + line.descent - 3) + 'px'
+      dot.dataset.issueType = issue.type
+      dot.dataset.issueDesc = issue.desc
+      dot.addEventListener('mouseenter', showTooltip)
+      dot.addEventListener('mousemove', moveTooltip)
+      dot.addEventListener('mouseleave', hideTooltip)
+      annotationsLayer.appendChild(dot)
     }
   }
+}
 
-  // Draw text
-  ctx.font = FONT_STR
-  ctx.fillStyle = TEXT_COLOR
-  ctx.textBaseline = 'alphabetic'
-  for (const line of lineData) {
-    ctx.fillText(line.text, line.x, line.baseline)
-  }
+// --- Tooltip ---
+function showTooltip(e) {
+  const type = e.currentTarget.dataset.issueType
+  const desc = e.currentTarget.dataset.issueDesc
+  tooltipEl.textContent = `${issueLabels[type]} \u2014 ${desc}`
+  tooltipEl.classList.add('visible')
+  moveTooltip(e)
+}
+function moveTooltip(e) {
+  tooltipEl.style.left = Math.min(e.clientX + 12, window.innerWidth - 260) + 'px'
+  tooltipEl.style.top = (e.clientY - 32) + 'px'
+}
+function hideTooltip() {
+  tooltipEl.classList.remove('visible')
 }
 
 function updateSummary() {
@@ -795,63 +913,8 @@ input.addEventListener('input', () => {
   inputDebounce = setTimeout(layoutAndLint, 60)
 })
 
-// --- Tooltip on canvas hover ---
-canvas.addEventListener('mousemove', e => {
-  const rect = canvas.getBoundingClientRect()
-  const mx = e.clientX - rect.left
-  const my = e.clientY - rect.top
-
-  let found = null
-  for (const issue of issues) {
-    if (issue.type === 'badRag') {
-      // Check if near the side bracket
-      const width = containerWidth - MARGIN * 2
-      const rx = MARGIN + width + 10
-      const firstLine = issue.paraLines[0]
-      const lastLine = issue.paraLines[issue.paraLines.length - 1]
-      if (mx >= rx - 12 && mx <= rx + 12 && my >= firstLine.y && my <= lastLine.y + lastLine.ascent + lastLine.descent) {
-        found = issue
-        break
-      }
-    } else {
-      const line = issue.line
-      if (my >= line.y && my <= line.y + line.ascent + line.descent) {
-        if (issue.type === 'awkwardBreak') {
-          // Hit test the last word area
-          if (mx >= line.x - 4 && mx <= line.x + line.width + 4) {
-            found = issue
-            break
-          }
-        } else {
-          if (mx >= line.x - 4 && mx <= line.x + line.width + 20) {
-            found = issue
-            break
-          }
-        }
-      }
-    }
-  }
-
-  if (found) {
-    tooltipEl.textContent = `${issueLabels[found.type]} \u2014 ${found.desc}`
-    tooltipEl.classList.add('visible')
-    tooltipEl.style.left = Math.min(e.clientX + 12, window.innerWidth - 260) + 'px'
-    tooltipEl.style.top = (e.clientY - 32) + 'px'
-    canvas.style.cursor = 'help'
-  } else {
-    tooltipEl.classList.remove('visible')
-    canvas.style.cursor = 'default'
-  }
-})
-
-canvas.addEventListener('mouseleave', () => {
-  tooltipEl.classList.remove('visible')
-  canvas.style.cursor = 'default'
-})
-
 // --- Opening animation: sweep width from narrow to wide ---
 function animateSweep() {
-  animating = true
   hint.style.opacity = '0'
   const startW = 240
   const endW = 520
@@ -871,9 +934,8 @@ function animateSweep() {
     layoutAndLint()
 
     if (t < 1) {
-      animFrame = requestAnimationFrame(step)
+      requestAnimationFrame(step)
     } else {
-      animating = false
       containerWidth = endW
       updateWidthLabel()
       layoutAndLint()
@@ -887,7 +949,7 @@ function animateSweep() {
   layoutAndLint()
   // Brief pause before sweep
   setTimeout(() => {
-    animFrame = requestAnimationFrame(step)
+    requestAnimationFrame(step)
   }, 600)
 }
 

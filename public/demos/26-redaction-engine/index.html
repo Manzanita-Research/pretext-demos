@@ -203,7 +203,6 @@
     padding: 3rem;
     position: relative;
   }
-  /* Cleaner paper texture on card */
   .document-card::before {
     content: '';
     position: absolute;
@@ -233,10 +232,259 @@
     opacity: 0.85;
   }
 
-  /* Canvas */
-  .document-canvas {
-    display: block;
+  /* Document content */
+  .document-content {
+    position: relative;
+  }
+
+  /* Block types */
+  .doc-block { position: relative; }
+
+  .doc-header-agency {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    color: #6B3A2A;
+    text-align: center;
+    margin-bottom: 2px;
+  }
+  .doc-header-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    font-weight: 500;
+    color: #7C7C7C;
+    text-align: center;
+    margin-bottom: 6px;
+  }
+  .doc-header-memo {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 16px;
+    font-weight: 700;
+    color: #6B3A2A;
+    text-align: center;
+    margin-bottom: 4px;
+  }
+  .doc-divider {
+    border: none;
+    border-top: 1px solid #E8E5DF;
+    margin: 4px 0;
+  }
+  .doc-spacer-sm { height: 4px; }
+  .doc-spacer-md { height: 6px; }
+  .doc-spacer-lg { height: 8px; }
+  .doc-spacer-xl { height: 14px; }
+
+  .doc-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: #2C2C2C;
+    margin-bottom: 2px;
+  }
+  .doc-meta .meta-label {
+    font-weight: 500;
+    color: #6B3A2A;
+  }
+
+  .doc-section-header {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    color: #6B3A2A;
+    margin-bottom: 2px;
+  }
+
+  .doc-body {
+    font-family: 'Literata', Georgia, serif;
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: #2C2C2C;
+    margin-bottom: 2px;
+  }
+  .doc-body.muted {
+    color: #7C7C7C;
+    font-style: italic;
+  }
+
+  /* Table */
+  .doc-table {
     width: 100%;
+    border-collapse: collapse;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    margin-bottom: 3px;
+  }
+  .doc-table thead th {
+    font-weight: 500;
+    color: #6B3A2A;
+    text-align: left;
+    padding: 2px 8px 2px 0;
+    border-bottom: 1px solid #E8E5DF;
+  }
+  .doc-table tbody td {
+    padding: 3px 8px 3px 0;
+    vertical-align: top;
+    color: #2C2C2C;
+  }
+
+  /* --- Redaction categories --- */
+  /* Category: names (level 1) — Terracotta */
+  .redacted-names {
+    background: #2C2C2C;
+    color: transparent;
+    user-select: none;
+    border-radius: 2px;
+    padding: 0 2px;
+    cursor: pointer;
+    transition: background 0.25s ease, color 0.25s ease;
+    position: relative;
+  }
+  .redacted-names:hover {
+    background: rgba(194, 113, 79, 0.15);
+    color: #C2714F;
+  }
+  .redacted-names.revealed {
+    background: rgba(194, 113, 79, 0.08);
+    color: #C2714F;
+    user-select: auto;
+  }
+
+  /* Category: data (level 1) — Ochre */
+  .redacted-data {
+    background: #2C2C2C;
+    color: transparent;
+    user-select: none;
+    border-radius: 2px;
+    padding: 0 2px;
+    cursor: pointer;
+    transition: background 0.25s ease, color 0.25s ease;
+    position: relative;
+  }
+  .redacted-data:hover {
+    background: rgba(196, 154, 60, 0.15);
+    color: #C49A3C;
+  }
+  .redacted-data.revealed {
+    background: rgba(196, 154, 60, 0.08);
+    color: #9B7A2F;
+    user-select: auto;
+  }
+
+  /* Category: operations (level 2) — Sage */
+  .redacted-ops {
+    background: #2C2C2C;
+    color: transparent;
+    user-select: none;
+    border-radius: 2px;
+    padding: 0 2px;
+    cursor: pointer;
+    transition: background 0.25s ease, color 0.25s ease;
+    position: relative;
+  }
+  .redacted-ops:hover {
+    background: rgba(139, 158, 126, 0.18);
+    color: #6B8060;
+  }
+  .redacted-ops.revealed {
+    background: rgba(139, 158, 126, 0.1);
+    color: #6B8060;
+    user-select: auto;
+  }
+
+  /* Category: locations (level 3) — Bark */
+  .redacted-locs {
+    background: #2C2C2C;
+    color: transparent;
+    user-select: none;
+    border-radius: 2px;
+    padding: 0 2px;
+    cursor: pointer;
+    transition: background 0.25s ease, color 0.25s ease;
+    position: relative;
+  }
+  .redacted-locs:hover {
+    background: rgba(107, 58, 42, 0.12);
+    color: #6B3A2A;
+  }
+  .redacted-locs.revealed {
+    background: rgba(107, 58, 42, 0.06);
+    color: #6B3A2A;
+    user-select: auto;
+  }
+
+  /* Block-level redaction (whole section) */
+  .redacted-block {
+    background: #2C2C2C;
+    color: transparent;
+    user-select: none;
+    border-radius: 3px;
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    transition: background 0.25s ease, color 0.25s ease;
+    display: block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+  }
+  .redacted-block:hover {
+    background: rgba(107, 58, 42, 0.12);
+    color: #6B3A2A;
+  }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: center;
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid #E8E5DF;
+  }
+  .legend-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #5C5C5C;
+    margin-right: 0.25rem;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: #5C5C5C;
+  }
+  .legend-swatch {
+    width: 14px;
+    height: 10px;
+    border-radius: 2px;
+    display: inline-block;
+  }
+  .legend-swatch.sw-names { background: #C2714F; }
+  .legend-swatch.sw-data { background: #C49A3C; }
+  .legend-swatch.sw-ops { background: #8B9E7E; }
+  .legend-swatch.sw-locs { background: #6B3A2A; }
+
+  /* Stats bar */
+  .stats-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #E8E5DF;
+  }
+  .stat {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: #5C5C5C;
+  }
+  .stat-value {
+    font-weight: 700;
+    color: #2C2C2C;
   }
 
   /* Modal */
@@ -298,6 +546,7 @@
     .document-card { padding: 1.5rem; }
     .classification-stamp { top: 1rem; right: 1rem; font-size: 0.6rem; }
     .header h1 { font-size: 1.35rem; }
+    .legend { gap: 0.6rem; }
   }
 </style>
 </head>
@@ -331,7 +580,15 @@
 <div class="document-area">
   <div class="document-card">
     <div class="classification-stamp" id="classStamp">PUBLIC</div>
-    <canvas class="document-canvas" id="docCanvas"></canvas>
+    <div class="document-content" id="docContent"></div>
+    <div class="legend">
+      <span class="legend-title">Redaction categories:</span>
+      <span class="legend-item"><span class="legend-swatch sw-names"></span>Names</span>
+      <span class="legend-item"><span class="legend-swatch sw-data"></span>Data</span>
+      <span class="legend-item"><span class="legend-swatch sw-ops"></span>Operations</span>
+      <span class="legend-item"><span class="legend-swatch sw-locs"></span>Locations</span>
+    </div>
+    <div class="stats-bar" id="statsBar"></div>
   </div>
 </div>
 
@@ -341,53 +598,38 @@
     <button class="modal-close" id="modalClose" aria-label="Close">&times;</button>
     <h2>Why We Built This</h2>
     <p>Redaction tools produce dead documents. Static PDFs with black bars pasted over text, broken layouts, ugly gaps where information used to be.</p>
-    <p>We wanted a document that stays alive at every classification level &mdash; reflowing in real time, always looking typeset, always readable. Pretext makes that possible at 60fps in a browser, with no DOM.</p>
-    <p>Every word you see on this page is rendered character-by-character onto a canvas. When redacted content reveals, the paragraph line-wrapping visibly changes. The layout engine recomputes the entire document on every frame.</p>
+    <p>We wanted a document that stays alive at every classification level &mdash; reflowing in real time, always looking typeset, always readable. Every word is a real DOM element: selectable, accessible, styled with CSS.</p>
+    <p>Pretext measures each paragraph's text so we can reserve stable heights. When you toggle classification levels, redacted spans swap between transparent text with black backgrounds and revealed text &mdash; but the layout stays locked because the space was pre-computed.</p>
   </div>
 </div>
 
 <script type="module">
-import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
+import { prepare, layout } from 'https://esm.sh/@chenglou/pretext'
 
 // --- Classification levels ---
 const LEVELS = ['PUBLIC', 'INTERNAL', 'CONFIDENTIAL', 'TOP SECRET']
 
-// --- Font config ---
-const HEADER_FONT_SIZE = 13
-const BODY_FONT_SIZE = 13.5
-const SMALL_FONT_SIZE = 11.5
-const HEADER_FONT = `700 ${HEADER_FONT_SIZE}px 'JetBrains Mono', monospace`
-const BODY_FONT = `${BODY_FONT_SIZE}px 'Literata', Georgia, serif`
-const BODY_FONT_BOLD = `500 ${BODY_FONT_SIZE}px 'Literata', Georgia, serif`
-const SMALL_FONT = `${SMALL_FONT_SIZE}px 'JetBrains Mono', monospace`
-const LABEL_FONT = `500 ${SMALL_FONT_SIZE}px 'JetBrains Mono', monospace`
+// --- Redaction categories ---
+// cat: CSS class suffix, minLevel: level at which text is revealed
+const CAT_NAMES = { cat: 'names', minLevel: 1 }
+const CAT_DATA  = { cat: 'data',  minLevel: 1 }
+const CAT_OPS   = { cat: 'ops',   minLevel: 2 }
+const CAT_LOCS  = { cat: 'locs',  minLevel: 3 }
 
-const TEXT_COLOR = '#2C2C2C'
-const HEADER_COLOR = '#6B3A2A'
-const MUTED_COLOR = '#7C7C7C'
-const REDACT_COLOR = '#2C2C2C'
-const DIVIDER_COLOR = '#E8E5DF'
+// Track manually revealed spans
+const revealedSet = new Set()
+let revealIdCounter = 0
 
-// --- Redaction marker ---
-const REDACT = '\u2588' // block character placeholder for measurement
+// --- Document structure ---
+// Each block is { type, ...data }
+// Body/meta text uses "segments": arrays of { text, redaction? } where redaction = { cat, minLevel }
+// This lets us render each segment as a <span> and apply redaction styles per-segment.
 
-// --- Document builder: returns structured blocks ---
 function buildDocument(level) {
-  // level: 0=public, 1=internal, 2=confidential, 3=top secret
   const blocks = []
 
-  function r(publicText, revealText, minLevel) {
-    // Returns revealed text if level >= minLevel, else redaction marker
-    return level >= minLevel ? revealText : publicText
-  }
-
-  function redact(text, minLevel) {
-    // Replace text with a redaction marker of proportional length at lower levels
-    if (level >= minLevel) return text
-    // Use block chars proportional to text length
-    const barLen = Math.max(2, Math.ceil(text.length * 0.7))
-    return '\u2588'.repeat(barLen)
-  }
+  function seg(text) { return { text } }
+  function redSeg(text, category) { return { text, redaction: category } }
 
   // Agency header
   blocks.push({ type: 'header-agency', text: 'CALIFORNIA DEPARTMENT OF WATER RESOURCES' })
@@ -396,12 +638,18 @@ function buildDocument(level) {
   blocks.push({ type: 'header-memo', text: 'MEMORANDUM \u2014 PROJECT SOLANO' })
   blocks.push({ type: 'spacer', height: 8 })
 
-  // Metadata fields
-  blocks.push({ type: 'meta', label: 'CLASSIFICATION:', value: LEVELS[level] })
-  blocks.push({ type: 'meta', label: 'DATE:', value: 'March 15, 2026' })
-  blocks.push({ type: 'meta', label: 'FROM:', value: level >= 1 ? 'Dr. Elena Vasquez, Director of Infrastructure Planning' : redact('Dr. Elena Vasquez, Director of Infrastructure Planning', 1) })
-  blocks.push({ type: 'meta', label: 'TO:', value: level >= 1 ? 'Central Valley Regional Board, Attn: Commissioner Liu' : redact('Central Valley Regional Board, Attn: Commissioner Liu', 1) })
-  blocks.push({ type: 'meta', label: 'RE:', value: 'Environmental Impact Assessment \u2014 North Fork Diversion Channel' })
+  // Metadata
+  blocks.push({ type: 'meta', label: 'CLASSIFICATION:', segments: [seg(LEVELS[level])] })
+  blocks.push({ type: 'meta', label: 'DATE:', segments: [seg('March 15, 2026')] })
+  blocks.push({ type: 'meta', label: 'FROM:', segments: [
+    redSeg('Dr. Elena Vasquez, Director of Infrastructure Planning', CAT_NAMES)
+  ]})
+  blocks.push({ type: 'meta', label: 'TO:', segments: [
+    redSeg('Central Valley Regional Board, Attn: Commissioner Liu', CAT_NAMES)
+  ]})
+  blocks.push({ type: 'meta', label: 'RE:', segments: [
+    seg('Environmental Impact Assessment \u2014 North Fork Diversion Channel')
+  ]})
 
   blocks.push({ type: 'divider' })
   blocks.push({ type: 'spacer', height: 6 })
@@ -410,23 +658,34 @@ function buildDocument(level) {
   blocks.push({ type: 'section-header', text: '1. EXECUTIVE SUMMARY' })
   blocks.push({ type: 'spacer', height: 4 })
 
-  if (level === 0) {
-    blocks.push({ type: 'body', text: `The proposed North Fork diversion channel will redirect approximately ${redact('2.4 million', 1)} acre-feet annually from the ${redact('Sacramento River tributary system', 1)} to the Central Valley aquifer recharge basins. Initial environmental review indicates ${redact('moderate-to-significant impact on downstream riparian ecosystems, with particular concern for winter-run Chinook salmon spawning habitat and associated wetland systems', 2)}.` })
-    blocks.push({ type: 'spacer', height: 6 })
-    blocks.push({ type: 'body', text: `This project was authorized under Executive Order ${redact('WR-2025-0147', 1)} and is managed jointly by the Department of Water Resources and ${redact('the Bureau of Reclamation under a federal-state compact agreement signed in November 2025', 2)}.` })
-  } else if (level === 1) {
-    blocks.push({ type: 'body', text: `The proposed North Fork diversion channel will redirect approximately 2.4 million acre-feet annually from the Sacramento River tributary system to the Central Valley aquifer recharge basins. Initial environmental review indicates ${redact('moderate-to-significant impact on downstream riparian ecosystems, with particular concern for winter-run Chinook salmon spawning habitat and associated wetland systems', 2)}.` })
-    blocks.push({ type: 'spacer', height: 6 })
-    blocks.push({ type: 'body', text: `This project was authorized under Executive Order WR-2025-0147 and is managed jointly by the Department of Water Resources and ${redact('the Bureau of Reclamation under a federal-state compact agreement signed in November 2025', 2)}.` })
-    blocks.push({ type: 'spacer', height: 6 })
-    blocks.push({ type: 'body', text: `Preliminary cost estimates range from $50M to $75M across three phases. A detailed budget breakdown is available at ${redact('Confidential', 2)} classification and above.` })
-  } else {
-    blocks.push({ type: 'body', text: 'The proposed North Fork diversion channel will redirect approximately 2.4 million acre-feet annually from the Sacramento River tributary system to the Central Valley aquifer recharge basins. Initial environmental review indicates moderate-to-significant impact on downstream riparian ecosystems, with particular concern for winter-run Chinook salmon spawning habitat and associated wetland systems.' })
-    blocks.push({ type: 'spacer', height: 6 })
-    blocks.push({ type: 'body', text: 'This project was authorized under Executive Order WR-2025-0147 and is managed jointly by the Department of Water Resources and the Bureau of Reclamation under a federal-state compact agreement signed in November 2025.' })
-    blocks.push({ type: 'spacer', height: 6 })
-    blocks.push({ type: 'body', text: 'Total project cost is estimated at $68.2 million, distributed across three construction phases commencing Q2 2026. The Governor\'s office has approved expedited permitting under drought emergency provisions.' })
-  }
+  blocks.push({ type: 'body', segments: [
+    seg('The proposed North Fork diversion channel will redirect approximately '),
+    redSeg('2.4 million', CAT_DATA),
+    seg(' acre-feet annually from the '),
+    redSeg('Sacramento River tributary system', CAT_LOCS),
+    seg(' to the Central Valley aquifer recharge basins. Initial environmental review indicates '),
+    redSeg('moderate-to-significant impact on downstream riparian ecosystems, with particular concern for winter-run Chinook salmon spawning habitat and associated wetland systems', CAT_OPS),
+    seg('.'),
+  ]})
+  blocks.push({ type: 'spacer', height: 6 })
+
+  blocks.push({ type: 'body', segments: [
+    seg('This project was authorized under Executive Order '),
+    redSeg('WR-2025-0147', CAT_DATA),
+    seg(' and is managed jointly by the Department of Water Resources and '),
+    redSeg('the Bureau of Reclamation under a federal-state compact agreement signed in November 2025', CAT_OPS),
+    seg('.'),
+  ]})
+  blocks.push({ type: 'spacer', height: 6 })
+
+  blocks.push({ type: 'body', segments: [
+    seg('Preliminary cost estimates range from '),
+    redSeg('$50M to $75M', CAT_DATA),
+    seg(' across three phases. Total project cost is estimated at '),
+    redSeg('$68.2 million, distributed across three construction phases commencing Q2 2026', CAT_OPS),
+    seg('. '),
+    redSeg('The Governor\'s office has approved expedited permitting under drought emergency provisions.', CAT_LOCS),
+  ]})
 
   blocks.push({ type: 'spacer', height: 14 })
 
@@ -434,39 +693,32 @@ function buildDocument(level) {
   blocks.push({ type: 'section-header', text: '2. BUDGET OVERVIEW' })
   blocks.push({ type: 'spacer', height: 4 })
 
-  if (level === 0) {
-    blocks.push({ type: 'body', text: 'Budget details are classified. Contact the Office of Infrastructure Planning for access at the appropriate clearance level.' })
-  } else {
-    if (level === 1) {
-      blocks.push({ type: 'body', text: 'Total estimated project budget: $50M \u2013 $75M (range pending final contractor negotiations).' })
-      blocks.push({ type: 'spacer', height: 6 })
-    } else {
-      blocks.push({ type: 'body', text: 'Total estimated project budget: $68.2M (firm, approved by Infrastructure Budget Committee on Feb 28, 2026).' })
-      blocks.push({ type: 'spacer', height: 6 })
-    }
+  blocks.push({ type: 'body', segments: [
+    redSeg('Total estimated project budget: $68.2M (firm, approved by Infrastructure Budget Committee on Feb 28, 2026).', CAT_DATA),
+  ]})
+  blocks.push({ type: 'spacer', height: 6 })
 
-    // Budget table
-    blocks.push({ type: 'table-row', cols: ['Phase', 'Description', 'Cost', 'Contractor'] })
-    blocks.push({ type: 'table-divider' })
-    blocks.push({ type: 'table-row', cols: [
-      '1',
-      'Site Assessment',
-      level >= 2 ? '$12.3M' : '$10M\u2013$15M',
-      level >= 2 ? 'Meridian Engineering Corp.' : redact('Meridian Engineering Corp.', 2)
-    ]})
-    blocks.push({ type: 'table-row', cols: [
-      '2',
-      'Channel Construction',
-      level >= 2 ? '$47.8M' : '$35M\u2013$55M',
-      level >= 2 ? 'Pacific Watershed Partners' : redact('Pacific Watershed Partners', 2)
-    ]})
-    blocks.push({ type: 'table-row', cols: [
-      '3',
-      'Monitoring & Compliance',
-      level >= 2 ? '$8.1M' : '$5M\u2013$10M',
-      level >= 2 ? 'UC Davis Env. Sciences' : redact('UC Davis Env. Sciences', 2)
-    ]})
-  }
+  // Budget table
+  blocks.push({ type: 'table', headers: ['Phase', 'Description', 'Cost', 'Contractor'], rows: [
+    [
+      { segments: [seg('1')] },
+      { segments: [seg('Site Assessment')] },
+      { segments: [redSeg('$12.3M', CAT_DATA)] },
+      { segments: [redSeg('Meridian Engineering Corp.', CAT_NAMES)] },
+    ],
+    [
+      { segments: [seg('2')] },
+      { segments: [seg('Channel Construction')] },
+      { segments: [redSeg('$47.8M', CAT_DATA)] },
+      { segments: [redSeg('Pacific Watershed Partners', CAT_NAMES)] },
+    ],
+    [
+      { segments: [seg('3')] },
+      { segments: [seg('Monitoring & Compliance')] },
+      { segments: [redSeg('$8.1M', CAT_DATA)] },
+      { segments: [redSeg('UC Davis Env. Sciences', CAT_NAMES)] },
+    ],
+  ]})
 
   blocks.push({ type: 'spacer', height: 14 })
 
@@ -474,27 +726,35 @@ function buildDocument(level) {
   blocks.push({ type: 'section-header', text: '3. ENVIRONMENTAL CONCERNS' })
   blocks.push({ type: 'spacer', height: 4 })
 
-  if (level === 0) {
-    blocks.push({ type: 'body', text: `Environmental review is ongoing. Key concerns include impacts to ${redact('winter-run Chinook salmon', 1)} migration patterns, ${redact('riparian cottonwood and willow gallery forest', 1)} habitat, and ${redact('groundwater table stability in the eastern Yolo Basin', 2)}.` })
-  } else if (level === 1) {
-    blocks.push({ type: 'body', text: `Environmental review is ongoing. Key concerns include impacts to winter-run Chinook salmon migration patterns, riparian cottonwood and willow gallery forest habitat, and ${redact('groundwater table stability in the eastern Yolo Basin', 2)}.` })
-    blocks.push({ type: 'spacer', height: 6 })
-    blocks.push({ type: 'body', text: `CDFW has flagged potential take of listed species under CESA. Formal consultation with USFWS initiated ${redact('January 12, 2026, under file number FWS-2026-0034', 2)}.` })
-  } else if (level === 2) {
-    blocks.push({ type: 'body', text: 'Environmental review is ongoing. Key concerns include impacts to winter-run Chinook salmon migration patterns, riparian cottonwood and willow gallery forest habitat, and groundwater table stability in the eastern Yolo Basin.' })
-    blocks.push({ type: 'spacer', height: 6 })
-    blocks.push({ type: 'body', text: 'CDFW has flagged potential take of listed species under CESA. Formal consultation with USFWS initiated January 12, 2026, under file number FWS-2026-0034. Biological opinion expected by Q3 2026.' })
-    blocks.push({ type: 'spacer', height: 6 })
-    blocks.push({ type: 'body', text: `Groundwater modeling by ${redact('Dr. Anya Patel, UC Davis Hydrogeology', 3)} suggests a 2.3-meter decline in water table elevation within a 15-kilometer radius of the primary intake structure over a 10-year projection period. ${redact('Mitigation: managed aquifer recharge via injection wells at coordinates specified in Appendix D (TS clearance required).', 3)}` })
-  } else {
-    blocks.push({ type: 'body', text: 'Environmental review is ongoing. Key concerns include impacts to winter-run Chinook salmon migration patterns, riparian cottonwood and willow gallery forest habitat, and groundwater table stability in the eastern Yolo Basin.' })
-    blocks.push({ type: 'spacer', height: 6 })
-    blocks.push({ type: 'body', text: 'CDFW has flagged potential take of listed species under CESA. Formal consultation with USFWS initiated January 12, 2026, under file number FWS-2026-0034. Biological opinion expected by Q3 2026.' })
-    blocks.push({ type: 'spacer', height: 6 })
-    blocks.push({ type: 'body', text: 'Groundwater modeling by Dr. Anya Patel, UC Davis Hydrogeology, suggests a 2.3-meter decline in water table elevation within a 15-kilometer radius of the primary intake structure over a 10-year projection period. Mitigation: managed aquifer recharge via injection wells at coordinates specified in Appendix D.' })
-    blocks.push({ type: 'spacer', height: 6 })
-    blocks.push({ type: 'body', text: 'NOTE: Supplemental modeling by the Army Corps of Engineers (Sacramento District) indicates potential levee stability concerns along Reach 7 of the North Fork channel alignment. Engineering review underway; preliminary results suggest sheet pile reinforcement at three locations (see Appendix E, TS clearance confirmed).' })
-  }
+  blocks.push({ type: 'body', segments: [
+    seg('Environmental review is ongoing. Key concerns include impacts to '),
+    redSeg('winter-run Chinook salmon', CAT_DATA),
+    seg(' migration patterns, '),
+    redSeg('riparian cottonwood and willow gallery forest', CAT_DATA),
+    seg(' habitat, and '),
+    redSeg('groundwater table stability in the eastern Yolo Basin', CAT_OPS),
+    seg('.'),
+  ]})
+  blocks.push({ type: 'spacer', height: 6 })
+
+  blocks.push({ type: 'body', segments: [
+    redSeg('CDFW has flagged potential take of listed species under CESA. Formal consultation with USFWS initiated ', CAT_DATA),
+    redSeg('January 12, 2026, under file number FWS-2026-0034', CAT_OPS),
+    seg('. Biological opinion expected by Q3 2026.'),
+  ]})
+  blocks.push({ type: 'spacer', height: 6 })
+
+  blocks.push({ type: 'body', segments: [
+    seg('Groundwater modeling by '),
+    redSeg('Dr. Anya Patel, UC Davis Hydrogeology', CAT_LOCS),
+    seg(' suggests a 2.3-meter decline in water table elevation within a 15-kilometer radius of the primary intake structure over a 10-year projection period. '),
+    redSeg('Mitigation: managed aquifer recharge via injection wells at coordinates specified in Appendix D (TS clearance required).', CAT_LOCS),
+  ]})
+  blocks.push({ type: 'spacer', height: 6 })
+
+  blocks.push({ type: 'body', segments: [
+    redSeg('NOTE: Supplemental modeling by the Army Corps of Engineers (Sacramento District) indicates potential levee stability concerns along Reach 7 of the North Fork channel alignment. Engineering review underway; preliminary results suggest sheet pile reinforcement at three locations (see Appendix E, TS clearance confirmed).', CAT_LOCS),
+  ]})
 
   blocks.push({ type: 'spacer', height: 14 })
 
@@ -502,56 +762,70 @@ function buildDocument(level) {
   blocks.push({ type: 'section-header', text: '4. SITE COORDINATES & ENGINEERING REFERENCES' })
   blocks.push({ type: 'spacer', height: 4 })
 
-  if (level < 3) {
-    blocks.push({ type: 'body-redacted-full', text: 'This section is classified TOP SECRET. Access restricted to personnel with TS/SCI clearance and need-to-know authorization from the Director of Infrastructure Planning.' })
-  } else {
-    blocks.push({ type: 'body', text: 'Primary Intake Structure: 38\u00b042\'17.3"N, 121\u00b033\'45.8"W (NAD83)' })
-    blocks.push({ type: 'body', text: 'Diversion Channel Origin: 38\u00b041\'52.1"N, 121\u00b034\'02.6"W' })
-    blocks.push({ type: 'body', text: 'Recharge Basin Alpha: 38\u00b038\'11.4"N, 121\u00b040\'28.9"W' })
-    blocks.push({ type: 'body', text: 'Recharge Basin Beta: 38\u00b036\'44.7"N, 121\u00b042\'15.3"W' })
-    blocks.push({ type: 'spacer', height: 6 })
-    blocks.push({ type: 'body', text: 'Engineering schematics: DWR-SOL-2026-ENG-001 through ENG-047. Geotechnical survey: USACE-SAC-GEO-2025-114. Hydrological model: UCD-HYDRO-NF-2026-03 (rev. 4).' })
-    blocks.push({ type: 'spacer', height: 6 })
-    blocks.push({ type: 'body', text: 'Security perimeter established 500m radius from primary intake structure. Drone surveillance zone active. Access requires escort by DWR Security Division personnel with advance 48-hour notice.' })
-  }
+  blocks.push({ type: 'body-block-redacted', minLevel: 3, placeholder: 'This section is classified TOP SECRET. Access restricted to personnel with TS/SCI clearance and need-to-know authorization from the Director of Infrastructure Planning.', segments: [
+    seg('Primary Intake Structure: 38\u00b042\'17.3"N, 121\u00b033\'45.8"W (NAD83)'),
+  ]})
+  blocks.push({ type: 'body-block-redacted', minLevel: 3, segments: [
+    seg('Diversion Channel Origin: 38\u00b041\'52.1"N, 121\u00b034\'02.6"W'),
+  ]})
+  blocks.push({ type: 'body-block-redacted', minLevel: 3, segments: [
+    seg('Recharge Basin Alpha: 38\u00b038\'11.4"N, 121\u00b040\'28.9"W'),
+  ]})
+  blocks.push({ type: 'body-block-redacted', minLevel: 3, segments: [
+    seg('Recharge Basin Beta: 38\u00b036\'44.7"N, 121\u00b042\'15.3"W'),
+  ]})
+  blocks.push({ type: 'spacer', height: 6 })
+  blocks.push({ type: 'body-block-redacted', minLevel: 3, segments: [
+    seg('Engineering schematics: DWR-SOL-2026-ENG-001 through ENG-047. Geotechnical survey: USACE-SAC-GEO-2025-114. Hydrological model: UCD-HYDRO-NF-2026-03 (rev. 4).'),
+  ]})
+  blocks.push({ type: 'spacer', height: 6 })
+  blocks.push({ type: 'body-block-redacted', minLevel: 3, segments: [
+    seg('Security perimeter established 500m radius from primary intake structure. Drone surveillance zone active. Access requires escort by DWR Security Division personnel with advance 48-hour notice.'),
+  ]})
 
   blocks.push({ type: 'spacer', height: 14 })
 
   // 5. Timeline
   blocks.push({ type: 'section-header', text: '5. PROJECT TIMELINE' })
   blocks.push({ type: 'spacer', height: 4 })
-  blocks.push({ type: 'body', text: `Phase 1 (Site Assessment): ${level >= 1 ? 'April \u2013 September 2026' : redact('April \u2013 September 2026', 1)}` })
-  blocks.push({ type: 'body', text: `Phase 2 (Construction): ${level >= 1 ? 'October 2026 \u2013 March 2028' : redact('October 2026 \u2013 March 2028', 1)}` })
-  blocks.push({ type: 'body', text: `Phase 3 (Monitoring): ${level >= 1 ? 'April 2028 \u2013 ongoing (minimum 5-year commitment)' : redact('April 2028 \u2013 ongoing (minimum 5-year commitment)', 1)}` })
-
-  if (level >= 2) {
-    blocks.push({ type: 'spacer', height: 6 })
-    blocks.push({ type: 'body', text: 'Critical path items: CEQA certification (expected June 2026), USACE Section 404 permit (expected August 2026), SWRCB water rights amendment (pending hearing, July 2026).' })
-  }
+  blocks.push({ type: 'body', segments: [
+    seg('Phase 1 (Site Assessment): '),
+    redSeg('April \u2013 September 2026', CAT_DATA),
+  ]})
+  blocks.push({ type: 'body', segments: [
+    seg('Phase 2 (Construction): '),
+    redSeg('October 2026 \u2013 March 2028', CAT_DATA),
+  ]})
+  blocks.push({ type: 'body', segments: [
+    seg('Phase 3 (Monitoring): '),
+    redSeg('April 2028 \u2013 ongoing (minimum 5-year commitment)', CAT_DATA),
+  ]})
+  blocks.push({ type: 'spacer', height: 6 })
+  blocks.push({ type: 'body', segments: [
+    redSeg('Critical path items: CEQA certification (expected June 2026), USACE Section 404 permit (expected August 2026), SWRCB water rights amendment (pending hearing, July 2026).', CAT_OPS),
+  ]})
 
   blocks.push({ type: 'spacer', height: 14 })
   blocks.push({ type: 'divider' })
   blocks.push({ type: 'spacer', height: 8 })
 
   // Distribution
-  blocks.push({ type: 'meta', label: 'DISTRIBUTION:', value: level >= 1 ? 'Limited \u2014 Infrastructure Division, Legal Affairs, Governor\'s Water Policy Office, SWRCB Liaison' : redact('Limited \u2014 Infrastructure Division, Legal Affairs, Governor\'s Water Policy Office, SWRCB Liaison', 1) })
-
-  if (level >= 2) {
-    blocks.push({ type: 'meta', label: 'CC:', value: level >= 2 ? 'Meridian Engineering Corp. (Project Lead), Pacific Watershed Partners (VP Operations)' : redact('Meridian Engineering Corp. (Project Lead), Pacific Watershed Partners (VP Operations)', 2) })
-  }
+  blocks.push({ type: 'meta', label: 'DISTRIBUTION:', segments: [
+    redSeg('Limited \u2014 Infrastructure Division, Legal Affairs, Governor\'s Water Policy Office, SWRCB Liaison', CAT_NAMES),
+  ]})
+  blocks.push({ type: 'meta', label: 'CC:', segments: [
+    redSeg('Meridian Engineering Corp. (Project Lead), Pacific Watershed Partners (VP Operations)', CAT_OPS),
+  ]})
 
   blocks.push({ type: 'spacer', height: 8 })
-  blocks.push({ type: 'meta', label: 'DOCUMENT ID:', value: 'DWR-SOL-2026-MEMO-003' })
-  blocks.push({ type: 'meta', label: 'PAGE:', value: '1 of 1' })
+  blocks.push({ type: 'meta', label: 'DOCUMENT ID:', segments: [seg('DWR-SOL-2026-MEMO-003')] })
+  blocks.push({ type: 'meta', label: 'PAGE:', segments: [seg('1 of 1')] })
 
   return blocks
 }
 
-// --- Canvas rendering ---
-const canvas = document.getElementById('docCanvas')
-const ctx = canvas.getContext('2d')
-const dpr = window.devicePixelRatio || 1
-
+// --- DOM refs ---
+const docContent = document.getElementById('docContent')
 const slider = document.getElementById('levelSlider')
 const sliderFill = document.getElementById('sliderFill')
 const classStamp = document.getElementById('classStamp')
@@ -559,8 +833,9 @@ const stops = document.querySelectorAll('.slider-stop')
 const infoBtn = document.getElementById('infoBtn')
 const modalOverlay = document.getElementById('modalOverlay')
 const modalClose = document.getElementById('modalClose')
+const statsBar = document.getElementById('statsBar')
 
-// Modal
+// --- Modal ---
 infoBtn.addEventListener('click', () => modalOverlay.classList.add('open'))
 modalClose.addEventListener('click', () => modalOverlay.classList.remove('open'))
 modalOverlay.addEventListener('click', (e) => {
@@ -570,7 +845,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') modalOverlay.classList.remove('open')
 })
 
-// Slider
+// --- Slider UI ---
 function updateSliderUI(level) {
   const pct = (level / 3) * 100
   sliderFill.style.width = pct + '%'
@@ -595,241 +870,265 @@ slider.addEventListener('input', () => {
   renderDocument(lv)
 })
 
-// --- Layout + render ---
-function resizeCanvas(height) {
-  const card = canvas.parentElement
-  const w = card.clientWidth - 96 // 3rem padding * 2 = 96px? We'll measure
-  const style = getComputedStyle(card)
-  const padL = parseFloat(style.paddingLeft)
-  const padR = parseFloat(style.paddingRight)
-  const containerWidth = card.clientWidth - padL - padR
-  canvas.style.width = containerWidth + 'px'
-  canvas.style.height = height + 'px'
-  canvas.width = Math.round(containerWidth * dpr)
-  canvas.height = Math.round(height * dpr)
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-  return containerWidth
+// --- Use pretext to measure paragraph height for stable layout ---
+function measureTextHeight(fullText, font, containerWidth) {
+  // Use pretext prepare + layout to get the height this text would occupy
+  // so we can set a min-height and prevent reflow when redactions toggle
+  try {
+    const prepared = prepare(fullText, font)
+    const result = layout(prepared, containerWidth)
+    // result.height gives total laid-out height
+    return result.height
+  } catch (e) {
+    // Fallback: don't set a fixed height
+    return null
+  }
 }
 
-// Check if text contains redaction blocks
-function containsRedaction(text) {
-  return text.includes('\u2588')
-}
+// --- Build a span for a segment ---
+function createSegmentSpan(segment, level) {
+  const span = document.createElement('span')
+  span.textContent = segment.text
 
-// Render a line of text, drawing redaction bars for █ runs and normal text otherwise
-function renderLineText(text, x, baseline, lineAscent, lineDescent, font) {
-  ctx.font = font
-  ctx.textBaseline = 'alphabetic'
+  if (segment.redaction) {
+    const { cat, minLevel } = segment.redaction
+    const rid = revealIdCounter++
+    span.dataset.rid = rid
+    span.dataset.cat = cat
+    span.dataset.minLevel = minLevel
 
-  // Split text into runs of redaction chars (█) and normal text
-  const BLOCK = '\u2588'
-  let cx = x
-  let i = 0
-  while (i < text.length) {
-    if (text[i] === BLOCK) {
-      // Find run of blocks
-      let j = i
-      while (j < text.length && text[j] === BLOCK) j++
-      const run = text.slice(i, j)
-      const w = ctx.measureText(run).width
-      // Draw redaction bar
-      const barHeight = lineAscent * 0.9 + lineDescent * 0.3
-      const barY = baseline - lineAscent * 0.85
-      ctx.fillStyle = REDACT_COLOR
-      const r = 2
-      ctx.beginPath()
-      ctx.moveTo(cx + r, barY)
-      ctx.lineTo(cx + w - r, barY)
-      ctx.quadraticCurveTo(cx + w, barY, cx + w, barY + r)
-      ctx.lineTo(cx + w, barY + barHeight - r)
-      ctx.quadraticCurveTo(cx + w, barY + barHeight, cx + w - r, barY + barHeight)
-      ctx.lineTo(cx + r, barY + barHeight)
-      ctx.quadraticCurveTo(cx, barY + barHeight, cx, barY + barHeight - r)
-      ctx.lineTo(cx, barY + r)
-      ctx.quadraticCurveTo(cx, barY, cx + r, barY)
-      ctx.closePath()
-      ctx.fill()
-      cx += w
-      i = j
+    if (level < minLevel && !revealedSet.has(rid)) {
+      span.className = `redacted-${cat}`
+      span.setAttribute('aria-hidden', 'true')
+      span.setAttribute('role', 'img')
+      span.setAttribute('aria-label', 'Redacted content')
     } else {
-      // Find run of normal text
-      let j = i
-      while (j < text.length && text[j] !== BLOCK) j++
-      const run = text.slice(i, j)
-      ctx.fillStyle = TEXT_COLOR
-      ctx.fillText(run, cx, baseline)
-      cx += ctx.measureText(run).width
-      i = j
+      // Revealed — either by level or by click
+      span.className = `redacted-${cat} revealed`
+      span.removeAttribute('aria-hidden')
+    }
+
+    // Click to permanently reveal
+    span.addEventListener('click', () => {
+      revealedSet.add(parseInt(span.dataset.rid))
+      span.classList.add('revealed')
+      span.removeAttribute('aria-hidden')
+      span.style.userSelect = 'auto'
+      updateStats()
+    })
+  }
+
+  return span
+}
+
+// --- Render segments into a container ---
+function renderSegments(container, segments, level) {
+  for (const segment of segments) {
+    container.appendChild(createSegmentSpan(segment, level))
+  }
+}
+
+// --- Count stats ---
+function countStats(blocks, level) {
+  let totalWords = 0
+  let redactedWords = 0
+  let redactedSpans = 0
+
+  function countSegments(segments) {
+    for (const seg of segments) {
+      const wc = seg.text.trim().split(/\s+/).filter(Boolean).length
+      totalWords += wc
+      if (seg.redaction && level < seg.redaction.minLevel) {
+        redactedWords += wc
+        redactedSpans++
+      }
     }
   }
-}
 
-function layoutText(text, font, maxWidth, startY) {
-  if (!text.trim()) return { lines: [], endY: startY }
-  const prepared = prepareWithSegments(text, font)
-  const lines = []
-  let y = startY
-  let cursor = { segmentIndex: 0, graphemeIndex: 0 }
-  while (true) {
-    const line = layoutNextLine(prepared, cursor, maxWidth)
-    if (!line) break
-    cursor = line.end
-    lines.push({ text: line.text, width: line.width, ascent: line.ascent, descent: line.descent, y })
-    y += line.ascent + line.descent
+  for (const block of blocks) {
+    if (block.segments) countSegments(block.segments)
+    if (block.type === 'table' && block.rows) {
+      for (const row of block.rows) {
+        for (const cell of row) {
+          if (cell.segments) countSegments(cell.segments)
+        }
+      }
+    }
   }
-  return { lines, endY: y }
+
+  return { totalWords, redactedWords, redactedSpans }
 }
 
+function updateStats() {
+  // Recount from DOM: count spans with redacted class that don't have .revealed
+  const allRedacted = docContent.querySelectorAll('[class*="redacted-"]:not(.revealed)')
+  const allRevealed = docContent.querySelectorAll('[class*="redacted-"].revealed')
+  const redactedCount = allRedacted.length
+  const revealedCount = allRevealed.length
+  // (We don't re-render stats from blocks here, just update the "peeked" count)
+}
+
+function renderStats(blocks, level) {
+  const { totalWords, redactedWords, redactedSpans } = countStats(blocks, level)
+  const visibleWords = totalWords - redactedWords
+  const pctVisible = totalWords > 0 ? Math.round((visibleWords / totalWords) * 100) : 100
+
+  statsBar.innerHTML = `
+    <span class="stat"><span class="stat-value">${totalWords}</span> words</span>
+    <span class="stat"><span class="stat-value">${redactedSpans}</span> redactions</span>
+    <span class="stat"><span class="stat-value">${redactedWords}</span> words hidden</span>
+    <span class="stat"><span class="stat-value">${pctVisible}%</span> visible</span>
+  `
+}
+
+// --- Main render ---
 function renderDocument(level) {
+  // Reset reveal counter (but keep revealedSet for manually revealed items)
+  revealIdCounter = 0
+
   const blocks = buildDocument(level)
-  const card = canvas.parentElement
+  docContent.innerHTML = ''
+
+  // Gather the full plaintext for each body block so we can measure with pretext
+  // and set a stable min-height
+  const card = docContent.parentElement
   const style = getComputedStyle(card)
   const padL = parseFloat(style.paddingLeft)
   const padR = parseFloat(style.paddingRight)
   const contentWidth = card.clientWidth - padL - padR
 
-  // First pass: compute total height
-  let y = 0
-  const rendered = []
-
   for (const block of blocks) {
     switch (block.type) {
       case 'header-agency': {
-        const r = layoutText(block.text, HEADER_FONT, contentWidth, y)
-        rendered.push({ block, lines: r.lines, font: HEADER_FONT, color: HEADER_COLOR, align: 'center' })
-        y = r.endY + 2
+        const el = document.createElement('div')
+        el.className = 'doc-header-agency'
+        el.textContent = block.text
+        docContent.appendChild(el)
         break
       }
       case 'header-sub': {
-        const font = `500 ${SMALL_FONT_SIZE}px 'JetBrains Mono', monospace`
-        const r = layoutText(block.text, font, contentWidth, y)
-        rendered.push({ block, lines: r.lines, font, color: MUTED_COLOR, align: 'center' })
-        y = r.endY + 6
+        const el = document.createElement('div')
+        el.className = 'doc-header-sub'
+        el.textContent = block.text
+        docContent.appendChild(el)
         break
       }
       case 'header-memo': {
-        const font = `700 16px 'JetBrains Mono', monospace`
-        const r = layoutText(block.text, font, contentWidth, y)
-        rendered.push({ block, lines: r.lines, font, color: HEADER_COLOR, align: 'center' })
-        y = r.endY + 4
+        const el = document.createElement('div')
+        el.className = 'doc-header-memo'
+        el.textContent = block.text
+        docContent.appendChild(el)
         break
       }
       case 'divider': {
-        rendered.push({ block, y })
-        y += 8
+        const el = document.createElement('hr')
+        el.className = 'doc-divider'
+        docContent.appendChild(el)
         break
       }
       case 'spacer': {
-        y += block.height
+        const el = document.createElement('div')
+        if (block.height <= 4) el.className = 'doc-spacer-sm'
+        else if (block.height <= 6) el.className = 'doc-spacer-md'
+        else if (block.height <= 8) el.className = 'doc-spacer-lg'
+        else el.className = 'doc-spacer-xl'
+        docContent.appendChild(el)
         break
       }
       case 'meta': {
-        // Label + value on one line (laid out as single text)
-        const combined = block.label + ' ' + block.value
-        const r = layoutText(combined, SMALL_FONT, contentWidth, y)
-        rendered.push({ block, lines: r.lines, font: SMALL_FONT, labelLen: block.label.length + 1 })
-        y = r.endY + 2
+        const el = document.createElement('div')
+        el.className = 'doc-meta'
+        const labelSpan = document.createElement('span')
+        labelSpan.className = 'meta-label'
+        labelSpan.textContent = block.label + ' '
+        el.appendChild(labelSpan)
+        renderSegments(el, block.segments, level)
+        docContent.appendChild(el)
         break
       }
       case 'section-header': {
-        const font = `700 ${HEADER_FONT_SIZE}px 'JetBrains Mono', monospace`
-        const r = layoutText(block.text, font, contentWidth, y)
-        rendered.push({ block, lines: r.lines, font, color: HEADER_COLOR })
-        y = r.endY + 2
+        const el = document.createElement('div')
+        el.className = 'doc-section-header'
+        el.textContent = block.text
+        docContent.appendChild(el)
         break
       }
-      case 'body':
-      case 'body-redacted-full': {
-        const r = layoutText(block.text, BODY_FONT, contentWidth, y)
-        rendered.push({ block, lines: r.lines, font: BODY_FONT, color: block.type === 'body-redacted-full' ? MUTED_COLOR : TEXT_COLOR })
-        y = r.endY + 2
-        break
-      }
-      case 'table-row': {
-        // Simple table: we lay out as tab-separated text with fixed columns
-        const colWidths = [0.06, 0.30, 0.22, 0.42] // proportions
-        let maxEndY = y
-        const colData = []
-        for (let i = 0; i < block.cols.length; i++) {
-          const colX = colWidths.slice(0, i).reduce((a, b) => a + b, 0) * contentWidth
-          const colW = colWidths[i] * contentWidth - 8
-          const r = layoutText(block.cols[i], SMALL_FONT, colW, y)
-          colData.push({ lines: r.lines, offsetX: colX })
-          if (r.endY > maxEndY) maxEndY = r.endY
+      case 'body': {
+        const el = document.createElement('div')
+        el.className = 'doc-body'
+
+        // Measure the full revealed text with pretext for stable height
+        const fullText = block.segments.map(s => s.text).join('')
+        const measuredHeight = measureTextHeight(fullText, "13.5px 'Literata', Georgia, serif", contentWidth)
+        if (measuredHeight != null) {
+          el.style.minHeight = measuredHeight + 'px'
         }
-        rendered.push({ block, colData, font: SMALL_FONT })
-        y = maxEndY + 3
+
+        renderSegments(el, block.segments, level)
+        docContent.appendChild(el)
         break
       }
-      case 'table-divider': {
-        rendered.push({ block, y })
-        y += 4
+      case 'body-block-redacted': {
+        // Entire block is redacted below a certain level
+        const el = document.createElement('div')
+        el.className = 'doc-body'
+
+        if (level < block.minLevel) {
+          // Show placeholder as a redacted block
+          const redBlock = document.createElement('span')
+          redBlock.className = 'redacted-block'
+          redBlock.textContent = block.placeholder || block.segments.map(s => s.text).join('')
+          redBlock.setAttribute('aria-label', 'Redacted section')
+
+          redBlock.addEventListener('click', () => {
+            // Peek: show the actual content briefly
+            redBlock.style.background = 'rgba(107, 58, 42, 0.08)'
+            redBlock.style.color = '#6B3A2A'
+            redBlock.style.userSelect = 'auto'
+          })
+
+          el.appendChild(redBlock)
+        } else {
+          renderSegments(el, block.segments, level)
+        }
+
+        docContent.appendChild(el)
         break
       }
-    }
-  }
+      case 'table': {
+        const table = document.createElement('table')
+        table.className = 'doc-table'
 
-  const totalHeight = y + 10
-  const w = resizeCanvas(totalHeight)
+        // Header
+        const thead = document.createElement('thead')
+        const headRow = document.createElement('tr')
+        for (const h of block.headers) {
+          const th = document.createElement('th')
+          th.textContent = h
+          headRow.appendChild(th)
+        }
+        thead.appendChild(headRow)
+        table.appendChild(thead)
 
-  // Second pass: render
-  ctx.clearRect(0, 0, w, totalHeight)
-
-  for (const item of rendered) {
-    const { block } = item
-
-    if (block.type === 'divider') {
-      ctx.strokeStyle = DIVIDER_COLOR
-      ctx.lineWidth = 1
-      ctx.beginPath()
-      ctx.moveTo(0, item.y + 4)
-      ctx.lineTo(w, item.y + 4)
-      ctx.stroke()
-      continue
-    }
-
-    if (block.type === 'table-divider') {
-      ctx.strokeStyle = DIVIDER_COLOR
-      ctx.lineWidth = 0.5
-      ctx.beginPath()
-      ctx.moveTo(0, item.y + 2)
-      ctx.lineTo(w, item.y + 2)
-      ctx.stroke()
-      continue
-    }
-
-    if (block.type === 'table-row') {
-      for (const col of item.colData) {
-        for (const line of col.lines) {
-          const baseline = line.y + line.ascent
-          if (block.cols[0] === 'Phase') {
-            ctx.fillStyle = HEADER_COLOR
-            renderLineText(line.text, col.offsetX, baseline, line.ascent, line.descent, LABEL_FONT)
-          } else {
-            renderLineText(line.text, col.offsetX, baseline, line.ascent, line.descent, SMALL_FONT)
+        // Body
+        const tbody = document.createElement('tbody')
+        for (const row of block.rows) {
+          const tr = document.createElement('tr')
+          for (const cell of row) {
+            const td = document.createElement('td')
+            renderSegments(td, cell.segments, level)
+            tr.appendChild(td)
           }
+          tbody.appendChild(tr)
         }
-      }
-      continue
-    }
-
-    if (!item.lines) continue
-
-    for (const line of item.lines) {
-      const baseline = line.y + line.ascent
-
-      if (item.align === 'center') {
-        const offset = (w - line.width) / 2
-        ctx.fillStyle = item.color || TEXT_COLOR
-        renderLineText(line.text, offset, baseline, line.ascent, line.descent, item.font)
-      } else if (block.type === 'meta') {
-        renderLineText(line.text, 0, baseline, line.ascent, line.descent, SMALL_FONT)
-      } else {
-        ctx.fillStyle = item.color || TEXT_COLOR
-        renderLineText(line.text, 0, baseline, line.ascent, line.descent, item.font)
+        table.appendChild(tbody)
+        docContent.appendChild(table)
+        break
       }
     }
   }
+
+  renderStats(blocks, level)
 }
 
 // --- Init ---
@@ -838,10 +1137,10 @@ function init() {
   renderDocument(0)
 }
 
-// Wait for fonts
+// Wait for fonts then render
 document.fonts.ready.then(init)
 
-// Resize handling
+// Resize: re-measure pretext heights
 let resizeRaf = null
 window.addEventListener('resize', () => {
   if (resizeRaf) cancelAnimationFrame(resizeRaf)

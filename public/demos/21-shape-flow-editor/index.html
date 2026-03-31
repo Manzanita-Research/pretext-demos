@@ -66,15 +66,71 @@
     position: relative;
   }
 
-  #canvas-wrap {
+  #editor-wrap {
     flex: 1;
     position: relative;
     overflow: hidden;
   }
 
-  canvas {
-    display: block;
-    cursor: default;
+  /* SVG layer sits behind text */
+  #shape-svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+  }
+
+  /* Animated dash offset on the shape path */
+  @keyframes dash-march {
+    to { stroke-dashoffset: -40; }
+  }
+
+  #shape-path {
+    fill: rgba(194, 113, 79, 0.03);
+    stroke: #E8E5DF;
+    stroke-width: 1.5;
+    stroke-dasharray: 4 4;
+    animation: dash-march 2s linear infinite;
+  }
+
+  .ctrl-point {
+    cursor: grab;
+    transition: r 0.15s;
+  }
+
+  .ctrl-point:hover {
+    r: 9;
+  }
+
+  .ctrl-point-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    pointer-events: none;
+    text-anchor: middle;
+    dominant-baseline: central;
+    user-select: none;
+  }
+
+  /* Text layer sits above SVG */
+  #text-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    /* Text is selectable */
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  #text-layer .text-line {
+    position: absolute;
+    white-space: nowrap;
+    font-family: 'Literata', Georgia, serif;
+    font-size: 16px;
+    line-height: 1;
+    color: #2C2C2C;
+    pointer-events: auto;
   }
 
   /* Preset shape buttons */
@@ -379,8 +435,15 @@
 </header>
 
 <div class="main-area">
-  <div id="canvas-wrap">
-    <canvas id="canvas"></canvas>
+  <div id="editor-wrap">
+    <!-- SVG layer: shape spline + control points -->
+    <svg id="shape-svg" xmlns="http://www.w3.org/2000/svg">
+      <path id="shape-path" />
+      <g id="ctrl-points-group"></g>
+    </svg>
+
+    <!-- DOM text layer: positioned divs for each line -->
+    <div id="text-layer"></div>
   </div>
 
   <div class="tagline">No CSS Shapes. No floats. Pure JS reflow at 60fps.</div>
@@ -420,7 +483,7 @@
   <div class="modal">
     <button class="modal-close" id="close-modal">&times;</button>
     <h2>Why We Built This</h2>
-    <p>CSS promised us text that flows around any shape. That was 2013. We're still waiting. Pretext doesn't wait for specs — it reflows text around arbitrary contours at 60fps, in pure JS, no DOM. Draw a shape, drag its edges, and watch text pour into it like water finding its level. Twelve lines of code. We built this because magazine-style layouts on the web shouldn't require a magazine's budget.</p>
+    <p>CSS promised us text that flows around any shape. That was 2013. We're still waiting. Pretext doesn't wait for specs — it reflows text around arbitrary contours at 60fps, in pure JS, no Canvas. Draw a shape, drag its edges, and watch text pour into it like water finding its level. Twelve lines of code. We built this because magazine-style layouts on the web shouldn't require a magazine's budget.</p>
   </div>
 </div>
 
@@ -428,14 +491,8 @@
 import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
 
 // --- Brand tokens ---
-const CREAM = '#FAF9F6'
-const TEXT_COLOR = '#2C2C2C'
 const TERRACOTTA = '#C2714F'
-const FOG = '#E8E5DF'
 const BARK = '#6B3A2A'
-const DUSK = '#5C5C5C'
-const SAGE = '#8B9E7E'
-const OCHRE = '#C49A3C'
 
 const FONT_SIZE = 16
 const FONT = `${FONT_SIZE}px Literata, Georgia, serif`
@@ -443,36 +500,31 @@ const LINE_HEIGHT = FONT_SIZE * 1.55
 
 const DEFAULT_TEXT = `Water finds its way. It does not force a path through stone but follows the grain of the earth, pooling in hollows, threading through fractures, always moving toward the lowest point with a patience that reshapes continents. A river does not argue with the mountain. It goes around, or it goes through, but it never stops. Given enough time, water will carve a canyon. Given enough patience, it will dissolve the hardest rock into sand. The ocean remembers every river that feeds it. Each tributary carries its own story — minerals from distant peaks, sediment from ancient forests, warmth from sunlit meadows. They merge without losing themselves, the way conversations layer into understanding. Rain falls where it will. It does not choose the fertile valley over the barren ridge. It arrives everywhere with the same quiet insistence, and the earth decides what to do with it. Some soaks in. Some runs off. Some freezes and waits. But none of it is wasted. Even the water that evaporates is just beginning another journey, rising to become clouds, drifting over new terrain, falling again somewhere unexpected. The cycle has no beginning and no end. It is not a circle but a spiral — each pass slightly different, each iteration carrying forward what came before. This is how meaning moves through language, how ideas find their shape. Not forced, not rushed. Flowing.`
 
-// --- Canvas setup ---
-const canvas = document.getElementById('canvas')
-const ctx = canvas.getContext('2d')
-const wrap = document.getElementById('canvas-wrap')
-let W, H, dpr
+// --- DOM refs ---
+const wrap = document.getElementById('editor-wrap')
+const svg = document.getElementById('shape-svg')
+const shapePath = document.getElementById('shape-path')
+const ctrlGroup = document.getElementById('ctrl-points-group')
+const textLayer = document.getElementById('text-layer')
+
+let W, H
 
 function resize() {
-  dpr = window.devicePixelRatio || 1
   W = wrap.clientWidth
   H = wrap.clientHeight
-  canvas.width = W * dpr
-  canvas.height = H * dpr
-  canvas.style.width = W + 'px'
-  canvas.style.height = H + 'px'
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`)
 }
 resize()
-window.addEventListener('resize', () => { resize(); rebuildShape() })
+window.addEventListener('resize', () => { resize(); rebuildShape(); scheduleLayout() })
 
 // --- Shape system ---
 let controlPoints = []
 let activeShape = 'blob'
 let draggingPoint = -1
-let hoverPoint = -1
 
 const POINT_RADIUS = 8
-const POINT_HIT_RADIUS = 16
 
 function makeBlob(cx, cy, rx, ry) {
-  // Asymmetric kidney shape, 6 points
   return [
     { x: cx - rx * 0.3, y: cy - ry * 0.95 },
     { x: cx + rx * 0.7, y: cy - ry * 0.6 },
@@ -533,16 +585,17 @@ function rebuildShape() {
     case 'diamond': controlPoints = makeDiamond(cx, cy, rx, ry); break
     case 'spiral': controlPoints = makeSpiral(cx, cy, rx, ry); break
   }
+  updateSVG()
+  scheduleLayout()
 }
 rebuildShape()
 
-// --- Smooth closed curve through points ---
-function getSplinePath(pts) {
-  if (pts.length < 3) return null
+// --- Catmull-Rom to cubic bezier: generate SVG path d attribute ---
+function getSplinePathD(pts) {
+  if (pts.length < 3) return ''
   const n = pts.length
-  const path = new Path2D()
+  let d = ''
 
-  // Catmull-Rom to cubic bezier, closed
   for (let i = 0; i < n; i++) {
     const p0 = pts[(i - 1 + n) % n]
     const p1 = pts[i]
@@ -554,33 +607,46 @@ function getSplinePath(pts) {
     const cp2x = p2.x - (p3.x - p1.x) / 6
     const cp2y = p2.y - (p3.y - p1.y) / 6
 
-    if (i === 0) path.moveTo(p1.x, p1.y)
-    path.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y)
+    if (i === 0) d += `M ${p1.x} ${p1.y} `
+    d += `C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y} `
   }
-  path.closePath()
-  return path
+  d += 'Z'
+  return d
 }
 
-// --- Scanline: get horizontal span at y ---
-function getShapeSpanAtY(y, pts, samples) {
-  // Sample the spline path boundary at many points, find x range at this y
-  // Use the samples array (pre-computed boundary points)
-  const tolerance = LINE_HEIGHT * 0.6
-  let minX = Infinity, maxX = -Infinity
-  let found = false
-  for (const s of samples) {
-    if (Math.abs(s.y - y) < tolerance) {
-      if (s.x < minX) minX = s.x
-      if (s.x > maxX) maxX = s.x
-      found = true
-    }
-  }
-  if (!found) return null
-  // Add small padding
-  const pad = 12
-  return { left: minX + pad, right: maxX - pad }
+// --- Update SVG shape and control points ---
+function updateSVG() {
+  // Update path
+  shapePath.setAttribute('d', getSplinePathD(controlPoints))
+
+  // Rebuild control point circles and labels
+  ctrlGroup.innerHTML = ''
+  controlPoints.forEach((p, i) => {
+    // Outer circle (visible point)
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle')
+    circle.setAttribute('cx', p.x)
+    circle.setAttribute('cy', p.y)
+    circle.setAttribute('r', POINT_RADIUS)
+    circle.setAttribute('fill', '#FAF9F6')
+    circle.setAttribute('stroke', TERRACOTTA)
+    circle.setAttribute('stroke-width', '1.5')
+    circle.setAttribute('class', 'ctrl-point')
+    circle.setAttribute('data-idx', i)
+    circle.style.filter = 'drop-shadow(0 1px 3px rgba(107,58,42,0.08))'
+    ctrlGroup.appendChild(circle)
+
+    // Index label
+    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text')
+    label.setAttribute('x', p.x)
+    label.setAttribute('y', p.y)
+    label.setAttribute('fill', BARK)
+    label.setAttribute('class', 'ctrl-point-label')
+    label.textContent = i + 1
+    ctrlGroup.appendChild(label)
+  })
 }
 
+// --- Scanline: sample spline boundary, get horizontal span at y ---
 function sampleSplineBoundary(pts, count) {
   const n = pts.length
   const samples = []
@@ -608,7 +674,22 @@ function sampleSplineBoundary(pts, count) {
   return samples
 }
 
-// --- Get bounding box of shape ---
+function getShapeSpanAtY(y, samples) {
+  const tolerance = LINE_HEIGHT * 0.6
+  let minX = Infinity, maxX = -Infinity
+  let found = false
+  for (const s of samples) {
+    if (Math.abs(s.y - y) < tolerance) {
+      if (s.x < minX) minX = s.x
+      if (s.x > maxX) maxX = s.x
+      found = true
+    }
+  }
+  if (!found) return null
+  const pad = 12
+  return { left: minX + pad, right: maxX - pad }
+}
+
 function getShapeBounds(samples) {
   let minY = Infinity, maxY = -Infinity
   for (const s of samples) {
@@ -622,7 +703,76 @@ function getShapeBounds(samples) {
 let userText = DEFAULT_TEXT
 const textInput = document.getElementById('text-input')
 textInput.value = userText
-textInput.addEventListener('input', () => { userText = textInput.value })
+textInput.addEventListener('input', () => { userText = textInput.value; scheduleLayout() })
+
+// --- Pretext layout state ---
+let lastPreparedText = ''
+let prepared = null
+
+// --- Layout: clear text layer, reflow text into positioned divs ---
+let layoutRAF = 0
+function scheduleLayout() {
+  if (!layoutRAF) layoutRAF = requestAnimationFrame(doLayout)
+}
+
+function doLayout() {
+  layoutRAF = 0
+
+  // Prepare text if changed
+  if (userText !== lastPreparedText) {
+    prepared = prepareWithSegments(userText, FONT)
+    lastPreparedText = userText
+  }
+  if (!prepared) return
+
+  // Sample boundary
+  const samples = sampleSplineBoundary(controlPoints, 400)
+  const bounds = getShapeBounds(samples)
+
+  // Clear previous text lines
+  textLayer.innerHTML = ''
+
+  // Flow text into shape
+  highlightCodeLine(1)
+  let cursor = { segmentIndex: 0, graphemeIndex: 0 }
+  let y = bounds.minY + FONT_SIZE + 4
+  let linesDrawn = 0
+  let safety = 0
+
+  while (y < bounds.maxY - 4 && safety++ < 200) {
+    const span = getShapeSpanAtY(y, samples)
+    if (!span || span.right - span.left < 30) {
+      y += LINE_HEIGHT
+      continue
+    }
+
+    const width = span.right - span.left
+    const line = layoutNextLine(prepared, cursor, width)
+    if (!line) break
+
+    // Create positioned DOM element for this line
+    const div = document.createElement('div')
+    div.className = 'text-line'
+    div.textContent = line.text
+    div.style.left = span.left + 'px'
+    div.style.top = y + 'px'
+    textLayer.appendChild(div)
+
+    cursor = line.end
+    y += LINE_HEIGHT
+    linesDrawn++
+  }
+
+  // Update code highlighting
+  if (draggingPoint >= 0) {
+    highlightCodeLine(6 + (Math.floor(performance.now() / 66) % 10))
+  } else if (linesDrawn > 0) {
+    highlightCodeLine(10)
+  }
+}
+
+// Initial layout
+scheduleLayout()
 
 // --- Code display ---
 const codeLines = [
@@ -638,7 +788,7 @@ const codeLines = [
   { text: '  const width = span.right - span.left', cls: '' },
   { text: '  const line = layoutNextLine(prepared, cursor, width)', cls: '' },
   { text: '  if (!line) break', cls: '' },
-  { text: '  drawLine(line, span.left, y)', cls: '' },
+  { text: '  div.textContent = line.text  // DOM, not Canvas', cls: '' },
   { text: '  cursor = line.end', cls: '' },
   { text: '  y += lineHeight', cls: '' },
   { text: '}', cls: '' },
@@ -652,10 +802,9 @@ codeLines.forEach((cl, i) => {
   if (cl.cls === 'comment') {
     div.innerHTML = `<span class="comment">${cl.text}</span>`
   } else {
-    // Simple syntax highlighting
     let html = cl.text
       .replace(/\b(const|let|while|if|break|continue)\b/g, '<span class="keyword">$1</span>')
-      .replace(/\b(prepareWithSegments|layoutNextLine|getShapeSpanAtY|drawLine)\b/g, '<span class="fn">$1</span>')
+      .replace(/\b(prepareWithSegments|layoutNextLine|getShapeSpanAtY)\b/g, '<span class="fn">$1</span>')
       .replace(/(\/\/.*)/g, '<span class="comment">$1</span>')
     div.innerHTML = html || '&nbsp;'
   }
@@ -723,208 +872,111 @@ document.querySelectorAll('.shape-btn').forEach(btn => {
   })
 })
 
-// --- Drag handling ---
-function getMousePos(e) {
-  const rect = canvas.getBoundingClientRect()
-  return { x: e.clientX - rect.left, y: e.clientY - rect.top }
+// --- Drag handling via pointer events on SVG ---
+function getSVGPos(e) {
+  const rect = svg.getBoundingClientRect()
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY
+  return { x: clientX - rect.left, y: clientY - rect.top }
 }
 
-function findNearestPoint(pos) {
-  let best = -1, bestDist = POINT_HIT_RADIUS * POINT_HIT_RADIUS
-  for (let i = 0; i < controlPoints.length; i++) {
-    const dx = pos.x - controlPoints[i].x
-    const dy = pos.y - controlPoints[i].y
-    const d2 = dx * dx + dy * dy
-    if (d2 < bestDist) { bestDist = d2; best = i }
-  }
-  return best
-}
+// Pointer down on control points
+svg.addEventListener('pointerdown', (e) => {
+  const target = e.target
+  if (!target.classList.contains('ctrl-point')) return
+  const idx = parseInt(target.dataset.idx, 10)
+  if (isNaN(idx)) return
 
-canvas.addEventListener('mousedown', (e) => {
-  const pos = getMousePos(e)
-  draggingPoint = findNearestPoint(pos)
-  if (draggingPoint >= 0) canvas.style.cursor = 'grabbing'
+  draggingPoint = idx
+  target.setAttribute('fill', TERRACOTTA)
+  target.setAttribute('r', POINT_RADIUS + 2)
+  target.style.cursor = 'grabbing'
+  target.style.filter = 'drop-shadow(0 2px 12px rgba(194,113,79,0.3))'
+  svg.setPointerCapture(e.pointerId)
+  e.preventDefault()
 })
 
-canvas.addEventListener('mousemove', (e) => {
-  const pos = getMousePos(e)
-  if (draggingPoint >= 0) {
-    controlPoints[draggingPoint].x = pos.x
-    controlPoints[draggingPoint].y = pos.y
-  } else {
-    const hp = findNearestPoint(pos)
-    hoverPoint = hp
-    canvas.style.cursor = hp >= 0 ? 'grab' : 'default'
+svg.addEventListener('pointermove', (e) => {
+  if (draggingPoint < 0) return
+  const pos = getSVGPos(e)
+  controlPoints[draggingPoint].x = pos.x
+  controlPoints[draggingPoint].y = pos.y
+
+  // Update SVG path (fast, just attribute change)
+  shapePath.setAttribute('d', getSplinePathD(controlPoints))
+
+  // Update dragged point position in SVG
+  const circles = ctrlGroup.querySelectorAll('.ctrl-point')
+  const labels = ctrlGroup.querySelectorAll('.ctrl-point-label')
+  if (circles[draggingPoint]) {
+    circles[draggingPoint].setAttribute('cx', pos.x)
+    circles[draggingPoint].setAttribute('cy', pos.y)
   }
+  if (labels[draggingPoint]) {
+    labels[draggingPoint].setAttribute('x', pos.x)
+    labels[draggingPoint].setAttribute('y', pos.y)
+  }
+
+  // Re-layout text
+  scheduleLayout()
 })
 
-canvas.addEventListener('mouseup', () => {
+svg.addEventListener('pointerup', (e) => {
+  if (draggingPoint < 0) return
+  const circles = ctrlGroup.querySelectorAll('.ctrl-point')
+  if (circles[draggingPoint]) {
+    circles[draggingPoint].setAttribute('fill', '#FAF9F6')
+    circles[draggingPoint].setAttribute('r', POINT_RADIUS)
+    circles[draggingPoint].style.cursor = 'grab'
+    circles[draggingPoint].style.filter = 'drop-shadow(0 1px 3px rgba(107,58,42,0.08))'
+  }
   draggingPoint = -1
-  canvas.style.cursor = hoverPoint >= 0 ? 'grab' : 'default'
+  svg.releasePointerCapture(e.pointerId)
 })
 
-canvas.addEventListener('mouseleave', () => {
-  if (draggingPoint < 0) {
-    hoverPoint = -1
-    canvas.style.cursor = 'default'
-  }
-})
-
-// Touch support
-canvas.addEventListener('touchstart', (e) => {
-  e.preventDefault()
+// Touch support (fallback for devices without pointer events)
+svg.addEventListener('touchstart', (e) => {
   const touch = e.touches[0]
-  const pos = getMousePos(touch)
-  draggingPoint = findNearestPoint(pos)
-}, { passive: false })
-
-canvas.addEventListener('touchmove', (e) => {
+  const el = document.elementFromPoint(touch.clientX, touch.clientY)
+  if (!el || !el.classList.contains('ctrl-point')) return
+  const idx = parseInt(el.dataset.idx, 10)
+  if (isNaN(idx)) return
+  draggingPoint = idx
+  el.setAttribute('fill', TERRACOTTA)
+  el.setAttribute('r', POINT_RADIUS + 2)
   e.preventDefault()
-  if (draggingPoint >= 0) {
-    const touch = e.touches[0]
-    const pos = getMousePos(touch)
-    controlPoints[draggingPoint].x = pos.x
-    controlPoints[draggingPoint].y = pos.y
-  }
 }, { passive: false })
 
-canvas.addEventListener('touchend', () => { draggingPoint = -1 })
+svg.addEventListener('touchmove', (e) => {
+  if (draggingPoint < 0) return
+  e.preventDefault()
+  const pos = getSVGPos(e)
+  controlPoints[draggingPoint].x = pos.x
+  controlPoints[draggingPoint].y = pos.y
+  shapePath.setAttribute('d', getSplinePathD(controlPoints))
 
-// --- Render loop ---
-let lastPreparedText = ''
-let prepared = null
-let frameCount = 0
-
-function render() {
-  requestAnimationFrame(render)
-  frameCount++
-
-  ctx.clearRect(0, 0, W, H)
-
-  // Background
-  ctx.fillStyle = CREAM
-  ctx.fillRect(0, 0, W, H)
-
-  const path = getSplinePath(controlPoints)
-  if (!path) return
-
-  // Draw shape fill — very subtle
-  ctx.save()
-  ctx.fillStyle = 'rgba(194, 113, 79, 0.03)'
-  ctx.fill(path)
-  ctx.restore()
-
-  // Draw shape stroke
-  ctx.save()
-  ctx.strokeStyle = FOG
-  ctx.lineWidth = 1.5
-  ctx.setLineDash([4, 4])
-  ctx.lineDashOffset = -frameCount * 0.3
-  ctx.stroke(path)
-  ctx.restore()
-
-  // Prepare text
-  if (userText !== lastPreparedText) {
-    prepared = prepareWithSegments(userText, FONT)
-    lastPreparedText = userText
+  const circles = ctrlGroup.querySelectorAll('.ctrl-point')
+  const labels = ctrlGroup.querySelectorAll('.ctrl-point-label')
+  if (circles[draggingPoint]) {
+    circles[draggingPoint].setAttribute('cx', pos.x)
+    circles[draggingPoint].setAttribute('cy', pos.y)
   }
-  if (!prepared) return
-
-  // Sample boundary
-  const samples = sampleSplineBoundary(controlPoints, 400)
-  const bounds = getShapeBounds(samples)
-
-  // Flow text into shape
-  highlightCodeLine(1) // "preparing"
-  let cursor = { segmentIndex: 0, graphemeIndex: 0 }
-  let y = bounds.minY + FONT_SIZE + 4
-  let linesDrawn = 0
-  let safety = 0
-  let currentCodeLine = 6
-
-  ctx.save()
-  ctx.font = FONT
-  ctx.fillStyle = TEXT_COLOR
-  ctx.textBaseline = 'alphabetic'
-
-  while (y < bounds.maxY - 4 && safety++ < 200) {
-    const span = getShapeSpanAtY(y, controlPoints, samples)
-    currentCodeLine = 7
-    if (!span || span.right - span.left < 30) {
-      y += LINE_HEIGHT
-      currentCodeLine = 8
-      continue
-    }
-
-    const width = span.right - span.left
-    currentCodeLine = 10
-
-    const line = layoutNextLine(prepared, cursor, width)
-    currentCodeLine = 11
-    if (!line) { currentCodeLine = 11; break }
-
-    // Center the line within the span
-    const lineX = span.left
-    ctx.fillText(line.text, lineX, y)
-
-    cursor = line.end
-    y += LINE_HEIGHT
-    linesDrawn++
-    currentCodeLine = 14
+  if (labels[draggingPoint]) {
+    labels[draggingPoint].setAttribute('x', pos.x)
+    labels[draggingPoint].setAttribute('y', pos.y)
   }
+  scheduleLayout()
+}, { passive: false })
 
-  ctx.restore()
-
-  // Update code highlighting based on activity
-  if (draggingPoint >= 0) {
-    // While dragging, cycle through code lines to show activity
-    highlightCodeLine(6 + (Math.floor(frameCount / 4) % 10))
-  } else if (linesDrawn > 0) {
-    highlightCodeLine(10) // layoutNextLine
+svg.addEventListener('touchend', () => {
+  if (draggingPoint < 0) return
+  const circles = ctrlGroup.querySelectorAll('.ctrl-point')
+  if (circles[draggingPoint]) {
+    circles[draggingPoint].setAttribute('fill', '#FAF9F6')
+    circles[draggingPoint].setAttribute('r', POINT_RADIUS)
   }
-
-  // Draw control points
-  for (let i = 0; i < controlPoints.length; i++) {
-    const p = controlPoints[i]
-    const isActive = i === draggingPoint
-    const isHover = i === hoverPoint
-
-    ctx.beginPath()
-    ctx.arc(p.x, p.y, isActive ? POINT_RADIUS + 2 : (isHover ? POINT_RADIUS + 1 : POINT_RADIUS), 0, Math.PI * 2)
-
-    if (isActive) {
-      ctx.fillStyle = TERRACOTTA
-      ctx.shadowColor = 'rgba(194, 113, 79, 0.3)'
-      ctx.shadowBlur = 12
-    } else if (isHover) {
-      ctx.fillStyle = TERRACOTTA
-      ctx.shadowColor = 'rgba(194, 113, 79, 0.15)'
-      ctx.shadowBlur = 8
-    } else {
-      ctx.fillStyle = '#FAF9F6'
-      ctx.strokeStyle = TERRACOTTA
-      ctx.lineWidth = 1.5
-      ctx.shadowColor = 'rgba(107, 58, 42, 0.08)'
-      ctx.shadowBlur = 4
-    }
-    ctx.fill()
-    if (!isActive && !isHover) ctx.stroke()
-
-    ctx.shadowColor = 'transparent'
-    ctx.shadowBlur = 0
-
-    // Point index label
-    ctx.font = '9px JetBrains Mono, monospace'
-    ctx.fillStyle = isActive || isHover ? '#FAF9F6' : BARK
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.fillText(i + 1, p.x, p.y)
-    ctx.textAlign = 'start'
-    ctx.textBaseline = 'alphabetic'
-  }
-}
-
-requestAnimationFrame(render)
+  draggingPoint = -1
+})
 </script>
 </body>
 </html>

@@ -122,16 +122,72 @@
 
   .btn-small:hover { background: #E8E5DF; }
 
-  .canvas-wrap {
+  .content-wrap {
     flex: 1;
     position: relative;
     min-height: 0;
+    overflow: hidden;
   }
 
-  canvas {
-    display: block;
+  .text-area {
     width: 100%;
     height: 100%;
+    overflow-y: auto;
+    padding: 36px 0;
+    cursor: none;
+  }
+
+  .text-container {
+    max-width: 620px;
+    margin: 0 auto;
+    padding: 0 60px;
+    font-family: 'Literata', Georgia, serif;
+    font-size: 16px;
+    line-height: 28px;
+    color: #2C2C2C;
+  }
+
+  .text-container .text-line {
+    white-space: pre-wrap;
+    min-height: 28px;
+  }
+
+  .loupe {
+    position: fixed;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 2.5px solid #C2714F;
+    box-shadow: 0 4px 20px rgba(194,113,79,0.25), inset 0 0 0 1px rgba(255,255,255,0.2);
+    pointer-events: none;
+    z-index: 50;
+    display: none;
+  }
+
+  .loupe-glass {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: radial-gradient(
+      circle at 35% 35%,
+      rgba(255,255,255,0.06) 0%,
+      rgba(255,255,255,0) 70%,
+      rgba(0,0,0,0.03) 100%
+    );
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  .loupe-content {
+    position: absolute;
+    font-family: 'Literata', Georgia, serif;
+    color: #2C2C2C;
+    white-space: pre-wrap;
+    background: rgba(250, 249, 246, 0.97);
+    z-index: 1;
+  }
+
+  .loupe-content .mag-line {
+    white-space: pre-wrap;
   }
 
   .caption {
@@ -272,8 +328,11 @@
   <button class="btn-small" id="whyBtn">Why we built this</button>
 </div>
 
-<div class="canvas-wrap">
-  <canvas id="canvas"></canvas>
+<div class="content-wrap">
+  <div class="text-area" id="textArea">
+    <div class="text-container" id="textContainer"></div>
+  </div>
+
   <div class="caption">Every line reflows in real time — this is not zoom.</div>
 
   <div class="text-panel" id="textPanel">
@@ -285,11 +344,16 @@
   </div>
 </div>
 
+<div class="loupe" id="loupe">
+  <div class="loupe-content" id="loupeContent"></div>
+  <div class="loupe-glass"></div>
+</div>
+
 <div class="modal-overlay" id="whyModal">
   <div class="modal">
     <h2>Why We Built This</h2>
     <p>Browser zoom is all-or-nothing. Pinch-to-zoom breaks layout. We wanted magnification that respects the reading experience — enlarge exactly what you need while the rest of the page stays coherent.</p>
-    <p>Under the loupe, text reflows at double size with comfortable spacing. Around it, every line recalculates its breaks in real time. Fifty lines, sixty times a second, zero jank.</p>
+    <p>Under the loupe, text reflows at the magnified size with comfortable spacing. The base text stays stable and selectable. A proofreading instrument, not a gimmick.</p>
     <button class="close-btn" id="closeModal">Close</button>
   </div>
 </div>
@@ -305,9 +369,11 @@ Good typography serves this attention. Comfortable line lengths, generous spacin
 
 There is something satisfying about finding the fault in a seemingly perfect page. The duplicated duplicated word, the misplaced mark, the spelling that almost passed \u2014 each one caught is a small victory for careful reading. The right magnification, at the right moment, makes the invisible visible.`
 
-// --- DOM ---
-const canvas = document.getElementById('canvas')
-const ctx = canvas.getContext('2d')
+// --- DOM refs ---
+const textArea = document.getElementById('textArea')
+const textContainer = document.getElementById('textContainer')
+const loupeEl = document.getElementById('loupe')
+const loupeContent = document.getElementById('loupeContent')
 const sourceTextEl = document.getElementById('sourceText')
 const loupeSizeSlider = document.getElementById('loupeSize')
 const magLevelSlider = document.getElementById('magLevel')
@@ -317,28 +383,39 @@ const magLevelVal = document.getElementById('magLevelVal')
 sourceTextEl.value = DEFAULT_TEXT
 
 // --- State ---
-let W = 0, H = 0
 let mouseX = -1000, mouseY = -1000
+let smoothX = -1000, smoothY = -1000
 let loupeRadius = 120
 let magnification = 2.0
 let preparedNormal = null
 let preparedMag = null
 let needsPrepare = true
+let needsLayout = true
+let needsMagLayout = true
 
 const NORMAL_SIZE = 16
 const NORMAL_LH = 28
-const PAD = 60
 const MAX_TEXT_W = 620
 
 function magSize() { return Math.round(NORMAL_SIZE * magnification) }
 function magLH() { return Math.round(NORMAL_LH * magnification) }
-function textWidth() { return Math.min(MAX_TEXT_W, W - PAD * 2) }
-function textX() { return Math.max(PAD, (W - textWidth()) / 2) }
+
+// Cached layout results
+let normalLines = []
+let normalCharOffsets = []
+let magLines = []
+let magCharOffsets = []
 
 // --- Prepare ---
 function prepareTexts() {
   const text = sourceTextEl.value
-  if (!text.trim()) { preparedNormal = null; preparedMag = null; return }
+  if (!text.trim()) {
+    preparedNormal = null
+    preparedMag = null
+    normalLines = []
+    magLines = []
+    return
+  }
   const nf = `${NORMAL_SIZE}px Literata, Georgia, serif`
   const mf = `${magSize()}px Literata, Georgia, serif`
   try {
@@ -346,283 +423,236 @@ function prepareTexts() {
     preparedMag = prepareWithSegments(text, mf)
   } catch (e) {
     console.error('prepare failed:', e)
-    preparedNormal = null; preparedMag = null
+    preparedNormal = null
+    preparedMag = null
   }
   needsPrepare = false
+  needsLayout = true
+  needsMagLayout = true
 }
 
-// --- Resize ---
-function resize() {
-  const wrap = canvas.parentElement
-  const dpr = window.devicePixelRatio || 1
-  W = wrap.clientWidth
-  H = wrap.clientHeight
-  canvas.width = W * dpr
-  canvas.height = H * dpr
-  canvas.style.width = W + 'px'
-  canvas.style.height = H + 'px'
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+function getTextWidth() {
+  const containerRect = textContainer.getBoundingClientRect()
+  // Use the actual container width (constrained by max-width and padding)
+  return containerRect.width
 }
 
-// --- Easing for smooth loupe boundary ---
-// Returns a blend factor [0,1] where 0 = normal, 1 = fully magnified
-// based on how close a y-position is to the loupe center
-function loupeInfluence(lineY, lineH, loupeCenterY, loupeR) {
-  // Distance from line center to loupe center
-  const lineCenterY = lineY + lineH * 0.5
-  const dist = Math.abs(lineCenterY - loupeCenterY)
-  if (dist > loupeR) return 0
-  // Smooth falloff using cosine
-  const t = dist / loupeR
-  return 0.5 * (1 + Math.cos(t * Math.PI))
-}
+// --- Layout normal text into DOM ---
+function layoutNormalText() {
+  if (!preparedNormal) {
+    textContainer.innerHTML = ''
+    normalLines = []
+    normalCharOffsets = []
+    return
+  }
 
-// --- Render ---
-function render() {
-  if (needsPrepare) prepareTexts()
-  ctx.clearRect(0, 0, W, H)
-  if (!preparedNormal || !preparedMag) { requestAnimationFrame(render); return }
+  const tw = getTextWidth()
+  if (tw <= 0) return
 
-  const loupeR = loupeRadius
-  const lx = mouseX
-  const ly = mouseY
-  const tw = textWidth()
-  const tx = textX()
-  const startY = 36
-  const mLH = magLH()
-  const mSz = magSize()
-  const loupeActive = lx > -500
-
-  // ---------------------------------------------------------------
-  // PHASE 1: Layout all text at NORMAL size to get line positions
-  //          and cursor positions so we can map between the two.
-  // ---------------------------------------------------------------
-  const normalLines = []
+  normalLines = []
+  normalCharOffsets = [0]
   let cursor = { segmentIndex: 0, graphemeIndex: 0 }
   for (let i = 0; i < 500; i++) {
     const line = layoutNextLine(preparedNormal, cursor, tw)
     if (!line) break
-    normalLines.push({ text: line.text, start: cursor, end: line.end })
+    normalLines.push(line.text)
+    normalCharOffsets.push(normalCharOffsets[normalCharOffsets.length - 1] + line.text.length)
     cursor = line.end
   }
 
-  // ---------------------------------------------------------------
-  // PHASE 2: Layout all text at MAGNIFIED size.
-  // ---------------------------------------------------------------
-  const magLines = []
-  let magCursor = { segmentIndex: 0, graphemeIndex: 0 }
+  // Render to DOM
+  textContainer.innerHTML = ''
+  for (const lineText of normalLines) {
+    const div = document.createElement('div')
+    div.className = 'text-line'
+    div.textContent = lineText
+    textContainer.appendChild(div)
+  }
+
+  needsLayout = false
+}
+
+// --- Layout magnified text (cached, not in DOM yet) ---
+function layoutMagText() {
+  if (!preparedMag) {
+    magLines = []
+    magCharOffsets = []
+    return
+  }
+
+  const tw = getTextWidth()
+  if (tw <= 0) return
+
+  magLines = []
+  magCharOffsets = [0]
+  let cursor = { segmentIndex: 0, graphemeIndex: 0 }
   for (let i = 0; i < 500; i++) {
-    const line = layoutNextLine(preparedMag, magCursor, tw)
+    const line = layoutNextLine(preparedMag, cursor, tw)
     if (!line) break
-    magLines.push({ text: line.text, start: magCursor, end: line.end })
-    magCursor = line.end
+    magLines.push(line.text)
+    magCharOffsets.push(magCharOffsets[magCharOffsets.length - 1] + line.text.length)
+    cursor = line.end
   }
 
-  // ---------------------------------------------------------------
-  // PHASE 3: Adaptive layout.
-  // Walk through the text character-by-character (line-by-line in
-  // normal space). For each normal-layout line, compute where its
-  // baseline sits on the page. If that line overlaps the loupe's
-  // vertical range, we expand its line height (and will render it
-  // magnified inside the loupe). Outside the loupe, text stays
-  // normal. The vertical positions accumulate as we go, so lines
-  // below the loupe naturally shift down.
+  needsMagLayout = false
+}
+
+// --- Position the loupe and its content ---
+function updateLoupe() {
+  // Smooth interpolation
+  const ease = 0.25
+  if (smoothX < -500) { smoothX = mouseX; smoothY = mouseY }
+  smoothX += (mouseX - smoothX) * ease
+  smoothY += (mouseY - smoothY) * ease
+
+  const active = mouseX > -500
+
+  if (!active) {
+    loupeEl.style.display = 'none'
+    return
+  }
+
+  const diameter = loupeRadius * 2
+  loupeEl.style.display = 'block'
+  loupeEl.style.width = diameter + 'px'
+  loupeEl.style.height = diameter + 'px'
+  loupeEl.style.left = (smoothX - loupeRadius) + 'px'
+  loupeEl.style.top = (smoothY - loupeRadius) + 'px'
+
+  if (!magLines.length || !normalLines.length) return
+
+  // Figure out what part of the text is under the cursor.
+  // Get the text container's position relative to the viewport.
+  const containerRect = textContainer.getBoundingClientRect()
+  const tw = containerRect.width
+
+  // Cursor position relative to the text container
+  const relX = smoothX - containerRect.left
+  const relY = smoothY - containerRect.top
+
+  // Which normal line is the cursor on?
+  const normalLineIdx = Math.floor(relY / NORMAL_LH)
+
+  if (normalLineIdx < 0 || normalLineIdx >= normalLines.length) {
+    // Cursor is outside text, still show loupe but with offset content
+  }
+
+  // Character offset at the cursor's normal line
+  const charAtCursor = normalLineIdx >= 0 && normalLineIdx < normalCharOffsets.length
+    ? normalCharOffsets[normalLineIdx]
+    : 0
+
+  // Find the corresponding magnified line
+  let magLineIdx = 0
+  for (let i = 0; i < magCharOffsets.length - 1; i++) {
+    if (magCharOffsets[i + 1] > charAtCursor) {
+      magLineIdx = i
+      break
+    }
+  }
+
+  // The magnified text needs to be offset so the text under the cursor
+  // appears at the center of the loupe.
   //
-  // This produces a "bulge" effect: the loupe zone expands, and
-  // lines above/below stay put (above) or shift down (below).
-  // ---------------------------------------------------------------
+  // In normal space, the cursor is at relY within the text container.
+  // The corresponding magnified line is magLineIdx.
+  // The y-position of magLineIdx in magnified space is magLineIdx * magLH().
+  // We also need to account for where within the normal line the cursor is
+  // (fraction of line height).
+  const mLH = magLH()
+  const mSz = magSize()
 
-  // For each normal line, compute: rendered y-position, effective
-  // line height (blended between normal and magnified based on
-  // proximity to loupe center).
-  const renderedLines = []
-  let y = startY
+  // Fraction into the current normal line
+  const lineFrac = normalLineIdx >= 0
+    ? (relY - normalLineIdx * NORMAL_LH) / NORMAL_LH
+    : 0
 
-  // We also need a mapping from normal line index -> which mag lines
-  // cover the same text. Build a char-offset table.
-  // Char offset at start of normal line i
-  const normalCharOffsets = [0]
-  for (let i = 0; i < normalLines.length; i++) {
-    normalCharOffsets.push(normalCharOffsets[i] + normalLines[i].text.length)
+  // The magnified y that should appear at the loupe center
+  const magY = magLineIdx * mLH + lineFrac * mLH
+
+  // The loupe center in loupe-local coords is (loupeRadius, loupeRadius)
+  // So offset the magnified content so magY aligns with loupeRadius
+  const offsetY = loupeRadius - magY
+
+  // For X: the text is laid out the same width in both cases, but the
+  // magnified text is the same width container just with bigger font.
+  // Center the magnified text horizontally the same way as the base text.
+  // The text starts at containerRect.left relative to viewport.
+  // In loupe-local coords, the container left edge relative to the loupe left edge is:
+  const offsetX = containerRect.left - (smoothX - loupeRadius)
+
+  // Build magnified line DOM
+  // Only render lines that could be visible in the loupe
+  const visibleMagStart = Math.max(0, Math.floor((magY - loupeRadius) / mLH) - 1)
+  const visibleMagEnd = Math.min(magLines.length, Math.ceil((magY + loupeRadius) / mLH) + 1)
+
+  loupeContent.style.fontSize = mSz + 'px'
+  loupeContent.style.lineHeight = mLH + 'px'
+  loupeContent.style.left = offsetX + 'px'
+  loupeContent.style.top = offsetY + 'px'
+  loupeContent.style.width = tw + 'px'
+  // Pad top for lines we skip
+  loupeContent.style.paddingTop = (visibleMagStart * mLH) + 'px'
+
+  // Rebuild loupe content only with visible lines
+  let html = ''
+  for (let i = visibleMagStart; i < visibleMagEnd; i++) {
+    html += '<div class="mag-line">' + escapeHTML(magLines[i]) + '</div>'
   }
-  const magCharOffsets = [0]
-  for (let i = 0; i < magLines.length; i++) {
-    magCharOffsets.push(magCharOffsets[i] + magLines[i].text.length)
+  loupeContent.innerHTML = html
+}
+
+function escapeHTML(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+// --- Animation loop (just for smooth loupe movement) ---
+let animating = false
+function tick() {
+  updateLoupe()
+  animating = mouseX > -500
+  if (animating) requestAnimationFrame(tick)
+}
+
+function startAnimating() {
+  if (!animating) {
+    animating = true
+    requestAnimationFrame(tick)
   }
-
-  for (let i = 0; i < normalLines.length; i++) {
-    const nl = normalLines[i]
-
-    // Compute influence: how much this line is inside the loupe
-    const influence = loupeActive
-      ? loupeInfluence(y, NORMAL_LH, ly, loupeR)
-      : 0
-
-    // Blended line height
-    const lh = NORMAL_LH + influence * (mLH - NORMAL_LH)
-
-    renderedLines.push({
-      normalIndex: i,
-      text: nl.text,
-      y: y,
-      lineHeight: lh,
-      influence: influence
-    })
-
-    y += lh
-  }
-
-  // ---------------------------------------------------------------
-  // PHASE 4: Render.
-  // Two passes: first render all text normally (outside loupe),
-  // then clip to loupe circle and render magnified text.
-  // ---------------------------------------------------------------
-
-  // 4a: Normal text (everything)
-  ctx.save()
-  ctx.font = `${NORMAL_SIZE}px Literata, Georgia, serif`
-  ctx.fillStyle = '#2C2C2C'
-  ctx.textBaseline = 'alphabetic'
-
-  for (const rl of renderedLines) {
-    // Baseline offset: place text at y + some portion of lineHeight
-    const baseline = rl.y + rl.lineHeight * 0.75
-    if (baseline < -NORMAL_LH || baseline > H + NORMAL_LH) continue
-
-    if (rl.influence > 0.01) {
-      // Fade out normal text in the loupe zone so magnified text takes over
-      ctx.globalAlpha = Math.max(0, 1 - rl.influence * 1.5)
-    }
-    ctx.fillText(rl.text, tx, baseline)
-    ctx.globalAlpha = 1
-  }
-  ctx.restore()
-
-  // 4b: Magnified text inside the loupe circle
-  if (loupeActive) {
-    ctx.save()
-    ctx.beginPath()
-    ctx.arc(lx, ly, loupeR, 0, Math.PI * 2)
-    ctx.clip()
-
-    // Glass effect: slight brightness
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.05)'
-    ctx.beginPath()
-    ctx.arc(lx, ly, loupeR, 0, Math.PI * 2)
-    ctx.fill()
-
-    // Find which mag lines should be drawn.
-    // We need to position mag lines so they align with the displaced
-    // normal lines in the loupe zone.
-    //
-    // Strategy: find the first rendered line that has influence > 0.
-    // Get its character offset. Find the corresponding mag line.
-    // Render mag lines from there, using mLH spacing, starting at
-    // the y-position of that first affected rendered line.
-
-    let firstAffectedIdx = -1
-    for (let i = 0; i < renderedLines.length; i++) {
-      if (renderedLines[i].influence > 0.01) {
-        firstAffectedIdx = i
-        break
-      }
-    }
-
-    if (firstAffectedIdx >= 0) {
-      const charOffset = normalCharOffsets[firstAffectedIdx]
-
-      // Find corresponding mag line
-      let magStartIdx = 0
-      for (let i = 0; i < magCharOffsets.length - 1; i++) {
-        if (magCharOffsets[i + 1] > charOffset) {
-          magStartIdx = i
-          break
-        }
-      }
-
-      // Compute the y-offset for mag lines.
-      // The first affected rendered line is at renderedLines[firstAffectedIdx].y.
-      // The mag line that corresponds to the same text should start at the same y.
-      // But the mag line might start a bit earlier in the text (since it might
-      // include chars from before the normal line boundary). Adjust:
-      const charDiff = charOffset - magCharOffsets[magStartIdx]
-      // If charDiff > 0, the mag line starts before our affected zone, so we
-      // need to offset up a bit. For simplicity, just start at the rendered y.
-
-      const affectedY = renderedLines[firstAffectedIdx].y
-      const magBaseline = affectedY + mLH * 0.75
-
-      ctx.font = `${mSz}px Literata, Georgia, serif`
-      ctx.fillStyle = '#2C2C2C'
-      ctx.textBaseline = 'alphabetic'
-
-      for (let i = magStartIdx; i < magLines.length; i++) {
-        const myBase = magBaseline + (i - magStartIdx) * mLH
-        if (myBase > ly + loupeR + mLH) break
-        if (myBase < ly - loupeR - mLH) continue
-        ctx.fillText(magLines[i].text, tx, myBase)
-      }
-    }
-
-    ctx.restore()
-
-    // --- Loupe border ---
-    ctx.save()
-    ctx.shadowColor = 'rgba(194, 113, 79, 0.25)'
-    ctx.shadowBlur = 20
-    ctx.shadowOffsetY = 4
-    ctx.beginPath()
-    ctx.arc(lx, ly, loupeR, 0, Math.PI * 2)
-    ctx.strokeStyle = '#C2714F'
-    ctx.lineWidth = 2.5
-    ctx.stroke()
-    ctx.restore()
-
-    // Inner highlight
-    ctx.save()
-    ctx.beginPath()
-    ctx.arc(lx, ly, loupeR - 1, 0, Math.PI * 2)
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)'
-    ctx.lineWidth = 1
-    ctx.stroke()
-    ctx.restore()
-
-    // Glass gradient
-    ctx.save()
-    ctx.beginPath()
-    ctx.arc(lx, ly, loupeR, 0, Math.PI * 2)
-    ctx.clip()
-    const grad = ctx.createRadialGradient(
-      lx - loupeR * 0.3, ly - loupeR * 0.3, 0,
-      lx, ly, loupeR
-    )
-    grad.addColorStop(0, 'rgba(255, 255, 255, 0.04)')
-    grad.addColorStop(0.7, 'rgba(255, 255, 255, 0)')
-    grad.addColorStop(1, 'rgba(0, 0, 0, 0.03)')
-    ctx.fillStyle = grad
-    ctx.fillRect(lx - loupeR, ly - loupeR, loupeR * 2, loupeR * 2)
-    ctx.restore()
-  }
-
-  requestAnimationFrame(render)
 }
 
 // --- Events ---
-canvas.addEventListener('mousemove', e => {
-  const r = canvas.getBoundingClientRect()
-  mouseX = e.clientX - r.left
-  mouseY = e.clientY - r.top
-})
-canvas.addEventListener('mouseleave', () => { mouseX = -1000; mouseY = -1000 })
+function onPointerMove(clientX, clientY) {
+  mouseX = clientX
+  mouseY = clientY
+  startAnimating()
+}
 
-canvas.addEventListener('touchmove', e => {
+document.addEventListener('mousemove', e => {
+  onPointerMove(e.clientX, e.clientY)
+})
+
+document.addEventListener('mouseleave', () => {
+  mouseX = -1000
+  mouseY = -1000
+  smoothX = -1000
+  smoothY = -1000
+  loupeEl.style.display = 'none'
+})
+
+document.addEventListener('touchmove', e => {
   e.preventDefault()
   const t = e.touches[0]
-  const r = canvas.getBoundingClientRect()
-  mouseX = t.clientX - r.left
-  mouseY = t.clientY - r.top
+  onPointerMove(t.clientX, t.clientY)
 }, { passive: false })
-canvas.addEventListener('touchend', () => { mouseX = -1000; mouseY = -1000 })
+
+document.addEventListener('touchend', () => {
+  mouseX = -1000
+  mouseY = -1000
+  smoothX = -1000
+  smoothY = -1000
+  loupeEl.style.display = 'none'
+})
 
 // Sliders
 loupeSizeSlider.addEventListener('input', () => {
@@ -633,6 +663,7 @@ magLevelSlider.addEventListener('input', () => {
   magnification = parseFloat(magLevelSlider.value)
   magLevelVal.textContent = magnification.toFixed(1) + 'x'
   needsPrepare = true
+  rebuild()
 })
 
 // Text panel
@@ -643,7 +674,10 @@ document.getElementById('toggleTextBtn').addEventListener('click', () => {
 document.getElementById('closeTextBtn').addEventListener('click', () => {
   textPanel.classList.remove('open')
 })
-sourceTextEl.addEventListener('input', () => { needsPrepare = true })
+sourceTextEl.addEventListener('input', () => {
+  needsPrepare = true
+  rebuild()
+})
 
 // Modal
 document.getElementById('whyBtn').addEventListener('click', () => {
@@ -657,17 +691,37 @@ document.getElementById('whyModal').addEventListener('click', e => {
 })
 
 // Resize
-window.addEventListener('resize', resize)
+let resizeTimer
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer)
+  resizeTimer = setTimeout(() => {
+    needsLayout = true
+    needsMagLayout = true
+    rebuild()
+  }, 100)
+})
+
+// --- Rebuild everything ---
+function rebuild() {
+  if (needsPrepare) prepareTexts()
+  if (needsLayout) layoutNormalText()
+  if (needsMagLayout) layoutMagText()
+}
 
 // --- Init ---
 function init() {
-  resize()
-  // Position loupe off-center on first load
-  mouseX = W * 0.35
-  mouseY = H * 0.4
   document.fonts.ready.then(() => {
     prepareTexts()
-    requestAnimationFrame(render)
+    layoutNormalText()
+    layoutMagText()
+
+    // Show loupe at a nice default position
+    const containerRect = textContainer.getBoundingClientRect()
+    mouseX = containerRect.left + containerRect.width * 0.4
+    mouseY = containerRect.top + 120
+    smoothX = mouseX
+    smoothY = mouseY
+    startAnimating()
   })
 }
 
