@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Integral Page</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=JetBrains+Mono:wght@300;400;500&family=Literata:ital,opsz,wght@0,7..72,200..900;1,7..72,200..900&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #FAF9F6;
+    color: #2C2C2C;
+    font-family: 'Literata', Georgia, serif;
+    height: 100vh;
+    width: 100vw;
+    display: flex;
+    overflow: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1000;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* --- Page area --- */
+  #page-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 48px 40px 80px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  #page-header {
+    text-align: center;
+    margin-bottom: 12px;
+    max-width: 720px;
+    width: 100%;
+  }
+
+  #page-header h1 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 13px;
+    font-weight: 400;
+    letter-spacing: 0.35em;
+    text-transform: uppercase;
+    color: #6B3A2A;
+    font-variation-settings: 'WONK' 1, 'SOFT' 100;
+    margin-bottom: 4px;
+  }
+
+  #page-header .attribution {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: #5C5C5C;
+    letter-spacing: 0.06em;
+    margin-bottom: 4px;
+  }
+
+  #page-header .epigraph {
+    font-family: 'Literata', Georgia, serif;
+    font-style: italic;
+    font-size: 13px;
+    color: #6B3A2A;
+    max-width: 420px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+
+  /* --- The compound grid page --- */
+  #integral-page {
+    max-width: 720px;
+    width: 100%;
+    position: relative;
+    margin-top: 24px;
+  }
+
+  /* Grid overlay (subtle, toggleable) */
+  #grid-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  #grid-overlay.visible {
+    opacity: 1;
+  }
+
+  .grid-col {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: rgba(196, 154, 60, 0.04);
+    border-left: 1px solid rgba(196, 154, 60, 0.08);
+    border-right: 1px solid rgba(196, 154, 60, 0.08);
+  }
+
+  /* --- Section rendering --- */
+  .section {
+    position: relative;
+    z-index: 1;
+    margin-bottom: 8px;
+    transition: margin-bottom 0.4s ease;
+  }
+
+  .section-lines {
+    font-family: 'Literata', Georgia, serif;
+    color: #2C2C2C;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .section-line {
+    white-space: pre-wrap;
+    word-break: normal;
+    overflow-wrap: break-word;
+  }
+
+  /* Multi-column sections */
+  .section-columns {
+    display: flex;
+    gap: 24px;
+  }
+
+  .section-col {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Argument mode: centered, escalating */
+  .section--argument .section-line {
+    text-align: center;
+  }
+
+  /* Whisper mode */
+  .section--whisper .section-line {
+    color: #8B9E7E;
+  }
+
+  /* Rotated text (Gerstner did this) */
+  .section--rotated {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    max-height: 400px;
+    margin: 24px auto;
+  }
+
+  /* Section mode indicator */
+  .section-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #C49A3C;
+    opacity: 0;
+    margin-bottom: 4px;
+    transition: opacity 0.3s;
+  }
+
+  .show-tags .section-tag {
+    opacity: 0.7;
+  }
+
+  /* --- Programme panel (right sidebar) --- */
+  #programme {
+    width: 280px;
+    min-width: 280px;
+    background: #FAF9F6;
+    border-left: 1px solid #E8E5DF;
+    padding: 28px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    overflow-y: auto;
+    box-shadow: -4px 0 24px rgba(107,58,42,0.04);
+    z-index: 10;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  #programme h2 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 16px;
+    font-weight: 400;
+    color: #6B3A2A;
+    font-variation-settings: 'WONK' 1, 'SOFT' 100;
+  }
+
+  #programme .subtitle {
+    font-size: 10px;
+    color: #5C5C5C;
+    letter-spacing: 0.04em;
+    margin-top: -16px;
+  }
+
+  /* Rule display */
+  .rule-group {
+    border-top: 1px solid #E8E5DF;
+    padding-top: 12px;
+  }
+
+  .rule-group-title {
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #6B3A2A;
+    margin-bottom: 8px;
+  }
+
+  .rule {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin-bottom: 4px;
+    font-size: 10px;
+    color: #5C5C5C;
+    line-height: 1.6;
+  }
+
+  .rule-arrow {
+    color: #C2714F;
+    flex-shrink: 0;
+  }
+
+  .rule-param {
+    color: #C49A3C;
+  }
+
+  .rule-value {
+    color: #2C2C2C;
+  }
+
+  /* Active section highlight in programme */
+  .active-section-display {
+    background: rgba(194, 113, 79, 0.06);
+    border: 1px solid rgba(194, 113, 79, 0.15);
+    border-radius: 4px;
+    padding: 10px 12px;
+  }
+
+  .active-section-label {
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #6B3A2A;
+    margin-bottom: 6px;
+  }
+
+  .active-params {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .active-param {
+    font-size: 10px;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .active-param-name {
+    color: #5C5C5C;
+  }
+
+  .active-param-val {
+    color: #C2714F;
+    font-weight: 500;
+  }
+
+  /* Toggle buttons */
+  .toggle-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .toggle-btn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.04em;
+    padding: 4px 10px;
+    border: 1px solid #E8E5DF;
+    border-radius: 3px;
+    background: transparent;
+    color: #5C5C5C;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .toggle-btn:hover {
+    border-color: #C2714F;
+    color: #C2714F;
+  }
+
+  .toggle-btn.active {
+    background: rgba(194, 113, 79, 0.08);
+    border-color: #C2714F;
+    color: #C2714F;
+  }
+
+  /* Perf */
+  .perf {
+    font-size: 9px;
+    color: #5C5C5C;
+    opacity: 0.6;
+  }
+
+  /* Why link */
+  .why-link {
+    font-size: 10px;
+    color: #5C5C5C;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    text-align: left;
+    text-decoration: underline;
+    text-decoration-color: #E8E5DF;
+    text-underline-offset: 3px;
+  }
+
+  .why-link:hover {
+    color: #C2714F;
+  }
+
+  /* Modal */
+  #modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(44,44,44,0.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+  }
+
+  #modal-overlay.visible {
+    display: flex;
+  }
+
+  #modal {
+    background: #FAF9F6;
+    max-width: 560px;
+    width: 90%;
+    padding: 40px;
+    border-radius: 8px;
+    box-shadow: 0 16px 48px rgba(107,58,42,0.15);
+    position: relative;
+  }
+
+  #modal h3 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 20px;
+    font-weight: 400;
+    color: #6B3A2A;
+    font-variation-settings: 'WONK' 1, 'SOFT' 100;
+    margin-bottom: 16px;
+  }
+
+  #modal p {
+    font-family: 'Literata', Georgia, serif;
+    font-size: 14px;
+    line-height: 1.75;
+    color: #2C2C2C;
+    margin-bottom: 12px;
+  }
+
+  #modal p:last-of-type { margin-bottom: 0; }
+
+  #modal .cite {
+    font-style: italic;
+    color: #6B3A2A;
+  }
+
+  #modal-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: none;
+    border: none;
+    font-size: 20px;
+    color: #5C5C5C;
+    cursor: pointer;
+    padding: 4px;
+    line-height: 1;
+  }
+
+  #modal-close:hover { color: #C2714F; }
+
+  /* Custom text */
+  .text-toggle {
+    font-size: 10px;
+    color: #5C5C5C;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    text-align: left;
+  }
+
+  .text-toggle:hover { color: #C2714F; }
+
+  #custom-text {
+    display: none;
+    width: 100%;
+    min-height: 160px;
+    padding: 8px;
+    font-family: 'Literata', Georgia, serif;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #2C2C2C;
+    background: #fff;
+    border: 1px solid #E8E5DF;
+    border-radius: 4px;
+    resize: vertical;
+    outline: none;
+  }
+
+  #custom-text:focus { border-color: #C2714F; }
+  #custom-text.visible { display: block; }
+
+  #apply-text {
+    display: none;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    padding: 5px 12px;
+    border: 1px solid #C2714F;
+    border-radius: 3px;
+    background: #C2714F;
+    color: #FAF9F6;
+    cursor: pointer;
+  }
+
+  #apply-text.visible { display: inline-block; }
+  #apply-text:hover { opacity: 0.85; }
+
+  /* Responsive */
+  @media (max-width: 840px) {
+    body { flex-direction: column; }
+    #programme {
+      width: 100%;
+      min-width: unset;
+      border-left: none;
+      border-top: 1px solid #E8E5DF;
+      max-height: 40vh;
+    }
+    #page-area { padding: 24px 16px 40px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="page-area">
+  <div id="page-header">
+    <h1>The Integral Page</h1>
+    <div class="attribution">pretext demo 27 — after Karl Gerstner</div>
+    <div class="epigraph">"The typographic process of giving form is the medium and meaning at one and the same time."</div>
+  </div>
+
+  <div id="integral-page">
+    <div id="grid-overlay"></div>
+    <div id="sections"></div>
+  </div>
+</div>
+
+<div id="programme">
+  <h2>Programme</h2>
+  <div class="subtitle">rules that generate this page</div>
+
+  <div class="active-section-display">
+    <div class="active-section-label">Active section</div>
+    <div class="active-params" id="active-params">
+      <div class="active-param"><span class="active-param-name">mode</span><span class="active-param-val" id="ap-mode">--</span></div>
+      <div class="active-param"><span class="active-param-name">intensity</span><span class="active-param-val" id="ap-intensity">--</span></div>
+      <div class="active-param"><span class="active-param-name">font-size</span><span class="active-param-val" id="ap-size">--</span></div>
+      <div class="active-param"><span class="active-param-name">font-weight</span><span class="active-param-val" id="ap-weight">--</span></div>
+      <div class="active-param"><span class="active-param-name">line-height</span><span class="active-param-val" id="ap-lh">--</span></div>
+      <div class="active-param"><span class="active-param-name">columns</span><span class="active-param-val" id="ap-cols">--</span></div>
+      <div class="active-param"><span class="active-param-name">alignment</span><span class="active-param-val" id="ap-align">--</span></div>
+    </div>
+  </div>
+
+  <div class="rule-group">
+    <div class="rule-group-title">Morphological Box</div>
+    <div class="rule"><span class="rule-param">intensity</span> <span class="rule-arrow">&rarr;</span> <span class="rule-value">font-size 14..32px</span></div>
+    <div class="rule"><span class="rule-param">intensity</span> <span class="rule-arrow">&rarr;</span> <span class="rule-value">font-weight 300..700</span></div>
+    <div class="rule"><span class="rule-param">pacing</span> <span class="rule-arrow">&rarr;</span> <span class="rule-value">line-height 1.25..1.80</span></div>
+    <div class="rule"><span class="rule-param">pacing</span> <span class="rule-arrow">&rarr;</span> <span class="rule-value">letter-spacing -0.01..0.03em</span></div>
+    <div class="rule"><span class="rule-param">mode:narration</span> <span class="rule-arrow">&rarr;</span> <span class="rule-value">1 col, left</span></div>
+    <div class="rule"><span class="rule-param">mode:dialogue</span> <span class="rule-arrow">&rarr;</span> <span class="rule-value">indent, dash</span></div>
+    <div class="rule"><span class="rule-param">mode:argument</span> <span class="rule-arrow">&rarr;</span> <span class="rule-value">center, escalate</span></div>
+    <div class="rule"><span class="rule-param">mode:whisper</span> <span class="rule-arrow">&rarr;</span> <span class="rule-value">light, small, sage</span></div>
+    <div class="rule"><span class="rule-param">mode:headline</span> <span class="rule-arrow">&rarr;</span> <span class="rule-value">2 col, bold, large</span></div>
+    <div class="rule"><span class="rule-param">mode:journal</span> <span class="rule-arrow">&rarr;</span> <span class="rule-value">3 col, small, dense</span></div>
+  </div>
+
+  <div class="rule-group">
+    <div class="rule-group-title">Grid</div>
+    <div class="rule">48-unit compound &mdash; divides for 1, 2, 3, 4, 6 columns</div>
+    <div class="rule">base unit: 15px (text size + leading)</div>
+  </div>
+
+  <div class="rule-group">
+    <div class="rule-group-title">Constraint</div>
+    <div class="rule">One typeface family. Literata variable.</div>
+    <div class="rule">Variation only through weight, size, spacing, columns.</div>
+  </div>
+
+  <div class="toggle-row">
+    <button class="toggle-btn" id="toggle-grid">grid</button>
+    <button class="toggle-btn" id="toggle-tags">tags</button>
+  </div>
+
+  <div class="perf" id="perf">--</div>
+
+  <div class="rule-group" style="margin-top: auto;">
+    <button class="text-toggle" id="text-toggle">+ edit text</button>
+    <textarea id="custom-text" spellcheck="false"></textarea>
+    <button id="apply-text">Apply</button>
+  </div>
+
+  <button class="why-link" id="why-link">why Gerstner</button>
+</div>
+
+<div id="modal-overlay">
+  <div id="modal">
+    <button id="modal-close">&times;</button>
+    <h3>Why Gerstner</h3>
+    <p>In 1957, Karl Gerstner designed <em>Schiff nach Europa</em>, a novel where the typography was inseparable from the story. When characters argued, the type grew larger and bolder. When the narrative shifted to journalism, the page became columns. When someone whispered, the type shrank. He called this <span class="cite">integral typography</span> &mdash; the message and its form are one.</p>
+    <p>Gerstner didn't make individual design decisions. He wrote <span class="cite">programmes</span> &mdash; rule sets that generate layouts from content. <span class="cite">"Instead of solutions to problems, programmes for solutions."</span> The designer defines the parameter space; the content navigates it.</p>
+    <p>This page is a programme. Each section of text is analyzed for its mode (narration, dialogue, argument, whisper) and its intensity (quiet to loud). Those values feed into a morphological box &mdash; Gerstner's matrix of parameters and components &mdash; which outputs the typography. One typeface, one grid, infinite variation. The form is not designed. It is generated by the text's own meaning.</p>
+  </div>
+</div>
+
+<script type="module">
+import { prepare, layout, prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
+
+// ---------------------------------------------------------------
+// THE TEXT
+// A compressed sea-voyage narrative with built-in mode annotations.
+// Annotations are stripped before rendering. They drive the programme.
+//
+// Format: [mode:MODE intensity:N] at start of paragraph
+//   MODE: narration, dialogue, argument, whisper, headline, journal
+//   N: 0.0 to 1.0
+// ---------------------------------------------------------------
+
+const ANNOTATED_TEXT = `[mode:narration intensity:0.2]
+The ship left the harbor at dusk. There was no ceremony, no crowd on the pier, no horn blast echoing off the warehouse walls. Just the slow, heavy pivot of a hull turning its back on land. The water was the color of used ink.
+
+[mode:narration intensity:0.3]
+Most of the passengers had already gone below. The dining room would not open for another hour. A few stood at the rail watching the city flatten into a line, then a smudge, then a theory. The engines hummed at a frequency you felt in your molars.
+
+[mode:whisper intensity:0.1]
+She said it so quietly he almost missed it: I don't think I'm coming back.
+
+[mode:dialogue intensity:0.35]
+\u2014 What do you mean?
+\u2014 I mean what I said. I don't think I'm coming back.
+\u2014 To the city?
+\u2014 To any of it.
+
+[mode:narration intensity:0.4]
+The second day was calm. The horizon was a ruled line dividing two grays. He read in a deck chair while she walked circuits around the promenade, her heels marking a rhythm on the teak planks that he could hear through the pages.
+
+[mode:headline intensity:0.6]
+The storm came on the third night without warning.
+
+[mode:narration intensity:0.65]
+The ship tilted fifteen degrees to starboard and held there long enough for a glass to slide the full length of the bar. Somewhere below, luggage shifted and a trunk broke open. The lights flickered. The captain's voice came through the speaker system in three languages, each one calmer than the situation deserved.
+
+[mode:argument intensity:0.7]
+\u2014 We should never have boarded this ship.
+\u2014 That is not helpful.
+\u2014 Helpful? You want helpful? I told you in New York. I told you at the dock.
+
+[mode:argument intensity:0.85]
+\u2014 You told me nothing! You stood there with your ticket in your hand like everyone else!
+\u2014 Because you had already decided! You always decide!
+\u2014 Someone has to!
+
+[mode:argument intensity:1.0]
+\u2014 THIS IS WHAT YOU DO. YOU DRAG PEOPLE INTO YOUR DECISIONS AND THEN YOU BLAME THEM FOR COMING.
+
+[mode:whisper intensity:0.1]
+The silence after was longer than the argument.
+
+[mode:narration intensity:0.25]
+By morning the storm had passed. The sea was green-gray and slow. Breakfast was served as if nothing had happened. The waiter set down the coffee with a hand that did not shake.
+
+[mode:journal intensity:0.3]
+NORTH ATLANTIC CHRONICLE, DAY 4 \u2014 Seas moderate following overnight disturbance. Minor structural damage to C-deck luggage hold. No injuries reported. Passengers advised that evening entertainment will proceed as scheduled. The captain extends his compliments and notes that weather conditions for the remaining crossing are expected to be fair.
+
+[mode:narration intensity:0.35]
+They did not speak about the argument. They did not need to. The words were still in the room like furniture that had been rearranged in the dark. You could feel where everything had moved even if you couldn't see it.
+
+[mode:whisper intensity:0.15]
+On the last night, she stood at the rail again. The French coast was a faint interruption in the darkness. She was not watching it arrive. She was watching the ocean end.
+
+[mode:narration intensity:0.2]
+The ship docked at Le Havre in thin rain. The gangway was lowered. The passengers filed down in a line that looked, from above, like a sentence being written across the page \u2014 each person a word, each pause between them a space, the whole of it meaning something that could only be read from a distance.`
+
+// ---------------------------------------------------------------
+// ANALYSE: parse annotations, compute parameters
+// ---------------------------------------------------------------
+
+function parseText(annotated) {
+  const sections = []
+  const blocks = annotated.trim().split(/\n\n+/)
+
+  for (const block of blocks) {
+    const match = block.match(/^\[mode:(\w+)\s+intensity:([\d.]+)\]/)
+    if (match) {
+      const mode = match[1]
+      const intensity = parseFloat(match[2])
+      const text = block.slice(match[0].length).trim()
+      if (!text) continue
+
+      // Compute pacing from sentence length
+      const sentences = text.split(/[.!?]+/).filter(s => s.trim())
+      const avgWords = sentences.reduce((sum, s) => sum + s.trim().split(/\s+/).length, 0) / Math.max(sentences.length, 1)
+      // Short sentences = fast pacing (high value), long = slow (low value)
+      const pacing = Math.max(0, Math.min(1, 1 - (avgWords - 4) / 20))
+
+      sections.push({ mode, intensity, pacing, text })
+    }
+  }
+  return sections
+}
+
+// ---------------------------------------------------------------
+// THE PROGRAMME: map analysis to typographic parameters
+// ---------------------------------------------------------------
+
+function programme(section) {
+  const { mode, intensity, pacing } = section
+
+  // Base parameters derived from intensity
+  let fontSize = 14 + intensity * 18         // 14..32
+  let fontWeight = 300 + intensity * 400     // 300..700
+  let lineHeight = 1.80 - pacing * 0.55     // 1.25..1.80
+  let letterSpacing = -0.01 + pacing * 0.04 // -0.01..0.03
+  let columns = 1
+  let textAlign = 'left'
+  let indent = 0
+  let color = '#2C2C2C'
+  let marginBottom = 20
+
+  // Mode overrides
+  switch (mode) {
+    case 'narration':
+      columns = 1
+      textAlign = 'left'
+      break
+
+    case 'dialogue':
+      columns = 1
+      textAlign = 'left'
+      indent = 32
+      fontSize = Math.min(fontSize, 17)
+      fontWeight = Math.min(fontWeight, 400)
+      lineHeight = Math.max(lineHeight, 1.55)
+      break
+
+    case 'argument':
+      columns = 1
+      textAlign = 'center'
+      // Escalation: intensity directly drives size
+      fontSize = 16 + intensity * 20
+      fontWeight = 400 + intensity * 400
+      lineHeight = 1.3 + (1 - intensity) * 0.3
+      marginBottom = 8
+      break
+
+    case 'whisper':
+      columns = 1
+      textAlign = 'left'
+      fontSize = 13
+      fontWeight = 300
+      lineHeight = 1.9
+      letterSpacing = 0.04
+      color = '#8B9E7E'
+      indent = 48
+      break
+
+    case 'headline':
+      columns = 1
+      textAlign = 'left'
+      fontSize = 28 + intensity * 8
+      fontWeight = 600
+      lineHeight = 1.15
+      letterSpacing = -0.01
+      marginBottom = 28
+      break
+
+    case 'journal':
+      columns = 3
+      textAlign = 'justify'
+      fontSize = 12
+      fontWeight = 400
+      lineHeight = 1.45
+      letterSpacing = 0
+      marginBottom = 24
+      break
+  }
+
+  return {
+    fontSize: Math.round(fontSize * 10) / 10,
+    fontWeight: Math.round(fontWeight),
+    lineHeight: Math.round(lineHeight * 100) / 100,
+    letterSpacing: Math.round(letterSpacing * 1000) / 1000,
+    columns,
+    textAlign,
+    indent,
+    color,
+    marginBottom,
+    mode,
+    intensity,
+  }
+}
+
+// ---------------------------------------------------------------
+// RENDER
+// ---------------------------------------------------------------
+
+const sectionsEl = document.getElementById('sections')
+const gridOverlay = document.getElementById('grid-overlay')
+const perfEl = document.getElementById('perf')
+
+// Active param display
+const apMode = document.getElementById('ap-mode')
+const apIntensity = document.getElementById('ap-intensity')
+const apSize = document.getElementById('ap-size')
+const apWeight = document.getElementById('ap-weight')
+const apLh = document.getElementById('ap-lh')
+const apCols = document.getElementById('ap-cols')
+const apAlign = document.getElementById('ap-align')
+
+let currentAnnotated = ANNOTATED_TEXT
+let sections = []
+let sectionEls = []
+
+function renderPage() {
+  const t0 = performance.now()
+  sections = parseText(currentAnnotated)
+  sectionsEl.innerHTML = ''
+  sectionEls = []
+
+  const pageWidth = document.getElementById('integral-page').clientWidth
+
+  for (let si = 0; si < sections.length; si++) {
+    const sec = sections[si]
+    const params = programme(sec)
+
+    const sectionDiv = document.createElement('div')
+    sectionDiv.className = `section section--${params.mode}`
+    sectionDiv.style.marginBottom = params.marginBottom + 'px'
+    sectionDiv.dataset.index = si
+
+    // Mode tag
+    const tag = document.createElement('div')
+    tag.className = 'section-tag'
+    tag.textContent = `${params.mode} \u00B7 intensity ${(sec.intensity * 100).toFixed(0)}%`
+    sectionDiv.appendChild(tag)
+
+    // Font string for pretext
+    const fontStr = `${params.fontSize}px Literata, Georgia, serif`
+    const lineHeightPx = params.fontSize * params.lineHeight
+
+    if (params.columns === 1) {
+      // Single column
+      const linesDiv = document.createElement('div')
+      linesDiv.className = 'section-lines'
+      linesDiv.style.fontSize = params.fontSize + 'px'
+      linesDiv.style.fontWeight = params.fontWeight
+      linesDiv.style.lineHeight = params.lineHeight
+      linesDiv.style.letterSpacing = params.letterSpacing + 'em'
+      linesDiv.style.color = params.color
+      linesDiv.style.textAlign = params.textAlign
+      if (params.indent) linesDiv.style.paddingLeft = params.indent + 'px'
+
+      // For dialogue, split on dashes and render each turn
+      if (params.mode === 'dialogue') {
+        const turns = sec.text.split(/\n/)
+        for (const turn of turns) {
+          const lineDiv = document.createElement('div')
+          lineDiv.className = 'section-line'
+          lineDiv.textContent = turn
+          linesDiv.appendChild(lineDiv)
+        }
+      } else if (params.mode === 'argument') {
+        // Arguments: each line is a turn, rendered with escalating size
+        const turns = sec.text.split(/\n/)
+        for (let ti = 0; ti < turns.length; ti++) {
+          const turn = turns[ti]
+          if (!turn.trim()) continue
+          const escalation = turns.length > 1 ? ti / (turns.length - 1) : 1
+          const turnSize = params.fontSize * (0.85 + escalation * 0.15)
+          const turnWeight = Math.round(params.fontWeight * (0.9 + escalation * 0.1))
+
+          const lineDiv = document.createElement('div')
+          lineDiv.className = 'section-line'
+          lineDiv.style.fontSize = turnSize.toFixed(1) + 'px'
+          lineDiv.style.fontWeight = turnWeight
+          lineDiv.textContent = turn
+          linesDiv.appendChild(lineDiv)
+        }
+      } else {
+        // Use pretext for line-breaking
+        const colWidth = pageWidth - (params.indent || 0)
+        const prepared = prepareWithSegments(sec.text, fontStr)
+        let cursor = { segmentIndex: 0, graphemeIndex: 0 }
+        let safety = 0
+        while (safety++ < 500) {
+          const line = layoutNextLine(prepared, cursor, colWidth)
+          if (!line) break
+          const lineDiv = document.createElement('div')
+          lineDiv.className = 'section-line'
+          lineDiv.textContent = line.text
+          linesDiv.appendChild(lineDiv)
+          cursor = line.end
+        }
+      }
+
+      sectionDiv.appendChild(linesDiv)
+    } else {
+      // Multi-column
+      const colsDiv = document.createElement('div')
+      colsDiv.className = 'section-columns'
+      colsDiv.style.fontSize = params.fontSize + 'px'
+      colsDiv.style.fontWeight = params.fontWeight
+      colsDiv.style.lineHeight = params.lineHeight
+      colsDiv.style.letterSpacing = params.letterSpacing + 'em'
+      colsDiv.style.color = params.color
+
+      const gap = 24
+      const colWidth = (pageWidth - gap * (params.columns - 1)) / params.columns
+
+      // Layout all lines, distribute across columns
+      const prepared = prepareWithSegments(sec.text, fontStr)
+      let cursor = { segmentIndex: 0, graphemeIndex: 0 }
+      const allLines = []
+      let safety = 0
+      while (safety++ < 500) {
+        const line = layoutNextLine(prepared, cursor, colWidth)
+        if (!line) break
+        allLines.push(line.text)
+        cursor = line.end
+      }
+
+      const linesPerCol = Math.ceil(allLines.length / params.columns)
+      for (let c = 0; c < params.columns; c++) {
+        const colDiv = document.createElement('div')
+        colDiv.className = 'section-col section-lines'
+        colDiv.style.textAlign = params.textAlign
+
+        const start = c * linesPerCol
+        const end = Math.min(start + linesPerCol, allLines.length)
+        for (let li = start; li < end; li++) {
+          const lineDiv = document.createElement('div')
+          lineDiv.className = 'section-line'
+          lineDiv.textContent = allLines[li]
+          colDiv.appendChild(lineDiv)
+        }
+        colsDiv.appendChild(colDiv)
+      }
+      sectionDiv.appendChild(colsDiv)
+    }
+
+    sectionsEl.appendChild(sectionDiv)
+    sectionEls.push({ el: sectionDiv, params: programme(sec), section: sec })
+  }
+
+  const elapsed = performance.now() - t0
+  perfEl.textContent = `programme: ${elapsed.toFixed(1)}ms \u00B7 ${sections.length} sections`
+
+  // Build grid overlay
+  buildGrid(pageWidth)
+}
+
+// ---------------------------------------------------------------
+// GRID OVERLAY
+// ---------------------------------------------------------------
+
+function buildGrid(pageWidth) {
+  gridOverlay.innerHTML = ''
+  const UNITS = 48
+  const unitW = pageWidth / UNITS
+  const gutter = 2 // units
+
+  // Show 6-column grid (48 / 8 = 6 cols of 6 units + 5 gutters of 2.4 units... simplify)
+  // Actually: 6 cols of 6 units each + 5 gaps of 2.4 units ≈ 48
+  // Simpler: just show every 8th unit as a column boundary
+  for (let i = 0; i < UNITS; i++) {
+    if (i % 8 < 6) {
+      // Column area
+    }
+    const col = document.createElement('div')
+    col.className = 'grid-col'
+    col.style.left = (i * unitW) + 'px'
+    col.style.width = unitW + 'px'
+    if (i % 8 >= 6) {
+      col.style.background = 'transparent'
+      col.style.borderColor = 'rgba(196, 154, 60, 0.12)'
+    }
+    gridOverlay.appendChild(col)
+  }
+}
+
+// ---------------------------------------------------------------
+// SCROLL-BASED ACTIVE SECTION TRACKING
+// ---------------------------------------------------------------
+
+function updateActiveSection() {
+  const pageArea = document.getElementById('page-area')
+  const scrollTop = pageArea.scrollTop
+  const viewportMid = scrollTop + pageArea.clientHeight * 0.4
+
+  let closest = 0
+  let closestDist = Infinity
+
+  for (let i = 0; i < sectionEls.length; i++) {
+    const el = sectionEls[i].el
+    const elMid = el.offsetTop + el.offsetHeight / 2
+    const dist = Math.abs(elMid - viewportMid)
+    if (dist < closestDist) {
+      closestDist = dist
+      closest = i
+    }
+  }
+
+  if (sectionEls[closest]) {
+    const p = sectionEls[closest].params
+    apMode.textContent = p.mode
+    apIntensity.textContent = (sectionEls[closest].section.intensity * 100).toFixed(0) + '%'
+    apSize.textContent = p.fontSize + 'px'
+    apWeight.textContent = p.fontWeight
+    apLh.textContent = p.lineHeight.toFixed(2)
+    apCols.textContent = p.columns
+    apAlign.textContent = p.textAlign
+  }
+}
+
+document.getElementById('page-area').addEventListener('scroll', updateActiveSection)
+
+// ---------------------------------------------------------------
+// TOGGLES
+// ---------------------------------------------------------------
+
+document.getElementById('toggle-grid').addEventListener('click', function() {
+  this.classList.toggle('active')
+  gridOverlay.classList.toggle('visible')
+})
+
+document.getElementById('toggle-tags').addEventListener('click', function() {
+  this.classList.toggle('active')
+  document.getElementById('integral-page').classList.toggle('show-tags')
+})
+
+// Custom text
+const customText = document.getElementById('custom-text')
+const applyText = document.getElementById('apply-text')
+let textOpen = false
+
+document.getElementById('text-toggle').addEventListener('click', function() {
+  textOpen = !textOpen
+  customText.classList.toggle('visible', textOpen)
+  applyText.classList.toggle('visible', textOpen)
+  this.textContent = textOpen ? '\u2212 hide text' : '+ edit text'
+  if (textOpen && !customText.value) {
+    customText.value = currentAnnotated
+  }
+})
+
+applyText.addEventListener('click', () => {
+  const val = customText.value.trim()
+  if (val) {
+    currentAnnotated = val
+    renderPage()
+    updateActiveSection()
+  }
+})
+
+// Modal
+document.getElementById('why-link').addEventListener('click', () => {
+  document.getElementById('modal-overlay').classList.add('visible')
+})
+document.getElementById('modal-close').addEventListener('click', () => {
+  document.getElementById('modal-overlay').classList.remove('visible')
+})
+document.getElementById('modal-overlay').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.remove('visible')
+})
+
+// ---------------------------------------------------------------
+// INIT
+// ---------------------------------------------------------------
+
+window.addEventListener('resize', () => {
+  renderPage()
+  updateActiveSection()
+})
+
+document.fonts.ready.then(() => {
+  renderPage()
+  updateActiveSection()
+})
+</script>
+</body>
+</html>
