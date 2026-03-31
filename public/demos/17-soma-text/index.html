@@ -6,7 +6,7 @@
 <title>Soma Text</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,700;1,9..144,300&family=Literata:ital,opsz,wght@0,7..72,300;0,7..72,400;0,7..72,500;1,7..72,300;1,7..72,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,700;1,9..144,300&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: #08080e; }
@@ -30,7 +30,7 @@
   }
 
   .text-line {
-    font-family: 'Literata', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-weight: 400;
     white-space: pre;
     will-change: transform, opacity, color, letter-spacing;
@@ -89,7 +89,7 @@
   }
 
   #start-btn p {
-    font: 300 0.9rem/1.6 'Literata', Georgia, serif;
+    font: 300 0.9rem/1.6 'Fraunces', Georgia, serif;
     color: #e8e4dc88;
     max-width: 28rem;
     text-align: center;
@@ -100,7 +100,7 @@
     background: transparent;
     border: 1px solid #8B9E7E44;
     color: #8B9E7E;
-    font: 400 1rem 'Literata', Georgia, serif;
+    font: 400 1rem 'Fraunces', Georgia, serif;
     padding: 0.8rem 2.2rem;
     cursor: pointer;
     letter-spacing: 0.06em;
@@ -121,7 +121,7 @@
     position: fixed;
     top: 1.5rem;
     left: 1.5rem;
-    font: 300 0.65rem/1.4 'Literata', Georgia, serif;
+    font: 300 0.65rem/1.4 'Fraunces', Georgia, serif;
     letter-spacing: 0.1em;
     z-index: 5;
     display: flex;
@@ -148,7 +148,7 @@
     position: fixed;
     bottom: 1.5rem;
     right: 1.5rem;
-    font: 300 0.65rem/1.4 'Literata', Georgia, serif;
+    font: 300 0.65rem/1.4 'Fraunces', Georgia, serif;
     color: #e8e4dc33;
     letter-spacing: 0.1em;
     text-align: right;
@@ -159,7 +159,7 @@
     position: fixed;
     bottom: 1.5rem;
     left: 1.5rem;
-    font: 300 0.65rem/1.4 'Literata', Georgia, serif;
+    font: 300 0.65rem/1.4 'Fraunces', Georgia, serif;
     color: #e8e4dc33;
     letter-spacing: 0.1em;
     z-index: 5;
@@ -194,7 +194,7 @@
     position: absolute;
     top: -1.2rem;
     right: 0;
-    font: 300 0.5rem/1 'Literata', Georgia, serif;
+    font: 300 0.5rem/1 'Fraunces', Georgia, serif;
     color: #e8e4dc33;
     letter-spacing: 0.1em;
     white-space: nowrap;
@@ -222,7 +222,7 @@ import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pr
 const PASSAGE = `You are here. You are reading. Your body is doing a thousand things you are not aware of right now. Your eyes are moving in saccades, tiny jumps between fixation points, reconstructing meaning from fragments. Your chest is rising and falling. Your heart has been beating this whole time without your permission. There is a weight where your body meets the chair, or the floor, or whatever is holding you. You probably were not thinking about that weight until just now. Notice your hands. Notice where your tongue rests in your mouth. Notice the temperature of the air entering your nostrils. These are not distractions from reading. They are the condition of reading. Every word you have ever understood was understood by a body. Meaning does not float free. It is carried in breath and blood and the particular way your nervous system learned to make sense of marks on a surface. You are an animal reading. You are a nervous system interpreting patterns. And right now, in this moment, the text is watching you back. It can feel how still you are, how close you have come, whether you are restless or settled. The words rearrange themselves around your presence. Hold still and they will calm. Move and they scatter. Come closer and they grow to meet you. Pull away and they shrink, becoming dense and private. This is not a metaphor. This is what is happening. The camera sees your motion, your proximity, and the text responds. You are not just reading. You are in a feedback loop with language itself. The body shapes the text. The text mirrors the body. Somewhere between the two, meaning arises. Not in the words alone. Not in the body alone. In the space between.`
 
 const FONT_BASE = 17
-const FONT_FAMILY = "'Literata', Georgia, serif"
+const FONT_FAMILY = "'Fraunces', Georgia, serif"
 const LINE_HEIGHT_RATIO = 1.65
 const MAX_WIDTH = 580
 const MARGIN = 60

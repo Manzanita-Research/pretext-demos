@@ -6,7 +6,7 @@
 <title>Babel Columns</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=Literata:ital,opsz,wght@0,7..72,200..900;1,7..72,200..900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: #08080e; }
@@ -133,7 +133,7 @@
     bottom: 12px;
     left: 0; right: 0;
     text-align: center;
-    font-family: Literata, Georgia, serif;
+    font-family: Fraunces, Georgia, serif;
     font-size: 11px;
     color: #5C5C5C;
     pointer-events: none;
@@ -167,14 +167,14 @@ const MARGIN = 32
 const GAP = 16
 const TOP_MARGIN = 80
 
-const englishFont = `${FONT_SIZE}px Literata, Georgia, "Times New Roman", serif`
+const englishFont = `${FONT_SIZE}px Fraunces, Georgia, "Times New Roman", serif`
 const arabicFont = `${FONT_SIZE}px "Geeza Pro", "Traditional Arabic", "Simplified Arabic", "Noto Naskh Arabic", serif`
 const chineseFont = `${FONT_SIZE}px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif`
 
 // --- Column config ---
 
 const COL = [
-  { text: '#e8d4c8', label: '#C2714F', name: 'English', bg: 'rgba(194, 113, 79, 0.04)', font: englishFont, fontFamily: 'Literata, Georgia, "Times New Roman", serif', dir: 'ltr' },
+  { text: '#e8d4c8', label: '#C2714F', name: 'English', bg: 'rgba(194, 113, 79, 0.04)', font: englishFont, fontFamily: 'Fraunces, Georgia, "Times New Roman", serif', dir: 'ltr' },
   { text: '#e8dcc0', label: '#C49A3C', name: 'العربية', bg: 'rgba(196, 154, 60, 0.04)', font: arabicFont, fontFamily: '"Geeza Pro", "Traditional Arabic", "Simplified Arabic", "Noto Naskh Arabic", serif', dir: 'rtl' },
   { text: '#c8d8c4', label: '#8B9E7E', name: '中文', bg: 'rgba(139, 158, 126, 0.04)', font: chineseFont, fontFamily: '"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif', dir: 'ltr' },
 ]

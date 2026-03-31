@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Integral Page</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=JetBrains+Mono:wght@300;400;500&family=Literata:ital,opsz,wght@0,7..72,200..900;1,7..72,200..900&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=Commit+Mono:wght@300;400;500&display=swap');
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
     background: #FAF9F6;
     color: #2C2C2C;
-    font-family: 'Literata', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
     height: 100vh;
     width: 100vw;
     display: flex;
@@ -58,7 +58,7 @@
   }
 
   #page-header .attribution {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 10px;
     color: #5C5C5C;
     letter-spacing: 0.06em;
@@ -66,7 +66,7 @@
   }
 
   #page-header .epigraph {
-    font-family: 'Literata', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-style: italic;
     font-size: 13px;
     color: #6B3A2A;
@@ -115,7 +115,7 @@
   }
 
   .section-lines {
-    font-family: 'Literata', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
     color: #2C2C2C;
     -webkit-font-smoothing: antialiased;
   }
@@ -157,7 +157,7 @@
 
   /* Section mode indicator */
   .section-tag {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 8px;
     letter-spacing: 0.15em;
     text-transform: uppercase;
@@ -184,7 +184,7 @@
     overflow-y: auto;
     box-shadow: -4px 0 24px rgba(107,58,42,0.04);
     z-index: 10;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
   }
 
   #programme h2 {
@@ -284,7 +284,7 @@
   }
 
   .toggle-btn {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 9px;
     letter-spacing: 0.04em;
     padding: 4px 10px;
@@ -367,7 +367,7 @@
   }
 
   #modal p {
-    font-family: 'Literata', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 14px;
     line-height: 1.75;
     color: #2C2C2C;
@@ -414,7 +414,7 @@
     width: 100%;
     min-height: 160px;
     padding: 8px;
-    font-family: 'Literata', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 12px;
     line-height: 1.5;
     color: #2C2C2C;
@@ -430,7 +430,7 @@
 
   #apply-text {
     display: none;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 10px;
     padding: 5px 12px;
     border: 1px solid #C2714F;
@@ -486,6 +486,8 @@
       <div class="active-param"><span class="active-param-name">line-height</span><span class="active-param-val" id="ap-lh">--</span></div>
       <div class="active-param"><span class="active-param-name">columns</span><span class="active-param-val" id="ap-cols">--</span></div>
       <div class="active-param"><span class="active-param-name">alignment</span><span class="active-param-val" id="ap-align">--</span></div>
+      <div class="active-param"><span class="active-param-name">WONK</span><span class="active-param-val" id="ap-wonk">--</span></div>
+      <div class="active-param"><span class="active-param-name">SOFT</span><span class="active-param-val" id="ap-soft">--</span></div>
     </div>
   </div>
 
@@ -501,6 +503,8 @@
     <div class="rule"><span class="rule-param">mode:whisper</span> <span class="rule-arrow">&rarr;</span> <span class="rule-value">light, small, sage</span></div>
     <div class="rule"><span class="rule-param">mode:headline</span> <span class="rule-arrow">&rarr;</span> <span class="rule-value">2 col, bold, large</span></div>
     <div class="rule"><span class="rule-param">mode:journal</span> <span class="rule-arrow">&rarr;</span> <span class="rule-value">3 col, small, dense</span></div>
+    <div class="rule"><span class="rule-param">mode:argument</span> <span class="rule-arrow">&rarr;</span> <span class="rule-value">WONK 1, SOFT 0..100</span></div>
+    <div class="rule"><span class="rule-param">mode:whisper</span> <span class="rule-arrow">&rarr;</span> <span class="rule-value">SOFT 100, opsz 9</span></div>
   </div>
 
   <div class="rule-group">
@@ -511,8 +515,8 @@
 
   <div class="rule-group">
     <div class="rule-group-title">Constraint</div>
-    <div class="rule">One typeface family. Literata variable.</div>
-    <div class="rule">Variation only through weight, size, spacing, columns.</div>
+    <div class="rule">One typeface family. Fraunces variable.</div>
+    <div class="rule">Variation through weight, size, spacing, optical size, WONK, SOFT.</div>
   </div>
 
   <div class="toggle-row">
@@ -654,12 +658,18 @@ function programme(section) {
   let indent = 0
   let color = '#2C2C2C'
   let marginBottom = 20
+  let wonk = 0          // Fraunces WONK axis: 0 (normal) or 1 (wonky)
+  let soft = 0          // Fraunces SOFT axis: 0..100 (angular to round)
+  let opticalSize = 16  // Fraunces opsz axis: 9..144
 
   // Mode overrides
   switch (mode) {
     case 'narration':
       columns = 1
       textAlign = 'left'
+      wonk = 0
+      soft = 20 + intensity * 30  // gets softer as intensity rises
+      opticalSize = fontSize
       break
 
     case 'dialogue':
@@ -669,27 +679,35 @@ function programme(section) {
       fontSize = Math.min(fontSize, 17)
       fontWeight = Math.min(fontWeight, 400)
       lineHeight = Math.max(lineHeight, 1.55)
+      wonk = 0
+      soft = 50  // conversational, rounded
+      opticalSize = fontSize
       break
 
     case 'argument':
       columns = 1
       textAlign = 'center'
-      // Escalation: intensity directly drives size
       fontSize = 16 + intensity * 20
       fontWeight = 400 + intensity * 400
       lineHeight = 1.3 + (1 - intensity) * 0.3
       marginBottom = 8
+      wonk = 1                     // agitated, wonky
+      soft = 100 * (1 - intensity) // angular at peak intensity
+      opticalSize = Math.min(fontSize * 1.2, 144)
       break
 
     case 'whisper':
       columns = 1
       textAlign = 'left'
       fontSize = 13
-      fontWeight = 300
+      fontWeight = 200
       lineHeight = 1.9
       letterSpacing = 0.04
       color = '#8B9E7E'
       indent = 48
+      wonk = 0
+      soft = 100   // maximally soft, gentle
+      opticalSize = 9
       break
 
     case 'headline':
@@ -700,6 +718,9 @@ function programme(section) {
       lineHeight = 1.15
       letterSpacing = -0.01
       marginBottom = 28
+      wonk = 1
+      soft = 80
+      opticalSize = 72
       break
 
     case 'journal':
@@ -710,6 +731,9 @@ function programme(section) {
       lineHeight = 1.45
       letterSpacing = 0
       marginBottom = 24
+      wonk = 0
+      soft = 0  // sharp, factual
+      opticalSize = 9
       break
   }
 
@@ -723,6 +747,9 @@ function programme(section) {
     indent,
     color,
     marginBottom,
+    wonk: Math.round(wonk),
+    soft: Math.round(soft),
+    opticalSize: Math.round(opticalSize),
     mode,
     intensity,
   }
@@ -744,6 +771,8 @@ const apWeight = document.getElementById('ap-weight')
 const apLh = document.getElementById('ap-lh')
 const apCols = document.getElementById('ap-cols')
 const apAlign = document.getElementById('ap-align')
+const apWonk = document.getElementById('ap-wonk')
+const apSoft = document.getElementById('ap-soft')
 
 let currentAnnotated = ANNOTATED_TEXT
 let sections = []
@@ -773,7 +802,7 @@ function renderPage() {
     sectionDiv.appendChild(tag)
 
     // Font string for pretext
-    const fontStr = `${params.fontSize}px Literata, Georgia, serif`
+    const fontStr = `${params.fontSize}px Fraunces, Georgia, serif`
     const lineHeightPx = params.fontSize * params.lineHeight
 
     if (params.columns === 1) {
@@ -786,6 +815,7 @@ function renderPage() {
       linesDiv.style.letterSpacing = params.letterSpacing + 'em'
       linesDiv.style.color = params.color
       linesDiv.style.textAlign = params.textAlign
+      linesDiv.style.fontVariationSettings = `'WONK' ${params.wonk}, 'SOFT' ${params.soft}, 'opsz' ${params.opticalSize}`
       if (params.indent) linesDiv.style.paddingLeft = params.indent + 'px'
 
       // For dialogue, split on dashes and render each turn
@@ -841,6 +871,7 @@ function renderPage() {
       colsDiv.style.lineHeight = params.lineHeight
       colsDiv.style.letterSpacing = params.letterSpacing + 'em'
       colsDiv.style.color = params.color
+      colsDiv.style.fontVariationSettings = `'WONK' ${params.wonk}, 'SOFT' ${params.soft}, 'opsz' ${params.opticalSize}`
 
       const gap = 24
       const colWidth = (pageWidth - gap * (params.columns - 1)) / params.columns
@@ -947,6 +978,8 @@ function updateActiveSection() {
     apLh.textContent = p.lineHeight.toFixed(2)
     apCols.textContent = p.columns
     apAlign.textContent = p.textAlign
+    apWonk.textContent = p.wonk
+    apSoft.textContent = p.soft
   }
 }
 

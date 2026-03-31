@@ -6,7 +6,7 @@
 <title>The Panopticon Reader</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,300;1,9..144,400&family=Literata:ital,opsz,wght@0,7..72,300;0,7..72,400;0,7..72,500;1,7..72,300;1,7..72,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,300;1,9..144,400&display=swap" rel="stylesheet">
 <script src="https://webgazer.cs.brown.edu/webgazer.js" defer></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -14,7 +14,7 @@
   body {
     background: #08080e;
     color: #e8e4dc;
-    font-family: 'Literata', Georgia, 'Times New Roman', serif;
+    font-family: 'Fraunces', Georgia, 'Times New Roman', serif;
     overflow: hidden;
     cursor: none;
     height: 100vh;
@@ -48,7 +48,7 @@
     max-width: 640px;
     font-size: 18px;
     line-height: 30px;
-    font-family: 'Literata', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
   }
 
   .text-line {
@@ -71,7 +71,7 @@
     transform: translateX(-50%);
     font-size: 13px;
     color: rgba(194, 113, 79, 0.45);
-    font-family: 'Literata', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-style: italic;
     pointer-events: none;
     z-index: 10;
@@ -96,7 +96,7 @@
     flex-direction: column;
     align-items: flex-end;
     gap: 10px;
-    font-family: 'Literata', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
     cursor: default;
   }
 
@@ -106,7 +106,7 @@
     color: rgba(232, 228, 220, 0.5);
     padding: 6px 14px;
     font-size: 12px;
-    font-family: 'Literata', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
     border-radius: 4px;
     cursor: pointer;
     transition: all 0.3s ease;
@@ -167,7 +167,7 @@
   }
 
   #calibration-overlay .cal-subtitle {
-    font-family: 'Literata', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 14px;
     color: rgba(232, 228, 220, 0.45);
     margin-bottom: 40px;
@@ -177,7 +177,7 @@
   }
 
   #calibration-overlay .cal-progress {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 11px;
     color: rgba(194, 113, 79, 0.6);
     letter-spacing: 0.08em;
@@ -242,7 +242,7 @@
     top: 20px;
     left: 20px;
     z-index: 100;
-    font-family: 'Literata', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 11px;
     color: rgba(139, 158, 126, 0.4);
     pointer-events: none;
@@ -354,7 +354,7 @@ We built this because we wanted to feel the shape of attention itself — to mak
 // --- Configuration ---
 const FONT_SIZE = 18
 const LINE_HEIGHT = 30
-const FONT = `${FONT_SIZE}px Literata, Georgia`
+const FONT = `${FONT_SIZE}px Fraunces, Georgia`
 const MAX_WIDTH = 640
 const FOVEAL_RADIUS_MIN = 60
 const FOVEAL_RADIUS_MAX = 400

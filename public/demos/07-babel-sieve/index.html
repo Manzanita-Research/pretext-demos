@@ -6,14 +6,14 @@
 <title>Babel Sieve</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=Literata:ital,opsz,wght@0,7..72,200..900;1,7..72,200..900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
     background: #08080e;
     color: #c8c8d0;
-    font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-family: 'Commit Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
     overflow: hidden;
     height: 100vh;
     display: flex;
@@ -32,7 +32,7 @@
     position: absolute;
     top: 0;
     left: 0;
-    font-family: Literata, Georgia, serif;
+    font-family: Fraunces, Georgia, serif;
     font-size: 14px;
     line-height: 20px;
     white-space: nowrap;
@@ -111,7 +111,7 @@
     background: rgba(200, 200, 208, 0.06);
     border: 1px solid rgba(200, 200, 208, 0.12);
     color: #c8c8d0;
-    font-family: Literata, Georgia, serif;
+    font-family: Fraunces, Georgia, serif;
     font-size: 12px;
     padding: 5px 10px;
     border-radius: 4px;
@@ -131,7 +131,7 @@
     opacity: 0.35;
     font-size: 11px;
     white-space: nowrap;
-    font-family: Literata, Georgia, serif;
+    font-family: Fraunces, Georgia, serif;
   }
 </style>
 </head>
@@ -210,7 +210,7 @@ let W, H;
 // matching the DOM font rendering
 function measureWord(word) {
   const cursor = prepareWithSegments(
-    [{ text: word, style: { fontFamily: 'Literata, Georgia, serif', fontSize: FONT_SIZE } }],
+    [{ text: word, style: { fontFamily: 'Fraunces, Georgia, serif', fontSize: FONT_SIZE } }],
     { lineWidth: 99999 }
   );
   const line = layoutNextLine(cursor);

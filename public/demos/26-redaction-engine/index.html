@@ -6,7 +6,7 @@
 <title>The Redaction Engine</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,400&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;1,7..72,400&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,400&family=Commit+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -14,7 +14,7 @@
     width: 100%; min-height: 100vh;
     background: #FAF9F6;
     color: #2C2C2C;
-    font-family: 'Literata', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 15px;
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
@@ -65,7 +65,7 @@
     border: 1px solid #E8E5DF;
     background: #fff;
     color: #6B3A2A;
-    font-family: 'Literata', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 0.9rem;
     cursor: pointer;
     display: flex;
@@ -93,7 +93,7 @@
     margin: 0 auto;
   }
   .classification-label {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 0.7rem;
     font-weight: 500;
     letter-spacing: 0.08em;
@@ -161,7 +161,7 @@
     right: 0;
   }
   .slider-stop {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 0.65rem;
     font-weight: 500;
     letter-spacing: 0.04em;
@@ -219,7 +219,7 @@
     position: absolute;
     top: 1.5rem;
     right: 2rem;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 0.75rem;
     font-weight: 700;
     letter-spacing: 0.12em;
@@ -241,7 +241,7 @@
   .doc-block { position: relative; }
 
   .doc-header-agency {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 13px;
     font-weight: 700;
     color: #6B3A2A;
@@ -249,7 +249,7 @@
     margin-bottom: 2px;
   }
   .doc-header-sub {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 11.5px;
     font-weight: 500;
     color: #7C7C7C;
@@ -257,7 +257,7 @@
     margin-bottom: 6px;
   }
   .doc-header-memo {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 16px;
     font-weight: 700;
     color: #6B3A2A;
@@ -275,7 +275,7 @@
   .doc-spacer-xl { height: 14px; }
 
   .doc-meta {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 11.5px;
     line-height: 1.5;
     color: #2C2C2C;
@@ -287,7 +287,7 @@
   }
 
   .doc-section-header {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 13px;
     font-weight: 700;
     color: #6B3A2A;
@@ -295,7 +295,7 @@
   }
 
   .doc-body {
-    font-family: 'Literata', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 13.5px;
     line-height: 1.6;
     color: #2C2C2C;
@@ -310,7 +310,7 @@
   .doc-table {
     width: 100%;
     border-collapse: collapse;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 11.5px;
     margin-bottom: 3px;
   }
@@ -422,7 +422,7 @@
     cursor: pointer;
     transition: background 0.25s ease, color 0.25s ease;
     display: block;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 11.5px;
   }
   .redacted-block:hover {
@@ -441,7 +441,7 @@
     border-top: 1px solid #E8E5DF;
   }
   .legend-title {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 0.65rem;
     font-weight: 500;
     letter-spacing: 0.08em;
@@ -453,7 +453,7 @@
     display: flex;
     align-items: center;
     gap: 0.35rem;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 0.65rem;
     color: #5C5C5C;
   }
@@ -478,7 +478,7 @@
     border-top: 1px solid #E8E5DF;
   }
   .stat {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 0.65rem;
     color: #5C5C5C;
   }
@@ -1059,7 +1059,7 @@ function renderDocument(level) {
 
         // Measure the full revealed text with pretext for stable height
         const fullText = block.segments.map(s => s.text).join('')
-        const measuredHeight = measureTextHeight(fullText, "13.5px 'Literata', Georgia, serif", contentWidth)
+        const measuredHeight = measureTextHeight(fullText, "13.5px 'Fraunces', Georgia, serif", contentWidth)
         if (measuredHeight != null) {
           el.style.minHeight = measuredHeight + 'px'
         }

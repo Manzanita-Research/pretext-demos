@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Proofreader's Loupe</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,400&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;1,7..72,400&family=JetBrains+Mono:wght@300;400&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,400&family=Commit+Mono:wght@300;400&display=swap');
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
     background: #FAF9F6;
     color: #2C2C2C;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     height: 100vh;
     width: 100vw;
     overflow: hidden;
@@ -107,7 +107,7 @@
   }
 
   .btn-small {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 9px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -141,7 +141,7 @@
     max-width: 620px;
     margin: 0 auto;
     padding: 0 60px;
-    font-family: 'Literata', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 16px;
     line-height: 28px;
     color: #2C2C2C;
@@ -179,7 +179,7 @@
 
   .loupe-content {
     position: absolute;
-    font-family: 'Literata', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
     color: #2C2C2C;
     white-space: pre-wrap;
     background: rgba(250, 249, 246, 0.97);
@@ -195,7 +195,7 @@
     bottom: 16px;
     left: 50%;
     transform: translateX(-50%);
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 10px;
     color: #5C5C5C;
     letter-spacing: 0.04em;
@@ -241,7 +241,7 @@
     padding: 16px;
     border: none;
     background: transparent;
-    font-family: 'Literata', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 13px;
     line-height: 1.7;
     color: #2C2C2C;
@@ -282,7 +282,7 @@
   }
 
   .modal p {
-    font-family: 'Literata', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 14px;
     line-height: 1.7;
     color: #2C2C2C;
@@ -291,7 +291,7 @@
 
   .modal .close-btn {
     margin-top: 16px;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 10px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -416,8 +416,8 @@ function prepareTexts() {
     magLines = []
     return
   }
-  const nf = `${NORMAL_SIZE}px Literata, Georgia, serif`
-  const mf = `${magSize()}px Literata, Georgia, serif`
+  const nf = `${NORMAL_SIZE}px Fraunces, Georgia, serif`
+  const mf = `${magSize()}px Fraunces, Georgia, serif`
   try {
     preparedNormal = prepareWithSegments(text, nf)
     preparedMag = prepareWithSegments(text, mf)

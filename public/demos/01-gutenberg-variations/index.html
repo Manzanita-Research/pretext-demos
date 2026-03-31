@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Gutenberg Variations</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,400;1,600&family=EB+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Literata:ital,opsz,wght@0,7..72,200..900;1,7..72,200..900&family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,800;0,900;1,400;1,600&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,400;1,600&family=EB+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=Inter:wght@300;400;500;600;700&family=Commit+Mono:wght@400;500&family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,800;0,900;1,400;1,600&display=swap');
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
     background: #FAF9F6;
     color: #2C2C2C;
-    font-family: 'Literata', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
     overflow: hidden;
     height: 100vh;
     width: 100vw;
@@ -203,7 +203,7 @@
   }
 
   .slider-bound {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 12px;
     color: #8B9E7E;
     letter-spacing: 0.05em;
@@ -327,8 +327,8 @@ const eraLabel = document.getElementById('era-label')
 const ERAS = [
   { year: 1440, name: 'Incunabula', columns: 1, fontSize: 19, lineHeight: 30, marginX: 0.2, marginTop: 0.12, colGap: 0, dropCap: true, pullQuote: false, headline: false, imageBlock: false, font: 'Cormorant Garamond', fontFallback: 'Georgia, serif', headlineFont: 'Cormorant Garamond', textColor: '#3a3020', bgColor: '#f0e6d0', ornamentColor: '#6b5c3e', ruleColor: 'rgba(58,48,32,0.12)' },
   { year: 1500, name: 'Renaissance Print', columns: 2, fontSize: 15, lineHeight: 24, marginX: 0.1, marginTop: 0.08, colGap: 30, dropCap: false, pullQuote: false, headline: false, imageBlock: false, font: 'EB Garamond', fontFallback: 'Georgia, serif', headlineFont: 'EB Garamond', textColor: '#2e2a22', bgColor: '#ede6d6', ornamentColor: '#5a5040', ruleColor: 'rgba(46,42,34,0.1)' },
-  { year: 1700, name: 'The Broadsheet Age', columns: 3, fontSize: 13, lineHeight: 20, marginX: 0.05, marginTop: 0.06, colGap: 20, dropCap: false, pullQuote: false, headline: true, imageBlock: false, font: 'Literata', fontFallback: 'Georgia, serif', headlineFont: 'Playfair Display', textColor: '#1a1a1a', bgColor: '#e8e0d0', ornamentColor: '#4a4438', ruleColor: 'rgba(26,26,26,0.15)' },
-  { year: 1900, name: 'Editorial & Magazine', columns: 2, fontSize: 15, lineHeight: 24, marginX: 0.08, marginTop: 0.08, colGap: 36, dropCap: true, pullQuote: true, headline: false, imageBlock: true, font: 'Literata', fontFallback: 'Georgia, serif', headlineFont: 'Fraunces', textColor: '#2C2C2C', bgColor: '#f5f0e8', ornamentColor: '#6a5a44', ruleColor: 'rgba(44,44,44,0.1)' },
+  { year: 1700, name: 'The Broadsheet Age', columns: 3, fontSize: 13, lineHeight: 20, marginX: 0.05, marginTop: 0.06, colGap: 20, dropCap: false, pullQuote: false, headline: true, imageBlock: false, font: 'Fraunces', fontFallback: 'Georgia, serif', headlineFont: 'Playfair Display', textColor: '#1a1a1a', bgColor: '#e8e0d0', ornamentColor: '#4a4438', ruleColor: 'rgba(26,26,26,0.15)' },
+  { year: 1900, name: 'Editorial & Magazine', columns: 2, fontSize: 15, lineHeight: 24, marginX: 0.08, marginTop: 0.08, colGap: 36, dropCap: true, pullQuote: true, headline: false, imageBlock: true, font: 'Fraunces', fontFallback: 'Georgia, serif', headlineFont: 'Fraunces', textColor: '#2C2C2C', bgColor: '#f5f0e8', ornamentColor: '#6a5a44', ruleColor: 'rgba(44,44,44,0.1)' },
   { year: 1960, name: 'Modernist Typography', columns: 1, fontSize: 17, lineHeight: 28, marginX: 0.18, marginTop: 0.1, colGap: 0, dropCap: false, pullQuote: false, headline: false, imageBlock: false, font: 'Inter', fontFallback: 'system-ui, sans-serif', headlineFont: 'Inter', textColor: '#1a1a1a', bgColor: '#ffffff', ornamentColor: '#cccccc', ruleColor: 'rgba(0,0,0,0.08)' },
   { year: 2000, name: 'The Infinite Scroll', columns: 1, fontSize: 20, lineHeight: 34, marginX: 0.25, marginTop: 0.08, colGap: 0, dropCap: false, pullQuote: false, headline: false, imageBlock: false, font: 'system-ui', fontFallback: '-apple-system, Helvetica Neue, sans-serif', headlineFont: 'system-ui', textColor: '#2C2C2C', bgColor: '#FAF9F6', ornamentColor: '#e0ddd8', ruleColor: 'rgba(44,44,44,0.06)' },
 ]

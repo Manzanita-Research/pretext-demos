@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Jacquard Text Loom</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,400&family=JetBrains+Mono:wght@300;400;500&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,400&family=Commit+Mono:wght@300;400;500&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap');
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -28,7 +28,7 @@
   body {
     background: var(--bg);
     color: var(--fg);
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     height: 100vh;
     display: flex;
     flex-direction: column;
@@ -144,7 +144,7 @@
     background: transparent;
     border: 1px solid var(--cell-border);
     color: var(--dim);
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 0.65rem;
     letter-spacing: 0.08em;
     padding: 0.35rem 0.65rem;
@@ -169,7 +169,7 @@
     border: none;
     border-bottom: 1px solid var(--accent);
     color: var(--fg);
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 0.75rem;
     padding: 0.35rem 0;
     outline: none;
@@ -189,7 +189,7 @@
     background: transparent;
     border: 1px solid var(--warp-color);
     color: var(--warp-color);
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 0.7rem;
     letter-spacing: 0.12em;
     padding: 0.5rem 1rem;
@@ -332,7 +332,7 @@
   .weave-grid {
     position: relative;
     padding-top: 4px;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 13px;
     line-height: 1;
   }
@@ -595,7 +595,7 @@ import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pr
 const GRID_COLS = 16
 const GRID_ROWS = 16
 const FONT_SIZE = 13
-const FONT = `${FONT_SIZE}px 'JetBrains Mono', monospace`
+const FONT = `${FONT_SIZE}px 'Commit Mono', monospace`
 const CELL_W = FONT_SIZE
 const CELL_H = Math.round(FONT_SIZE * 1.45)
 const TERRACOTTA = '#C2714F'

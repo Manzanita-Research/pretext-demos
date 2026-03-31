@@ -6,7 +6,7 @@
 <title>The Typographic Linter</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,400&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;1,7..72,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,400&family=Commit+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -14,7 +14,7 @@
     width: 100%; height: 100vh;
     background: #FAF9F6;
     color: #2C2C2C;
-    font-family: 'Literata', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 15px;
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
@@ -95,7 +95,7 @@
   }
 
   .text-line {
-    font-family: 'Literata', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 17px;
     color: #2C2C2C;
     white-space: pre;
@@ -202,7 +202,7 @@
     position: absolute;
     right: -14px;
     bottom: -24px;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 0.65rem;
     color: #5C5C5C;
     white-space: nowrap;
@@ -240,7 +240,7 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 0.75rem;
     color: #2C2C2C;
   }
@@ -274,7 +274,7 @@
     background: rgba(0,0,0,0.03);
   }
   .legend-name {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 0.72rem;
     font-weight: 500;
     display: flex;
@@ -302,7 +302,7 @@
     border-top: 1px solid #E8E5DF;
   }
   .textarea-section label {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 0.7rem;
     color: #5C5C5C;
     display: block;
@@ -311,7 +311,7 @@
   .textarea-section textarea {
     width: 100%;
     height: 120px;
-    font-family: 'Literata', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 0.8rem;
     line-height: 1.5;
     color: #2C2C2C;
@@ -328,7 +328,7 @@
   }
 
   .perf-counter {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 0.65rem;
     color: #5C5C5C;
     text-align: right;
@@ -336,7 +336,7 @@
   }
 
   .why-link {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 0.7rem;
     color: #C2714F;
     cursor: pointer;
@@ -405,7 +405,7 @@
     position: fixed;
     background: #2C2C2C;
     color: #FAF9F6;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 0.7rem;
     padding: 0.4rem 0.65rem;
     border-radius: 4px;
@@ -422,7 +422,7 @@
   }
 
   .width-label {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 0.65rem;
     color: #5C5C5C;
     text-align: center;
@@ -487,7 +487,7 @@ import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pr
 
 // --- Config ---
 const FONT_SIZE = 17
-const FONT_STR = `${FONT_SIZE}px Literata, Georgia, serif`
+const FONT_STR = `${FONT_SIZE}px Fraunces, Georgia, serif`
 const MARGIN = 28
 
 const COLORS = {

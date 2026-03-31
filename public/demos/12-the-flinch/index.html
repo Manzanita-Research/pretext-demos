@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Flinch</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,300;0,7..72,400;1,7..72,300;1,7..72,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,7..72,300;0,7..72,400;1,7..72,300;1,7..72,400&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: #08080e; }
   #loading {
     position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
-    color: #5C5C5C; font: 300 15px 'Literata', Georgia, serif; letter-spacing: 0.04em;
+    color: #5C5C5C; font: 300 15px 'Fraunces', Georgia, serif; letter-spacing: 0.04em;
     background: #08080e; z-index: 10; transition: opacity 1.2s;
   }
   #loading.hidden { opacity: 0; pointer-events: none; }
@@ -21,7 +21,7 @@
   }
   .word {
     position: absolute;
-    font: 300 17px/30px 'Literata', Georgia, serif;
+    font: 300 17px/30px 'Fraunces', Georgia, serif;
     color: rgb(228, 220, 207);
     white-space: nowrap;
     will-change: transform, color, opacity;
@@ -46,7 +46,7 @@ const PASSAGE = `I wrote this knowing you would come. I wrote it anyway. There i
 
 // --- Font & Layout ---
 const FONT_SIZE = 17
-const FONT_FAMILY = "'Literata', Georgia, serif"
+const FONT_FAMILY = "'Fraunces', Georgia, serif"
 const FONT = `300 ${FONT_SIZE}px ${FONT_FAMILY}`
 const LINE_HEIGHT = 30
 const MAX_WIDTH = 540

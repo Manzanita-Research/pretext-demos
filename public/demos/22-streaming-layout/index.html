@@ -6,7 +6,7 @@
 <title>The Streaming Layout</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,400&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;1,7..72,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,400&family=Commit+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -14,7 +14,7 @@
     width: 100%; min-height: 100vh;
     background: #FAF9F6;
     color: #2C2C2C;
-    font-family: 'Literata', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 15px;
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
@@ -64,7 +64,7 @@
     flex-wrap: wrap;
   }
   .controls button {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 0.8rem;
     font-weight: 500;
     padding: 0.45rem 1.1rem;
@@ -98,7 +98,7 @@
     gap: 0.5rem;
   }
   .speed-control label {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 0.75rem;
     color: #5C5C5C;
   }
@@ -107,7 +107,7 @@
     accent-color: #C2714F;
   }
   .speed-value {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 0.75rem;
     color: #6B3A2A;
     min-width: 4ch;
@@ -133,7 +133,7 @@
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 0.7rem;
     font-weight: 500;
     text-transform: uppercase;
@@ -185,11 +185,11 @@
     justify-content: center;
     font-size: 0.65rem;
     color: #fff;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-weight: 500;
   }
   .chat-name {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 0.75rem;
     font-weight: 500;
     color: #2C2C2C;
@@ -199,7 +199,7 @@
     overflow-anchor: auto;
   }
   .chat-text {
-    font-family: 'Literata', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 0.9rem;
     line-height: 1.65;
     color: #2C2C2C;
@@ -227,7 +227,7 @@
     box-shadow: 0 1px 3px rgba(44, 44, 44, 0.04);
   }
   .below-chat-label {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 0.65rem;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -243,7 +243,7 @@
     padding: 0.5rem 0.75rem;
     border: 1px solid #E8E5DF;
     border-radius: 6px;
-    font-family: 'Literata', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 0.82rem;
     color: #2C2C2C;
     background: #FAF9F6;
@@ -257,7 +257,7 @@
     color: #b0ada8;
   }
   .send-btn {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 0.75rem;
     font-weight: 500;
     padding: 0.5rem 0.9rem;
@@ -280,7 +280,7 @@
     display: flex;
     align-items: center;
     gap: 0.4rem;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 0.7rem;
   }
   .shift-counter-label {
@@ -295,7 +295,7 @@
 
   /* Height label for pretext container */
   .height-label {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Commit Mono', monospace;
     font-size: 0.6rem;
     color: #8B9E7E;
     letter-spacing: 0.04em;
@@ -324,7 +324,7 @@
     border: 1px solid #E8E5DF;
     background: #fff;
     color: #6B3A2A;
-    font-family: 'Literata', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 0.85rem;
     font-style: italic;
     cursor: pointer;
@@ -382,7 +382,7 @@
     margin-bottom: 1rem;
   }
   .modal p {
-    font-family: 'Literata', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
     font-size: 0.88rem;
     line-height: 1.7;
     color: #2C2C2C;
@@ -527,7 +527,7 @@ const TOKENS = STREAM_TEXT.split(/(\s+)/).filter(Boolean)
 const FONT_SIZE = 14.4
 const LINE_HEIGHT_MULT = 1.65
 const LINE_HEIGHT = FONT_SIZE * LINE_HEIGHT_MULT
-const FONT_FAMILY = "'Literata', Georgia, serif"
+const FONT_FAMILY = "'Fraunces', Georgia, serif"
 const FONT_STR = `${FONT_SIZE}px ${FONT_FAMILY}`
 
 // --- DOM refs ---
