@@ -9,18 +9,35 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: #08080e; }
-  canvas { display: block; width: 100%; height: 100%; cursor: default; }
   #loading {
     position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
     color: #5C5C5C; font: 300 15px 'Literata', Georgia, serif; letter-spacing: 0.04em;
     background: #08080e; z-index: 10; transition: opacity 1.2s;
   }
   #loading.hidden { opacity: 0; pointer-events: none; }
+  #stage {
+    position: fixed; inset: 0; cursor: default;
+    -webkit-user-select: text; user-select: text;
+  }
+  .word {
+    position: absolute;
+    font: 300 17px/30px 'Literata', Georgia, serif;
+    color: rgb(228, 220, 207);
+    white-space: nowrap;
+    will-change: transform, color, opacity;
+    pointer-events: none;
+  }
+  .particle {
+    position: absolute;
+    border-radius: 50%;
+    will-change: transform, opacity;
+    pointer-events: none;
+  }
 </style>
 </head>
 <body>
 <div id="loading">approaching...</div>
-<canvas id="canvas"></canvas>
+<div id="stage"></div>
 <script type="module">
 import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
 
@@ -37,12 +54,11 @@ const MARGIN = 40
 const BG = '#08080e'
 
 // --- Colors ---
-const COLOR_CREAM = [228, 220, 207]       // warm cream — home position
-const COLOR_DUSK = [92, 92, 92]           // #5C5C5C — scared/faded
-const COLOR_TERRACOTTA = [194, 113, 79]   // #C2714F — brave/returning glow
+const COLOR_CREAM = [228, 220, 207]
+const COLOR_DUSK = [92, 92, 92]
+const COLOR_TERRACOTTA = [194, 113, 79]
 
 // --- Word personality traits ---
-// Each word gets a "fear" level and behavior flags
 const SKITTISH_WORDS = new Set(['look', 'away', 'flinching', 'scared', 'running', 'chase', 'fragile', 'flinch', 'trap', 'sound'])
 const BRAVE_WORDS = new Set(['trust', 'me', 'stay', 'still', 'courage', 'honest', 'honesty', 'invitation', 'worth'])
 const CLINGING_PAIRS = [
@@ -58,7 +74,6 @@ function getWordPersonality(word) {
   if (BRAVE_WORDS.has(lower)) {
     return { fear: 0.15 + Math.random() * 0.15, returnSpeed: 0.7, fleeMultiplier: 0.5, sensitivityRadius: 0.6 }
   }
-  // Default words
   const fear = 0.3 + Math.random() * 0.4
   return { fear, returnSpeed: 0.25 + (1 - fear) * 0.35, fleeMultiplier: 0.8 + fear * 0.6, sensitivityRadius: 0.8 + fear * 0.4 }
 }
@@ -69,25 +84,20 @@ function shouldCling(wordA, wordB) {
   return CLINGING_PAIRS.some(([x, y]) => (a === x && b === y) || (a === y && b === x))
 }
 
-// --- Canvas setup ---
-const canvas = document.getElementById('canvas')
-const ctx = canvas.getContext('2d')
+// --- Stage setup ---
+const stage = document.getElementById('stage')
+let W = window.innerWidth
+let H = window.innerHeight
 
-let W, H, dpr
-
-function resize() {
-  dpr = window.devicePixelRatio || 1
+window.addEventListener('resize', () => {
   W = window.innerWidth
   H = window.innerHeight
-  canvas.width = W * dpr
-  canvas.height = H * dpr
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-}
-resize()
-window.addEventListener('resize', resize)
+  needsRelayout = true
+})
 
-// --- Prepare text with pretext ---
+// --- Prepare text with pretext for measurement ---
 const prepared = prepareWithSegments(PASSAGE, FONT)
+
 // --- Mouse tracking ---
 let mouseX = -9999, mouseY = -9999
 let prevMouseX = -9999, prevMouseY = -9999
@@ -95,14 +105,13 @@ let mouseSpeed = 0
 let mouseOnCanvas = false
 let smoothSpeed = 0
 
-canvas.addEventListener('pointermove', (e) => {
-  const rect = canvas.getBoundingClientRect()
-  mouseX = e.clientX - rect.left
-  mouseY = e.clientY - rect.top
+stage.addEventListener('pointermove', (e) => {
+  mouseX = e.clientX
+  mouseY = e.clientY
   mouseOnCanvas = true
 })
 
-canvas.addEventListener('pointerleave', () => {
+stage.addEventListener('pointerleave', () => {
   mouseOnCanvas = false
 })
 
@@ -119,7 +128,6 @@ function updateMouseVelocity() {
 }
 
 // --- Word-level physics ---
-// We'll pre-split the passage into words and give each one physics state
 const words = PASSAGE.split(/(\s+)/).filter(w => w.length > 0)
 const wordStates = words.map((word, i) => {
   const isSpace = /^\s+$/.test(word)
@@ -128,32 +136,41 @@ const wordStates = words.map((word, i) => {
     word,
     isSpace,
     personality,
-    // Physics
     offsetX: 0,
     offsetY: 0,
     velX: 0,
     velY: 0,
-    // Visual
     opacity: 1,
-    colorBlend: 0,   // 0 = cream, 1 = dusk, -1 = terracotta
-    // Return animation
+    homeX: 0,
+    homeY: 0,
+    width: 0,
+    el: null,
     returnDelay: isSpace ? 0 : (personality ? personality.fear * 60 + Math.random() * 30 : 0),
     returnTimer: 0,
     isReturning: false,
-    // Scatter state
     scatterAngle: Math.random() * Math.PI * 2,
     scattered: false,
   }
 })
 
+// Create DOM elements for visible words
+wordStates.forEach((state) => {
+  if (state.isSpace) return
+  const el = document.createElement('span')
+  el.className = 'word'
+  el.textContent = state.word
+  stage.appendChild(el)
+  state.el = el
+})
+
 // --- Emotional state tracking ---
-let stillTime = 0             // frames cursor has been still
-let aggressiveTime = 0        // frames cursor has been fast
-let givenUp = false           // text has given up and scattered
-let givenUpAmount = 0         // 0-1 how scattered
-const STILL_THRESHOLD = 1.5   // speed below which we consider "still"
-const AGGRESSIVE_SPEED = 12   // speed above which counts as aggressive
-const AGGRESSIVE_FRAMES_FOR_GIVEUP = 360 // ~6 seconds of chasing
+let stillTime = 0
+let aggressiveTime = 0
+let givenUp = false
+let givenUpAmount = 0
+const STILL_THRESHOLD = 1.5
+const AGGRESSIVE_SPEED = 12
+const AGGRESSIVE_FRAMES_FOR_GIVEUP = 360
 
 // --- Particle system ---
 const particles = []
@@ -161,21 +178,31 @@ const MAX_PARTICLES = 150
 
 function spawnParticles(x, y, count, vxBias) {
   for (let i = 0; i < count; i++) {
-    if (particles.length >= MAX_PARTICLES) particles.shift()
+    if (particles.length >= MAX_PARTICLES) {
+      const old = particles.shift()
+      if (old.el.parentNode) old.el.parentNode.removeChild(old.el)
+    }
     const angle = Math.random() * Math.PI * 2
     const speed = 0.3 + Math.random() * 1.5
+    const el = document.createElement('div')
+    el.className = 'particle'
+    const size = 2 + Math.random() * 3
+    el.style.width = size + 'px'
+    el.style.height = size + 'px'
+    stage.appendChild(el)
     particles.push({
       x, y: y + (Math.random() - 0.5) * 8,
       vx: Math.cos(angle) * speed + vxBias * 0.2,
       vy: Math.sin(angle) * speed,
       life: 1.0,
       decay: 0.008 + Math.random() * 0.02,
-      size: 2 + Math.random() * 3,
+      size,
+      el,
     })
   }
 }
 
-function updateAndDrawParticles() {
+function updateParticles() {
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i]
     p.x += p.vx
@@ -183,21 +210,32 @@ function updateAndDrawParticles() {
     p.vx *= 0.97
     p.vy *= 0.97
     p.life -= p.decay
-    if (p.life <= 0) { particles.splice(i, 1); continue }
+    if (p.life <= 0) {
+      if (p.el.parentNode) p.el.parentNode.removeChild(p.el)
+      particles.splice(i, 1)
+      continue
+    }
     const alpha = p.life * 0.3
     const r = Math.round(COLOR_TERRACOTTA[0] * alpha + COLOR_CREAM[0] * (1 - alpha) * alpha)
     const g = Math.round(COLOR_TERRACOTTA[1] * alpha + COLOR_CREAM[1] * (1 - alpha) * alpha)
     const b = Math.round(COLOR_TERRACOTTA[2] * alpha + COLOR_CREAM[2] * (1 - alpha) * alpha)
-    ctx.beginPath()
-    ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2)
-    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`
-    ctx.fill()
+    const s = p.size * p.life
+    p.el.style.transform = `translate3d(${p.x - s / 2}px, ${p.y - s / 2}px, 0)`
+    p.el.style.width = s + 'px'
+    p.el.style.height = s + 'px'
+    p.el.style.background = `rgba(${r}, ${g}, ${b}, ${alpha})`
   }
 }
 
-// --- Layout words into lines (using pretext for measurement) ---
+// --- Layout words into lines using pretext for measurement ---
+let needsRelayout = true
+
 function layoutWords(maxWidth) {
-  ctx.font = FONT
+  // Use an offscreen canvas for measurement (pretext needs it, but we render to DOM)
+  const measureCanvas = document.createElement('canvas')
+  const measureCtx = measureCanvas.getContext('2d')
+  measureCtx.font = FONT
+
   const lines = []
   let currentLine = []
   let currentWidth = 0
@@ -207,7 +245,7 @@ function layoutWords(maxWidth) {
     const isSpace = /^\s+$/.test(word)
 
     if (isSpace) {
-      const spaceWidth = ctx.measureText(' ').width
+      const spaceWidth = measureCtx.measureText(' ').width
       if (currentWidth + spaceWidth <= maxWidth) {
         currentLine.push({ wordIndex: i, text: ' ', x: currentWidth, width: spaceWidth })
         currentWidth += spaceWidth
@@ -215,7 +253,7 @@ function layoutWords(maxWidth) {
       continue
     }
 
-    const wordWidth = ctx.measureText(word).width
+    const wordWidth = measureCtx.measureText(word).width
 
     if (currentWidth + wordWidth > maxWidth && currentLine.length > 0) {
       lines.push({ words: currentLine, width: currentWidth })
@@ -237,6 +275,10 @@ function layoutWords(maxWidth) {
 // --- Main render ---
 let lastTime = 0
 let frameCount = 0
+let cachedLines = null
+let cachedBaseX = 0
+let cachedBaseY = 0
+let cachedTextBlockWidth = 0
 
 function render(time) {
   requestAnimationFrame(render)
@@ -270,7 +312,7 @@ function render(time) {
   if (givenUp) {
     givenUpAmount = Math.min(1, givenUpAmount + 0.008)
   }
-  // Recovery from given up (if cursor leaves or is very still for a while)
+  // Recovery from given up
   if (givenUp && (!mouseOnCanvas || stillTime > 180)) {
     givenUpAmount = Math.max(0, givenUpAmount - 0.003)
     if (givenUpAmount <= 0) {
@@ -279,31 +321,44 @@ function render(time) {
     }
   }
 
-  ctx.clearRect(0, 0, W, H)
+  // --- Layout (only recompute when needed) ---
+  if (needsRelayout || !cachedLines) {
+    cachedTextBlockWidth = Math.min(MAX_WIDTH, W - MARGIN * 2)
+    cachedLines = layoutWords(cachedTextBlockWidth)
+    const totalHeight = cachedLines.length * LINE_HEIGHT
+    cachedBaseX = (W - cachedTextBlockWidth) / 2
+    cachedBaseY = Math.max(MARGIN + LINE_HEIGHT, (H - totalHeight) / 2 + LINE_HEIGHT)
 
-  // --- Layout ---
-  const textBlockWidth = Math.min(MAX_WIDTH, W - MARGIN * 2)
-  const lines = layoutWords(textBlockWidth)
-  const totalHeight = lines.length * LINE_HEIGHT
-  const baseX = (W - textBlockWidth) / 2
-  const baseY = Math.max(MARGIN + LINE_HEIGHT, (H - totalHeight) / 2 + LINE_HEIGHT)
+    // Update home positions
+    for (let li = 0; li < cachedLines.length; li++) {
+      const line = cachedLines[li]
+      const y = cachedBaseY + li * LINE_HEIGHT
+      for (const entry of line.words) {
+        const state = wordStates[entry.wordIndex]
+        if (!state || state.isSpace) continue
+        state.homeX = cachedBaseX + entry.x
+        state.homeY = y
+        state.width = entry.width
+      }
+    }
+    needsRelayout = false
+  }
 
   const REPULSION_RADIUS = 200
   const SPRING_K = 0.003
   const DAMPING = 0.88
 
-  // --- Update and draw each word ---
-  for (let li = 0; li < lines.length; li++) {
-    const line = lines[li]
-    const y = baseY + li * LINE_HEIGHT
+  // --- Update and position each word ---
+  for (let li = 0; li < cachedLines.length; li++) {
+    const line = cachedLines[li]
 
     for (const entry of line.words) {
       const state = wordStates[entry.wordIndex]
       if (!state || state.isSpace) continue
 
       const p = state.personality
-      const homeX = baseX + entry.x
-      const homeY = y
+      const homeX = state.homeX
+      const homeY = state.homeY
 
       // Distance from cursor to this word's home
       const dxHome = mouseOnCanvas ? (homeX + entry.width / 2 - mouseX) : 9999
@@ -326,7 +381,6 @@ function render(time) {
         // --- Normal repulsion ---
         if (mouseOnCanvas && proximity > 0) {
           const speedFactor = Math.min(mouseSpeed / 6, 1)
-          // Skittish words react even to slow movement
           const effectiveSpeed = p.fear > 0.7 ? Math.max(speedFactor, proximity * 0.3) : speedFactor
 
           if (effectiveSpeed > 0.08) {
@@ -345,7 +399,7 @@ function render(time) {
           }
         }
 
-        // --- Return behavior: word by word, tentatively ---
+        // --- Return behavior ---
         if (mouseOnCanvas && mouseSpeed < STILL_THRESHOLD && Math.abs(state.offsetX) > 0.5) {
           state.returnTimer++
           if (state.returnTimer > state.returnDelay) {
@@ -361,10 +415,10 @@ function render(time) {
         state.velX += -SPRING_K * returnMultiplier * state.offsetX * (state.isReturning ? 3 : 1)
         state.velY += -SPRING_K * returnMultiplier * state.offsetY * (state.isReturning ? 3 : 1)
 
-        // Clinging: pull toward neighbors if they're a clinging pair
+        // Clinging pairs
         if (entry.wordIndex > 0 && entry.wordIndex < words.length - 1) {
-          const prev = wordStates[entry.wordIndex - 2] // skip space
-          const next = wordStates[entry.wordIndex + 2] // skip space
+          const prev = wordStates[entry.wordIndex - 2]
+          const next = wordStates[entry.wordIndex + 2]
           if (prev && !prev.isSpace && shouldCling(state.word, prev.word)) {
             state.velX += (prev.offsetX - state.offsetX) * 0.02
             state.velY += (prev.offsetY - state.offsetY) * 0.02
@@ -375,7 +429,7 @@ function render(time) {
           }
         }
 
-        // Opacity: scared words fade more
+        // Opacity
         const targetOpacity = 1 - proximity * p.fear * 0.4
         state.opacity += (targetOpacity - state.opacity) * 0.1
       }
@@ -387,21 +441,18 @@ function render(time) {
       state.offsetY += state.velY
 
       // Clamp
-      const maxOff = textBlockWidth * 0.8
+      const maxOff = cachedTextBlockWidth * 0.8
       state.offsetX = Math.max(-maxOff, Math.min(maxOff, state.offsetX))
       state.offsetY = Math.max(-H * 0.4, Math.min(H * 0.4, state.offsetY))
 
       // --- Color ---
-      // Blend between cream (home), dusk (scared), terracotta (returning/brave)
       let r, g, b
       if (state.isReturning && !givenUp) {
-        // Terracotta glow when returning
         const returnBlend = Math.min(1, state.returnTimer / (state.returnDelay + 30)) * 0.6
         r = Math.round(COLOR_CREAM[0] + (COLOR_TERRACOTTA[0] - COLOR_CREAM[0]) * returnBlend)
         g = Math.round(COLOR_CREAM[1] + (COLOR_TERRACOTTA[1] - COLOR_CREAM[1]) * returnBlend)
         b = Math.round(COLOR_CREAM[2] + (COLOR_TERRACOTTA[2] - COLOR_CREAM[2]) * returnBlend)
       } else if (proximity > 0 && mouseOnCanvas) {
-        // Fade to dusk when scared
         const scareBlend = proximity * p.fear * 0.8
         r = Math.round(COLOR_CREAM[0] + (COLOR_DUSK[0] - COLOR_CREAM[0]) * scareBlend)
         g = Math.round(COLOR_CREAM[1] + (COLOR_DUSK[1] - COLOR_CREAM[1]) * scareBlend)
@@ -417,14 +468,16 @@ function render(time) {
         ? (Math.random() - 0.5) * Math.min(Math.abs(state.velX) * 0.3, 1.5)
         : 0
 
-      ctx.font = FONT
-      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${state.opacity})`
-      ctx.fillText(entry.text, homeX + state.offsetX, homeY + state.offsetY + tremor)
+      // Update DOM element
+      const drawX = homeX + state.offsetX
+      const drawY = homeY + state.offsetY + tremor - FONT_SIZE // adjust for top-left vs baseline
+      state.el.style.transform = `translate3d(${drawX}px, ${drawY}px, 0)`
+      state.el.style.color = `rgba(${r}, ${g}, ${b}, ${state.opacity})`
     }
   }
 
   // --- Particles ---
-  updateAndDrawParticles()
+  updateParticles()
 }
 
 // --- Init ---

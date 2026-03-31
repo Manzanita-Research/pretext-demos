@@ -10,7 +10,36 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: #08080e; }
-  canvas { display: block; width: 100%; height: 100%; }
+
+  #text-container {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  #text-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+
+  .text-line {
+    font: 18px Literata, Georgia, serif;
+    color: #e8e4dc;
+    line-height: 28px;
+    height: 28px;
+    white-space: nowrap;
+    text-align: center;
+    pointer-events: auto;
+    user-select: text;
+    transition: none;
+  }
 
   #input-panel {
     position: fixed;
@@ -148,10 +177,34 @@
     border: 1px dashed #C2714F44;
     padding: 40px 60px;
   }
+
+  #mode-indicator {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    font: 12px Literata, Georgia, serif;
+    color: #8B9E7E;
+    opacity: 0.35;
+    z-index: 5;
+  }
+
+  #freq-visualizer {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 120px;
+    height: 40px;
+    z-index: 5;
+  }
 </style>
 </head>
 <body>
-<canvas id="c"></canvas>
+
+<div id="text-container">
+  <div id="text-block"></div>
+</div>
+
+<canvas id="freq-visualizer" width="240" height="80"></canvas>
 
 <div id="input-panel">
   <button class="input-btn" id="mic-btn">Use Microphone</button>
@@ -171,12 +224,12 @@
 </div>
 
 <div id="drop-overlay"><span>Drop audio file here</span></div>
+<div id="mode-indicator"></div>
 
 <script type="module">
 import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
 
-const canvas = document.getElementById('c')
-const ctx = canvas.getContext('2d')
+const textBlock = document.getElementById('text-block')
 const inputPanel = document.getElementById('input-panel')
 const micBtn = document.getElementById('mic-btn')
 const fileBtn = document.getElementById('file-btn')
@@ -188,6 +241,9 @@ const playPauseBtn = document.getElementById('play-pause-btn')
 const progressFill = document.getElementById('progress-fill')
 const progressTime = document.getElementById('progress-time')
 const dropOverlay = document.getElementById('drop-overlay')
+const modeIndicator = document.getElementById('mode-indicator')
+const freqCanvas = document.getElementById('freq-visualizer')
+const freqCtx = freqCanvas.getContext('2d')
 
 const TEXT_COLOR = '#e8e4dc'
 const BG_COLOR = '#08080e'
@@ -221,6 +277,9 @@ let audioPauseOffset = 0
 let audioPlaying = false
 let oscillatorNode = null
 
+// DOM line element pool
+let lineElements = []
+
 function showStatus(msg) {
   statusMsg.textContent = msg
   statusMsg.classList.add('visible')
@@ -236,16 +295,6 @@ function formatTime(seconds) {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-// Resize canvas to device pixels
-function resize() {
-  const dpr = window.devicePixelRatio || 1
-  canvas.width = window.innerWidth * dpr
-  canvas.height = window.innerHeight * dpr
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-}
-window.addEventListener('resize', resize)
-resize()
-
 // Normalize frequency data (-100..0 dB) to 0..1
 function normalizeFreq(db) {
   const min = -100
@@ -254,15 +303,15 @@ function normalizeFreq(db) {
 }
 
 // Get line width from frequency band
-function getLineWidth(lineIndex, totalLines, canvasW) {
-  if (!smoothedFreq) return canvasW * MAX_WIDTH_RATIO
+function getLineWidth(lineIndex, totalLines, containerW) {
+  if (!smoothedFreq) return containerW * MAX_WIDTH_RATIO
 
   const bandIndex = Math.floor((lineIndex / Math.max(totalLines, 1)) * (NUM_BANDS - 1))
   const clampedBand = Math.min(bandIndex, NUM_BANDS - 1)
   const amplitude = smoothedFreq[clampedBand]
 
-  const minW = canvasW * MIN_WIDTH_RATIO
-  const maxW = canvasW * MAX_WIDTH_RATIO
+  const minW = containerW * MIN_WIDTH_RATIO
+  const maxW = containerW * MAX_WIDTH_RATIO
   return minW + amplitude * (maxW - minW)
 }
 
@@ -465,24 +514,25 @@ function updateFrequency() {
   }
 }
 
-// Draw small frequency visualizer in bottom-right corner
-function drawFreqVisualizer(w, h) {
+// Draw small frequency visualizer on the small canvas
+function drawFreqVisualizer() {
   if (!smoothedFreq) return
 
-  const vizW = 120
-  const vizH = 40
-  const x0 = w - vizW - 20
-  const y0 = h - vizH - 20
-  const barW = vizW / NUM_BANDS
+  const w = freqCanvas.width
+  const h = freqCanvas.height
+  const barW = w / NUM_BANDS
 
-  ctx.globalAlpha = 0.3
+  freqCtx.clearRect(0, 0, w, h)
+  freqCtx.globalAlpha = 0.3
+
   for (let i = 0; i < NUM_BANDS; i++) {
     const amp = smoothedFreq[i]
-    const barH = amp * vizH
-    ctx.fillStyle = ACCENT_COLOR
-    ctx.fillRect(x0 + i * barW, y0 + vizH - barH, barW - 0.5, barH)
+    const barH = amp * h
+    freqCtx.fillStyle = ACCENT_COLOR
+    freqCtx.fillRect(i * barW, h - barH, barW - 0.5, barH)
   }
-  ctx.globalAlpha = 1.0
+
+  freqCtx.globalAlpha = 1.0
 }
 
 // Update playback progress
@@ -501,14 +551,36 @@ function updateProgress() {
   }
 }
 
+// Ensure we have enough line elements in the pool
+function ensureLineElements(count) {
+  while (lineElements.length < count) {
+    const div = document.createElement('div')
+    div.className = 'text-line'
+    textBlock.appendChild(div)
+    lineElements.push(div)
+  }
+  // Hide excess elements
+  for (let i = 0; i < lineElements.length; i++) {
+    lineElements[i].style.display = i < count ? '' : 'none'
+  }
+}
+
+// Update mode indicator
+function updateModeIndicator() {
+  if (inputMode === 'mic') {
+    modeIndicator.textContent = speechSupported ? 'listening...' : 'mic active (no speech recognition)'
+  } else if (inputMode === 'file') {
+    modeIndicator.textContent = 'audio file'
+  } else if (inputMode === 'demo') {
+    modeIndicator.textContent = 'demo tone'
+  } else {
+    modeIndicator.textContent = ''
+  }
+}
+
 // Main render loop
 function render() {
   const w = window.innerWidth
-  const h = window.innerHeight
-
-  // Clear
-  ctx.fillStyle = BG_COLOR
-  ctx.fillRect(0, 0, w, h)
 
   if (inputMode !== 'none') {
     updateFrequency()
@@ -516,22 +588,21 @@ function render() {
 
   updateProgress()
 
-  // Prepare text layout
+  // Prepare text layout using pretext for measurement only
   const prepared = prepareWithSegments(currentText, FONT)
-  ctx.font = FONT
 
-  // First pass: figure out how many lines
+  // First pass: figure out how many lines at max width
   let cursor = { segmentIndex: 0, graphemeIndex: 0 }
-  const lines = []
+  const preLines = []
 
   while (true) {
     const line = layoutNextLine(prepared, cursor, w * MAX_WIDTH_RATIO)
     if (line === null) break
-    lines.push(line)
+    preLines.push(line)
     cursor = line.end
   }
 
-  const totalLines = lines.length
+  const totalLines = preLines.length
 
   // Second pass: lay out with frequency-driven widths
   cursor = { segmentIndex: 0, graphemeIndex: 0 }
@@ -541,62 +612,48 @@ function render() {
     const lineW = getLineWidth(i, Math.max(totalLines, 10), w)
     const line = layoutNextLine(prepared, cursor, lineW)
     if (line === null) break
-    shapedLines.push({ ...line, targetWidth: lineW, index: i })
+    shapedLines.push({ text: line.text, targetWidth: lineW, index: i })
     cursor = line.end
   }
 
-  // Center the block vertically
-  const blockHeight = shapedLines.length * LINE_HEIGHT
-  let startY = Math.max(40, (h - blockHeight) / 2)
-  const centerX = w / 2
+  // Ensure DOM elements exist
+  ensureLineElements(shapedLines.length)
 
-  // Draw each line
-  for (const line of shapedLines) {
-    const y = startY + line.index * LINE_HEIGHT
+  // Update each line element
+  for (let i = 0; i < shapedLines.length; i++) {
+    const line = shapedLines[i]
+    const el = lineElements[i]
 
+    // Update text content if changed
+    if (el.textContent !== line.text) {
+      el.textContent = line.text
+    }
+
+    // Compute amplitude for this line
     const bandIndex = Math.floor((line.index / Math.max(shapedLines.length, 1)) * (NUM_BANDS - 1))
     const amplitude = smoothedFreq ? smoothedFreq[Math.min(bandIndex, NUM_BANDS - 1)] : 0
 
-    // Glow on loud lines
+    // Apply glow and opacity based on amplitude
     if (amplitude > 0.25) {
       const glowStrength = (amplitude - 0.25) / 0.75
-      ctx.shadowColor = GLOW_COLOR
-      ctx.shadowBlur = 8 + glowStrength * 20
-      ctx.globalAlpha = 0.6 + glowStrength * 0.4
+      const blur = 8 + glowStrength * 20
+      const alpha = 0.6 + glowStrength * 0.4
+      el.style.textShadow = `0 0 ${blur}px ${GLOW_COLOR}`
+      el.style.opacity = alpha
     } else {
-      ctx.shadowColor = 'transparent'
-      ctx.shadowBlur = 0
-      ctx.globalAlpha = 0.45 + amplitude * 1.2
+      el.style.textShadow = 'none'
+      el.style.opacity = 0.45 + amplitude * 1.2
     }
 
-    ctx.fillStyle = TEXT_COLOR
-    ctx.textAlign = 'center'
-    ctx.fillText(line.text, centerX, y)
+    // Set max-width to the frequency-driven width, centered via flexbox parent
+    el.style.maxWidth = line.targetWidth + 'px'
   }
-
-  // Reset shadow
-  ctx.shadowColor = 'transparent'
-  ctx.shadowBlur = 0
-  ctx.globalAlpha = 1.0
 
   // Frequency visualizer
-  drawFreqVisualizer(w, h)
+  drawFreqVisualizer()
 
-  // Input mode indicator
-  ctx.globalAlpha = 0.35
-  ctx.font = '12px Literata, Georgia'
-  ctx.textAlign = 'left'
-  if (inputMode === 'mic') {
-    ctx.fillStyle = '#8B9E7E'
-    ctx.fillText(speechSupported ? 'listening...' : 'mic active (no speech recognition)', 20, h - 20)
-  } else if (inputMode === 'file') {
-    ctx.fillStyle = '#8B9E7E'
-    ctx.fillText('audio file', 20, h - 20)
-  } else if (inputMode === 'demo') {
-    ctx.fillStyle = '#8B9E7E'
-    ctx.fillText('demo tone', 20, h - 20)
-  }
-  ctx.globalAlpha = 1.0
+  // Mode indicator
+  updateModeIndicator()
 
   requestAnimationFrame(render)
 }

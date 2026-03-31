@@ -19,17 +19,53 @@
     overflow: hidden;
   }
 
-  #canvas-wrap {
+  #scene-wrap {
     flex: 1;
     position: relative;
     overflow: hidden;
   }
 
-  canvas {
+  #scene-wrap svg {
     display: block;
     position: absolute;
     top: 0;
     left: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  #text-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  #text-layer .flow-char {
+    position: absolute;
+    font-family: 'Literata', serif;
+    font-size: 11px;
+    line-height: 1;
+    white-space: pre;
+    pointer-events: auto;
+    user-select: text;
+    transform-origin: center center;
+    will-change: transform, opacity;
+  }
+
+  #text-layer .orbit-word {
+    position: absolute;
+    font-family: 'Literata', serif;
+    font-size: 9px;
+    line-height: 1;
+    white-space: nowrap;
+    pointer-events: auto;
+    user-select: text;
+    transform-origin: center center;
+    text-align: center;
   }
 
   #input-bar {
@@ -76,8 +112,9 @@
 </style>
 </head>
 <body>
-  <div id="canvas-wrap">
-    <canvas id="canvas"></canvas>
+  <div id="scene-wrap">
+    <svg id="network-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div id="text-layer"></div>
   </div>
   <div id="input-bar">
     <label>mycelium</label>
@@ -87,9 +124,10 @@
 <script type="module">
 import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
 
-const canvas = document.getElementById('canvas')
-const ctx = canvas.getContext('2d')
+const svg = document.getElementById('network-svg')
+const textLayer = document.getElementById('text-layer')
 const input = document.getElementById('msg-input')
+const NS = 'http://www.w3.org/2000/svg'
 
 const FONT_SIZE = 11
 const FONT = `${FONT_SIZE}px 'Literata', serif`
@@ -102,7 +140,7 @@ const OCHRE = '#C49A3C'
 const BARK = '#6B3A2A'
 const TERRACOTTA = '#C2714F'
 const FOG = '#E8E5DF'
-const BIOLUM = '#5ca89a'   // blue-green bioluminescence accent
+const BIOLUM = '#5ca89a'
 
 const BRANCH_COLORS = [
   '#8B9E7E', '#7A8E6E', '#6B7F5F', '#9BAE8E', '#748868',
@@ -118,18 +156,71 @@ let branches = []
 let nutrientNodes = []
 let messages = []
 let spores = []
+let splitParticles = []
 let networkAge = 0
-let noiseCanvas = null
+
+// --- SVG element groups (created in resize) ---
+let svgDefs, bgGroup, ringsGroup, sporesGroup, branchGroup, centerGroup, nodesGroup, particlesGroup
+
+// --- DOM text element pools ---
+let flowCharEls = []  // reusable pool of .flow-char spans
+let orbitWordEls = []  // reusable pool of .orbit-word spans
+let flowCharIdx = 0
+let orbitWordIdx = 0
+
+function ensureFlowChars(count) {
+  while (flowCharEls.length < count) {
+    const el = document.createElement('span')
+    el.className = 'flow-char'
+    el.style.display = 'none'
+    textLayer.appendChild(el)
+    flowCharEls.push(el)
+  }
+}
+
+function ensureOrbitWords(count) {
+  while (orbitWordEls.length < count) {
+    const el = document.createElement('span')
+    el.className = 'orbit-word'
+    el.style.display = 'none'
+    textLayer.appendChild(el)
+    orbitWordEls.push(el)
+  }
+}
+
+function resetPools() {
+  flowCharIdx = 0
+  orbitWordIdx = 0
+}
+
+function hideUnused() {
+  for (let i = flowCharIdx; i < flowCharEls.length; i++) {
+    flowCharEls[i].style.display = 'none'
+  }
+  for (let i = orbitWordIdx; i < orbitWordEls.length; i++) {
+    orbitWordEls[i].style.display = 'none'
+  }
+}
+
+function getFlowChar() {
+  ensureFlowChars(flowCharIdx + 1)
+  const el = flowCharEls[flowCharIdx++]
+  el.style.display = ''
+  return el
+}
+
+function getOrbitWord() {
+  ensureOrbitWords(orbitWordIdx + 1)
+  const el = orbitWordEls[orbitWordIdx++]
+  el.style.display = ''
+  return el
+}
 
 // --- Utilities ---
 function rand(min, max) { return min + Math.random() * (max - min) }
 function randInt(min, max) { return Math.floor(rand(min, max)) }
 function lerp(a, b, t) { return a + (b - a) * t }
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)) }
-
-function hexAlpha(a) {
-  return Math.round(clamp(a, 0, 1) * 255).toString(16).padStart(2, '0')
-}
 
 function hexToRgb(hex) {
   const r = parseInt(hex.slice(1,3), 16)
@@ -181,22 +272,17 @@ function bezierNormal(p0, p1, p2, p3, t) {
   return { x: -tang.y / len, y: tang.x / len }
 }
 
-// --- Noise texture overlay ---
-function generateNoiseTexture() {
-  noiseCanvas = document.createElement('canvas')
-  noiseCanvas.width = 256
-  noiseCanvas.height = 256
-  const nctx = noiseCanvas.getContext('2d')
-  const imageData = nctx.createImageData(256, 256)
-  const data = imageData.data
-  for (let i = 0; i < data.length; i += 4) {
-    const v = Math.random() * 255
-    data[i] = v
-    data[i+1] = v
-    data[i+2] = v
-    data[i+3] = 8 // very faint
+// --- SVG helpers ---
+function svgEl(tag, attrs) {
+  const el = document.createElementNS(NS, tag)
+  for (const [k, v] of Object.entries(attrs || {})) {
+    el.setAttribute(k, v)
   }
-  nctx.putImageData(imageData, 0, 0)
+  return el
+}
+
+function clearGroup(g) {
+  while (g.firstChild) g.removeChild(g.firstChild)
 }
 
 // --- Spore particles ---
@@ -211,7 +297,8 @@ function spawnSpores(count) {
       alpha: rand(0.05, 0.2),
       life: rand(0, 1),
       maxLife: rand(0.5, 1),
-      color: Math.random() > 0.6 ? BIOLUM : SAGE
+      color: Math.random() > 0.6 ? BIOLUM : SAGE,
+      el: null
     })
   }
 }
@@ -224,7 +311,6 @@ function updateSpores() {
     s.life += 0.002
     if (s.life > s.maxLife) s.alpha -= 0.003
     if (s.alpha <= 0 || s.y < -10 || s.x < -10 || s.x > W + 10) {
-      // respawn
       s.x = rand(0, W)
       s.y = rand(H * 0.3, H)
       s.alpha = rand(0.05, 0.2)
@@ -235,12 +321,14 @@ function updateSpores() {
 }
 
 function drawSpores() {
+  clearGroup(sporesGroup)
   for (const s of spores) {
     if (s.alpha <= 0) continue
-    ctx.fillStyle = rgbaStr(s.color, s.alpha)
-    ctx.beginPath()
-    ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2)
-    ctx.fill()
+    const circle = svgEl('circle', {
+      cx: s.x, cy: s.y, r: s.size,
+      fill: rgbaStr(s.color, s.alpha)
+    })
+    sporesGroup.appendChild(circle)
   }
 }
 
@@ -259,10 +347,8 @@ function generateBranch(startX, startY, angle, width, depth, maxDepth, parent) {
   const cp2x = startX + Math.cos(angle + curve) * length * 0.66
   const cp2y = startY + Math.sin(angle + curve) * length * 0.66
 
-  // More dramatic taper
   const endWidth = width * rand(0.35, 0.55)
 
-  // Nodules along the branch
   const numNodules = randInt(1, 4)
   const nodules = []
   for (let i = 0; i < numNodules; i++) {
@@ -297,7 +383,6 @@ function generateBranch(startX, startY, angle, width, depth, maxDepth, parent) {
 
   branches.push(branch)
 
-  // Sub-branches
   const numChildren = depth === 0 ? randInt(3, 5) : (depth < 3 ? randInt(1, 3) : randInt(0, 2))
   for (let i = 0; i < numChildren; i++) {
     const branchT = rand(0.4, 0.95)
@@ -311,7 +396,6 @@ function generateBranch(startX, startY, angle, width, depth, maxDepth, parent) {
     if (child) branch.childBranches.push(child)
   }
 
-  // Nutrient node at tips
   if (branch.childBranches.length === 0 || (depth >= 2 && Math.random() > 0.6)) {
     nutrientNodes.push({
       x: endX,
@@ -361,9 +445,6 @@ function growNewBranch() {
 
 // --- Message flowing ---
 
-// Split particles: small bursts when text splits at branch points
-let splitParticles = []
-
 function emitSplitParticles(x, y, count) {
   for (let i = 0; i < count; i++) {
     const angle = rand(0, Math.PI * 2)
@@ -393,11 +474,14 @@ function updateSplitParticles() {
 }
 
 function drawSplitParticles() {
+  clearGroup(particlesGroup)
   for (const p of splitParticles) {
-    ctx.fillStyle = rgbaStr(p.color, p.life * 0.6)
-    ctx.beginPath()
-    ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2)
-    ctx.fill()
+    const circle = svgEl('circle', {
+      cx: p.x, cy: p.y,
+      r: p.size * p.life,
+      fill: rgbaStr(p.color, p.life * 0.6)
+    })
+    particlesGroup.appendChild(circle)
   }
 }
 
@@ -433,7 +517,6 @@ function sendMessage(text) {
     })
   }
 
-  // Emit split particles from center
   emitSplitParticles(centerX, centerY, 12)
 }
 
@@ -453,18 +536,57 @@ function collectPath(rootBranch) {
 
 // --- Resize ---
 function resize() {
-  const dpr = window.devicePixelRatio || 1
-  const wrap = document.getElementById('canvas-wrap')
+  const wrap = document.getElementById('scene-wrap')
   W = wrap.clientWidth
   H = wrap.clientHeight
-  canvas.width = W * dpr
-  canvas.height = H * dpr
-  canvas.style.width = W + 'px'
-  canvas.style.height = H + 'px'
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`)
 
   centerX = W / 2
   centerY = H / 2
+
+  // Rebuild SVG structure
+  while (svg.firstChild) svg.removeChild(svg.firstChild)
+
+  svgDefs = svgEl('defs')
+  svg.appendChild(svgDefs)
+
+  // Noise filter for background texture
+  const noiseFilter = svgEl('filter', { id: 'noise', x: '0%', y: '0%', width: '100%', height: '100%' })
+  const feTurb = svgEl('feTurbulence', { type: 'fractalNoise', baseFrequency: '0.65', numOctaves: '3', stitchTiles: 'stitch', result: 'noise' })
+  const feColorMatrix = svgEl('feColorMatrix', { type: 'saturate', values: '0', in: 'noise', result: 'mono' })
+  const feBlend = svgEl('feBlend', { in: 'SourceGraphic', in2: 'mono', mode: 'overlay' })
+  noiseFilter.appendChild(feTurb)
+  noiseFilter.appendChild(feColorMatrix)
+  noiseFilter.appendChild(feBlend)
+  svgDefs.appendChild(noiseFilter)
+
+  // Glow filter for bioluminescence
+  const glowFilter = svgEl('filter', { id: 'glow', x: '-50%', y: '-50%', width: '200%', height: '200%' })
+  const feGaussian = svgEl('feGaussianBlur', { stdDeviation: '3', result: 'blur' })
+  const feMerge = svgEl('feMerge')
+  const feMergeNode1 = svgEl('feMergeNode', { in: 'blur' })
+  const feMergeNode2 = svgEl('feMergeNode', { in: 'SourceGraphic' })
+  feMerge.appendChild(feMergeNode1)
+  feMerge.appendChild(feMergeNode2)
+  glowFilter.appendChild(feGaussian)
+  glowFilter.appendChild(feMerge)
+  svgDefs.appendChild(glowFilter)
+
+  bgGroup = svgEl('g', { id: 'bg-group' })
+  ringsGroup = svgEl('g', { id: 'rings-group' })
+  sporesGroup = svgEl('g', { id: 'spores-group' })
+  branchGroup = svgEl('g', { id: 'branch-group' })
+  centerGroup = svgEl('g', { id: 'center-group' })
+  nodesGroup = svgEl('g', { id: 'nodes-group' })
+  particlesGroup = svgEl('g', { id: 'particles-group' })
+
+  svg.appendChild(bgGroup)
+  svg.appendChild(ringsGroup)
+  svg.appendChild(sporesGroup)
+  svg.appendChild(branchGroup)
+  svg.appendChild(centerGroup)
+  svg.appendChild(nodesGroup)
+  svg.appendChild(particlesGroup)
 
   buildNetwork()
   spores = []
@@ -474,33 +596,39 @@ function resize() {
 // --- Drawing ---
 
 function drawBackground(time) {
-  // Dark forest floor gradient
-  const bgGrad = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, Math.max(W, H) * 0.7)
-  bgGrad.addColorStop(0, '#12150e')
-  bgGrad.addColorStop(0.4, '#0d0f0a')
-  bgGrad.addColorStop(1, '#080907')
-  ctx.fillStyle = bgGrad
-  ctx.fillRect(0, 0, W, H)
+  clearGroup(bgGroup)
 
-  // Subtle earth-tone warmth at edges
-  const edgeGrad = ctx.createRadialGradient(centerX, H, 0, centerX, H, H * 0.8)
-  edgeGrad.addColorStop(0, rgbaStr(BARK, 0.06))
-  edgeGrad.addColorStop(1, 'transparent')
-  ctx.fillStyle = edgeGrad
-  ctx.fillRect(0, 0, W, H)
-
-  // Noise texture overlay
-  if (noiseCanvas) {
-    ctx.globalAlpha = 0.03
-    const pattern = ctx.createPattern(noiseCanvas, 'repeat')
-    ctx.fillStyle = pattern
-    ctx.fillRect(0, 0, W, H)
-    ctx.globalAlpha = 1
+  // Dark forest floor radial gradient
+  const radGradId = 'bg-rad'
+  let radGrad = svgDefs.querySelector('#' + radGradId)
+  if (!radGrad) {
+    radGrad = svgEl('radialGradient', { id: radGradId, cx: '50%', cy: '50%', r: '70%' })
+    radGrad.appendChild(svgEl('stop', { offset: '0%', 'stop-color': '#12150e' }))
+    radGrad.appendChild(svgEl('stop', { offset: '40%', 'stop-color': '#0d0f0a' }))
+    radGrad.appendChild(svgEl('stop', { offset: '100%', 'stop-color': '#080907' }))
+    svgDefs.appendChild(radGrad)
   }
+
+  const bgRect = svgEl('rect', { x: 0, y: 0, width: W, height: H, fill: `url(#${radGradId})` })
+  bgGroup.appendChild(bgRect)
+
+  // Bark warmth at bottom
+  const warmGradId = 'bg-warm'
+  let warmGrad = svgDefs.querySelector('#' + warmGradId)
+  if (!warmGrad) {
+    warmGrad = svgEl('radialGradient', { id: warmGradId, cx: '50%', cy: '100%', r: '80%' })
+    warmGrad.appendChild(svgEl('stop', { offset: '0%', 'stop-color': BARK, 'stop-opacity': '0.06' }))
+    warmGrad.appendChild(svgEl('stop', { offset: '100%', 'stop-color': BARK, 'stop-opacity': '0' }))
+    svgDefs.appendChild(warmGrad)
+  }
+  bgGroup.appendChild(svgEl('rect', { x: 0, y: 0, width: W, height: H, fill: `url(#${warmGradId})` }))
+
+  // Noise overlay
+  bgGroup.appendChild(svgEl('rect', { x: 0, y: 0, width: W, height: H, fill: '#888', opacity: '0.03', filter: 'url(#noise)' }))
 }
 
-// Concentric rings from center
 function drawCenterRings(time) {
+  clearGroup(ringsGroup)
   const numRings = 5
   for (let i = 0; i < numRings; i++) {
     const baseRadius = 30 + i * 50
@@ -508,11 +636,12 @@ function drawCenterRings(time) {
     const r = baseRadius + wave
     const alpha = 0.03 - i * 0.005
     if (alpha <= 0) continue
-    ctx.strokeStyle = rgbaStr(SAGE, alpha)
-    ctx.lineWidth = 0.5
-    ctx.beginPath()
-    ctx.arc(centerX, centerY, r, 0, Math.PI * 2)
-    ctx.stroke()
+    ringsGroup.appendChild(svgEl('circle', {
+      cx: centerX, cy: centerY, r,
+      fill: 'none',
+      stroke: rgbaStr(SAGE, alpha),
+      'stroke-width': 0.5
+    }))
   }
 }
 
@@ -522,71 +651,54 @@ function drawBranch(branch, time) {
   const progress = Math.min(branch.growProgress, 1)
   const steps = 40
   const drawSteps = Math.floor(steps * progress)
-
-  // Pulse effect
   const pulse = branch.pulseIntensity * (Math.sin(time * 0.003 + branch.pulsePhase) * 0.5 + 0.5)
 
-  ctx.lineCap = 'round'
-  ctx.lineJoin = 'round'
-
-  // Draw as a single smooth bezier path with gradient stroke
-  // We draw multiple passes: shadow/glow, then main stroke
-
-  // Bioluminescence glow (always faint, stronger when pulsing)
   const glowAlpha = 0.03 + branch.pulseIntensity * 0.12
-  if (glowAlpha > 0.01) {
-    for (let i = 0; i < drawSteps; i++) {
-      const t0 = i / steps
-      const t1 = (i + 1) / steps
-      const pt0 = bezierPoint(branch.p0, branch.p1, branch.p2, branch.p3, t0)
-      const pt1 = bezierPoint(branch.p0, branch.p1, branch.p2, branch.p3, t1)
-      const w = lerp(branch.startWidth, branch.endWidth, t0)
-      ctx.strokeStyle = rgbaStr(BIOLUM, glowAlpha * (1 - t0 * 0.5))
-      ctx.lineWidth = w + 6 + pulse * 4
-      ctx.beginPath()
-      ctx.moveTo(pt0.x, pt0.y)
-      ctx.lineTo(pt1.x, pt1.y)
-      ctx.stroke()
-    }
-  }
 
-  // Main branch with gradient: darker at trunk, lighter at tips
+  // Build path data for the visible portion
   for (let i = 0; i < drawSteps; i++) {
     const t0 = i / steps
     const t1 = (i + 1) / steps
     const pt0 = bezierPoint(branch.p0, branch.p1, branch.p2, branch.p3, t0)
     const pt1 = bezierPoint(branch.p0, branch.p1, branch.p2, branch.p3, t1)
-    const w = lerp(branch.startWidth, branch.endWidth, t0) * (0.85 + pulse * 0.15)
+    const w = lerp(branch.startWidth, branch.endWidth, t0)
 
-    // Gradient from trunk (bark-tinted dark) to tips (sage-bright)
+    // Bioluminescence glow
+    if (glowAlpha > 0.01) {
+      branchGroup.appendChild(svgEl('line', {
+        x1: pt0.x, y1: pt0.y, x2: pt1.x, y2: pt1.y,
+        stroke: rgbaStr(BIOLUM, glowAlpha * (1 - t0 * 0.5)),
+        'stroke-width': w + 6 + pulse * 4,
+        'stroke-linecap': 'round'
+      }))
+    }
+
+    // Main branch segment
     const trunkAlpha = 0.35 + branch.pulseIntensity * 0.35
     const tipAlpha = 0.15 + branch.pulseIntensity * 0.2
-
-    // Blend between trunk color and tip color
     const c1 = hexToRgb(branch.color)
     const c2 = hexToRgb(branch.colorAlt)
     const barkC = hexToRgb(BARK)
-
     const r = Math.round(lerp(lerp(barkC.r, c1.r, 0.4), c2.r, t0))
     const g = Math.round(lerp(lerp(barkC.g, c1.g, 0.4), c2.g, t0))
     const b = Math.round(lerp(lerp(barkC.b, c1.b, 0.4), c2.b, t0))
     const a = lerp(trunkAlpha, tipAlpha, t0)
 
-    ctx.strokeStyle = `rgba(${r},${g},${b},${a})`
-    ctx.lineWidth = w
-    ctx.beginPath()
-    ctx.moveTo(pt0.x, pt0.y)
-    ctx.lineTo(pt1.x, pt1.y)
-    ctx.stroke()
+    branchGroup.appendChild(svgEl('line', {
+      x1: pt0.x, y1: pt0.y, x2: pt1.x, y2: pt1.y,
+      stroke: `rgba(${r},${g},${b},${a})`,
+      'stroke-width': w * (0.85 + pulse * 0.15),
+      'stroke-linecap': 'round'
+    }))
 
-    // Active pulse glow (terracotta)
+    // Active pulse glow
     if (branch.pulseIntensity > 0.05) {
-      ctx.strokeStyle = rgbaStr(TERRACOTTA, pulse * branch.pulseIntensity * 0.12)
-      ctx.lineWidth = w + 3
-      ctx.beginPath()
-      ctx.moveTo(pt0.x, pt0.y)
-      ctx.lineTo(pt1.x, pt1.y)
-      ctx.stroke()
+      branchGroup.appendChild(svgEl('line', {
+        x1: pt0.x, y1: pt0.y, x2: pt1.x, y2: pt1.y,
+        stroke: rgbaStr(TERRACOTTA, pulse * branch.pulseIntensity * 0.12),
+        'stroke-width': w * (0.85 + pulse * 0.15) + 3,
+        'stroke-linecap': 'round'
+      }))
     }
   }
 
@@ -598,12 +710,12 @@ function drawBranch(branch, time) {
     const w = lerp(branch.startWidth, branch.endWidth, nod.t)
     const nx = pt.x + norm.x * w * 0.4 * nod.side
     const ny = pt.y + norm.y * w * 0.4 * nod.side
-
     const nodAlpha = 0.2 + branch.pulseIntensity * 0.3
-    ctx.fillStyle = rgbaStr(branch.color, nodAlpha)
-    ctx.beginPath()
-    ctx.arc(nx, ny, nod.size, 0, Math.PI * 2)
-    ctx.fill()
+
+    branchGroup.appendChild(svgEl('circle', {
+      cx: nx, cy: ny, r: nod.size,
+      fill: rgbaStr(branch.color, nodAlpha)
+    }))
   }
 }
 
@@ -616,51 +728,80 @@ function drawNutrientNode(node, time) {
   if (node.ringAlpha > 0.01) {
     node.ringRadius += 0.8
     node.ringAlpha *= 0.97
-    ctx.strokeStyle = rgbaStr(OCHRE, node.ringAlpha)
-    ctx.lineWidth = 1.5
-    ctx.beginPath()
-    ctx.arc(node.x, node.y, node.ringRadius, 0, Math.PI * 2)
-    ctx.stroke()
+    nodesGroup.appendChild(svgEl('circle', {
+      cx: node.x, cy: node.y, r: node.ringRadius,
+      fill: 'none',
+      stroke: rgbaStr(OCHRE, node.ringAlpha),
+      'stroke-width': 1.5
+    }))
   }
 
   // Outer glow
-  const grad = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, r * 4)
-  grad.addColorStop(0, rgbaStr(NODE_GLOW, brightness * 0.5))
-  grad.addColorStop(0.3, rgbaStr(NODE_GLOW, brightness * 0.2))
-  grad.addColorStop(0.7, rgbaStr(BIOLUM, brightness * 0.05))
-  grad.addColorStop(1, 'rgba(0,0,0,0)')
-  ctx.fillStyle = grad
-  ctx.beginPath()
-  ctx.arc(node.x, node.y, r * 4, 0, Math.PI * 2)
-  ctx.fill()
+  const outerGradId = `node-outer-${node.x.toFixed(0)}-${node.y.toFixed(0)}`
+  let outerGrad = svgDefs.querySelector('#' + CSS.escape(outerGradId))
+  if (!outerGrad) {
+    outerGrad = svgEl('radialGradient', { id: outerGradId })
+    outerGrad.appendChild(svgEl('stop', { offset: '0%', 'stop-color': NODE_GLOW, 'stop-opacity': String(brightness * 0.5) }))
+    outerGrad.appendChild(svgEl('stop', { offset: '30%', 'stop-color': NODE_GLOW, 'stop-opacity': String(brightness * 0.2) }))
+    outerGrad.appendChild(svgEl('stop', { offset: '70%', 'stop-color': BIOLUM, 'stop-opacity': String(brightness * 0.05) }))
+    outerGrad.appendChild(svgEl('stop', { offset: '100%', 'stop-color': '#000', 'stop-opacity': '0' }))
+    svgDefs.appendChild(outerGrad)
+  } else {
+    // Update opacities
+    const stops = outerGrad.querySelectorAll('stop')
+    stops[0].setAttribute('stop-opacity', String(brightness * 0.5))
+    stops[1].setAttribute('stop-opacity', String(brightness * 0.2))
+    stops[2].setAttribute('stop-opacity', String(brightness * 0.05))
+  }
+
+  nodesGroup.appendChild(svgEl('circle', {
+    cx: node.x, cy: node.y, r: r * 4,
+    fill: `url(#${outerGradId})`
+  }))
 
   // Core
-  const coreGrad = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, r)
-  coreGrad.addColorStop(0, rgbaStr(OCHRE, brightness * 1.2))
-  coreGrad.addColorStop(0.6, rgbaStr(OCHRE, brightness * 0.7))
-  coreGrad.addColorStop(1, rgbaStr(SAGE, brightness * 0.3))
-  ctx.fillStyle = coreGrad
-  ctx.beginPath()
-  ctx.arc(node.x, node.y, r, 0, Math.PI * 2)
-  ctx.fill()
+  const coreGradId = `node-core-${node.x.toFixed(0)}-${node.y.toFixed(0)}`
+  let coreGrad = svgDefs.querySelector('#' + CSS.escape(coreGradId))
+  if (!coreGrad) {
+    coreGrad = svgEl('radialGradient', { id: coreGradId })
+    coreGrad.appendChild(svgEl('stop', { offset: '0%', 'stop-color': OCHRE, 'stop-opacity': String(brightness * 1.2) }))
+    coreGrad.appendChild(svgEl('stop', { offset: '60%', 'stop-color': OCHRE, 'stop-opacity': String(brightness * 0.7) }))
+    coreGrad.appendChild(svgEl('stop', { offset: '100%', 'stop-color': SAGE, 'stop-opacity': String(brightness * 0.3) }))
+    svgDefs.appendChild(coreGrad)
+  } else {
+    const stops = coreGrad.querySelectorAll('stop')
+    stops[0].setAttribute('stop-opacity', String(Math.min(1, brightness * 1.2)))
+    stops[1].setAttribute('stop-opacity', String(brightness * 0.7))
+    stops[2].setAttribute('stop-opacity', String(brightness * 0.3))
+  }
 
-  // Stored text orbits
+  nodesGroup.appendChild(svgEl('circle', {
+    cx: node.x, cy: node.y, r,
+    fill: `url(#${coreGradId})`
+  }))
+
+  // Stored text orbits — rendered as DOM elements
   if (node.storedText.length > 0) {
-    ctx.font = `${FONT_SIZE - 2}px 'Literata', serif`
     const angleStep = (Math.PI * 2) / Math.max(node.storedText.length, 1)
     for (let i = 0; i < node.storedText.length; i++) {
       const a = time * 0.0005 + i * angleStep
       const orbitR = r * 2.5 + 8
       const tx = node.x + Math.cos(a) * orbitR
       const ty = node.y + Math.sin(a) * orbitR
-      // Warm glow behind text
-      ctx.fillStyle = rgbaStr(OCHRE, 0.15)
-      ctx.beginPath()
-      ctx.arc(tx, ty, 8, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.fillStyle = rgbaStr(FOG, 0.6)
-      ctx.textAlign = 'center'
-      ctx.fillText(node.storedText[i], tx, ty + 3)
+
+      // Warm glow behind text (SVG)
+      nodesGroup.appendChild(svgEl('circle', {
+        cx: tx, cy: ty, r: 8,
+        fill: rgbaStr(OCHRE, 0.15)
+      }))
+
+      // DOM text element
+      const el = getOrbitWord()
+      el.textContent = node.storedText[i]
+      el.style.left = tx + 'px'
+      el.style.top = ty + 'px'
+      el.style.color = rgbaStr(FOG, 0.6)
+      el.style.transform = 'translate(-50%, -50%)'
     }
   }
 }
@@ -676,9 +817,6 @@ function drawFlowingMessage(msg, time) {
   } catch (e) {
     return
   }
-
-  ctx.font = FONT
-  ctx.textAlign = 'left'
 
   let cursor = { segmentIndex: 0, graphemeIndex: 0 }
 
@@ -698,10 +836,8 @@ function drawFlowingMessage(msg, time) {
 
     const localProgress = clamp((progress - branchFrac) / (branchEndFrac - branchFrac), 0, 1)
 
-    // Pulse the branch
     branch.pulseIntensity = Math.max(branch.pulseIntensity, localProgress > 0 && localProgress < 1 ? 0.8 : branch.pulseIntensity)
 
-    // Emit split particles at branch transitions
     if (bi > 0 && !msg.hasSplit && localProgress > 0.05 && localProgress < 0.2) {
       const pt = bezierPoint(branch.p0, branch.p1, branch.p2, branch.p3, 0)
       emitSplitParticles(pt.x, pt.y, 6)
@@ -721,19 +857,21 @@ function drawFlowingMessage(msg, time) {
     const startT = Math.max(0, localProgress - 0.3)
     const endT = localProgress
 
-    // Draw warm glow trail
+    // Draw warm glow trail (SVG circles)
     const trailSteps = 8
     for (let ti = 0; ti < trailSteps; ti++) {
       const tt = lerp(startT, endT, ti / trailSteps)
       if (tt < 0 || tt > 1) continue
       const pt = bezierPoint(branch.p0, branch.p1, branch.p2, branch.p3, tt)
       const trailAlpha = msg.alpha * 0.08 * (ti / trailSteps)
-      ctx.fillStyle = rgbaStr(OCHRE, trailAlpha)
-      ctx.beginPath()
-      ctx.arc(pt.x, pt.y, 6 + (ti / trailSteps) * 4, 0, Math.PI * 2)
-      ctx.fill()
+      nodesGroup.appendChild(svgEl('circle', {
+        cx: pt.x, cy: pt.y,
+        r: 6 + (ti / trailSteps) * 4,
+        fill: rgbaStr(OCHRE, trailAlpha)
+      }))
     }
 
+    // Render each character as a positioned DOM span
     for (let i = 0; i < charCount; i++) {
       const charFrac = i / charCount
       const t = lerp(startT, endT, charFrac)
@@ -743,24 +881,25 @@ function drawFlowingMessage(msg, time) {
       const tang = bezierTangent(branch.p0, branch.p1, branch.p2, branch.p3, t)
       const angle = Math.atan2(tang.y, tang.x)
 
-      // Fade in as characters arrive
       const fadeIn = clamp(charFrac * 3, 0, 1)
       const fadeOut = clamp((1 - charFrac) * 3, 0, 1)
       const arrivalFade = clamp((localProgress - (charFrac * 0.3)) * 5, 0, 1)
       const alpha = msg.alpha * fadeIn * fadeOut * arrivalFade
 
-      // Warm glow behind each character
-      ctx.fillStyle = rgbaStr(OCHRE, alpha * 0.15)
-      ctx.beginPath()
-      ctx.arc(pt.x, pt.y, 5, 0, Math.PI * 2)
-      ctx.fill()
+      // Warm glow behind character (SVG)
+      nodesGroup.appendChild(svgEl('circle', {
+        cx: pt.x, cy: pt.y, r: 5,
+        fill: rgbaStr(OCHRE, alpha * 0.15)
+      }))
 
-      ctx.save()
-      ctx.translate(pt.x, pt.y)
-      ctx.rotate(angle)
-      ctx.fillStyle = rgbaStr(FOG, alpha)
-      ctx.fillText(lineText[i], 0, FONT_SIZE * 0.35)
-      ctx.restore()
+      // DOM character element
+      const el = getFlowChar()
+      el.textContent = lineText[i]
+      el.style.left = pt.x + 'px'
+      el.style.top = pt.y + 'px'
+      el.style.color = rgbaStr(FOG, alpha)
+      const deg = angle * (180 / Math.PI)
+      el.style.transform = `translate(-50%, -50%) rotate(${deg}deg)`
     }
 
     cursor = line.end
@@ -768,40 +907,59 @@ function drawFlowingMessage(msg, time) {
   }
 }
 
-// Draw central node
 function drawCenter(time) {
+  clearGroup(centerGroup)
+
   const pulse = 0.5 + 0.5 * Math.sin(time * 0.001)
   const r = 9 + pulse * 3
 
   // Large ambient glow
-  const ambientGrad = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, r * 8)
-  ambientGrad.addColorStop(0, rgbaStr(BIOLUM, 0.06 + pulse * 0.03))
-  ambientGrad.addColorStop(0.3, rgbaStr(SAGE, 0.03))
-  ambientGrad.addColorStop(1, 'rgba(0,0,0,0)')
-  ctx.fillStyle = ambientGrad
-  ctx.beginPath()
-  ctx.arc(centerX, centerY, r * 8, 0, Math.PI * 2)
-  ctx.fill()
+  const ambGradId = 'center-ambient'
+  let ambGrad = svgDefs.querySelector('#' + ambGradId)
+  if (!ambGrad) {
+    ambGrad = svgEl('radialGradient', { id: ambGradId })
+    svgDefs.appendChild(ambGrad)
+  }
+  while (ambGrad.firstChild) ambGrad.removeChild(ambGrad.firstChild)
+  ambGrad.appendChild(svgEl('stop', { offset: '0%', 'stop-color': BIOLUM, 'stop-opacity': String(0.06 + pulse * 0.03) }))
+  ambGrad.appendChild(svgEl('stop', { offset: '30%', 'stop-color': SAGE, 'stop-opacity': '0.03' }))
+  ambGrad.appendChild(svgEl('stop', { offset: '100%', 'stop-color': '#000', 'stop-opacity': '0' }))
+  centerGroup.appendChild(svgEl('circle', {
+    cx: centerX, cy: centerY, r: r * 8,
+    fill: `url(#${ambGradId})`
+  }))
 
   // Medium glow
-  const grad = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, r * 4)
-  grad.addColorStop(0, rgbaStr(SAGE, 0.4 + pulse * 0.2))
-  grad.addColorStop(0.4, rgbaStr(SAGE, 0.1))
-  grad.addColorStop(1, 'rgba(0,0,0,0)')
-  ctx.fillStyle = grad
-  ctx.beginPath()
-  ctx.arc(centerX, centerY, r * 4, 0, Math.PI * 2)
-  ctx.fill()
+  const medGradId = 'center-med'
+  let medGrad = svgDefs.querySelector('#' + medGradId)
+  if (!medGrad) {
+    medGrad = svgEl('radialGradient', { id: medGradId })
+    svgDefs.appendChild(medGrad)
+  }
+  while (medGrad.firstChild) medGrad.removeChild(medGrad.firstChild)
+  medGrad.appendChild(svgEl('stop', { offset: '0%', 'stop-color': SAGE, 'stop-opacity': String(0.4 + pulse * 0.2) }))
+  medGrad.appendChild(svgEl('stop', { offset: '40%', 'stop-color': SAGE, 'stop-opacity': '0.1' }))
+  medGrad.appendChild(svgEl('stop', { offset: '100%', 'stop-color': '#000', 'stop-opacity': '0' }))
+  centerGroup.appendChild(svgEl('circle', {
+    cx: centerX, cy: centerY, r: r * 4,
+    fill: `url(#${medGradId})`
+  }))
 
   // Core
-  const coreGrad = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, r)
-  coreGrad.addColorStop(0, rgbaStr(SAGE, 0.7 + pulse * 0.2))
-  coreGrad.addColorStop(0.5, rgbaStr(SAGE, 0.4))
-  coreGrad.addColorStop(1, rgbaStr(BARK, 0.2))
-  ctx.fillStyle = coreGrad
-  ctx.beginPath()
-  ctx.arc(centerX, centerY, r, 0, Math.PI * 2)
-  ctx.fill()
+  const coreGradId = 'center-core'
+  let coreGrad = svgDefs.querySelector('#' + coreGradId)
+  if (!coreGrad) {
+    coreGrad = svgEl('radialGradient', { id: coreGradId })
+    svgDefs.appendChild(coreGrad)
+  }
+  while (coreGrad.firstChild) coreGrad.removeChild(coreGrad.firstChild)
+  coreGrad.appendChild(svgEl('stop', { offset: '0%', 'stop-color': SAGE, 'stop-opacity': String(0.7 + pulse * 0.2) }))
+  coreGrad.appendChild(svgEl('stop', { offset: '50%', 'stop-color': SAGE, 'stop-opacity': '0.4' }))
+  coreGrad.appendChild(svgEl('stop', { offset: '100%', 'stop-color': BARK, 'stop-opacity': '0.2' }))
+  centerGroup.appendChild(svgEl('circle', {
+    cx: centerX, cy: centerY, r,
+    fill: `url(#${coreGradId})`
+  }))
 }
 
 // --- Main loop ---
@@ -811,14 +969,19 @@ function render(time) {
   requestAnimationFrame(render)
   networkAge = time
 
+  // Clear dynamic SVG groups each frame
+  clearGroup(branchGroup)
+  clearGroup(nodesGroup)
+
+  // Reset DOM text pools
+  resetPools()
+
   drawBackground(time)
   drawCenterRings(time)
 
-  // Update spores
   updateSpores()
   drawSpores()
 
-  // Update split particles
   updateSplitParticles()
 
   // Grow branches
@@ -829,7 +992,6 @@ function render(time) {
     b.pulseIntensity *= 0.995
   }
 
-  // Periodic new growth
   if (time - lastGrowTime > 4000 && branches.length < 200) {
     growNewBranch()
     lastGrowTime = time
@@ -841,16 +1003,13 @@ function render(time) {
     drawBranch(b, time)
   }
 
-  // Draw center
   drawCenter(time)
 
-  // Draw nutrient nodes
   for (const node of nutrientNodes) {
     node.brightness *= 0.998
     drawNutrientNode(node, time)
   }
 
-  // Draw split particles on top
   drawSplitParticles()
 
   // Update and draw messages
@@ -868,7 +1027,6 @@ function render(time) {
           if (nearest.storedText.length > 5) nearest.storedText.shift()
         }
         nearest.brightness = 1
-        // Trigger expanding ring
         nearest.ringRadius = nearest.radius
         nearest.ringAlpha = 0.6
       }
@@ -881,6 +1039,9 @@ function render(time) {
 
     drawFlowingMessage(msg, time)
   }
+
+  // Hide unused pool elements
+  hideUnused()
 }
 
 // --- Events ---
@@ -900,11 +1061,9 @@ document.addEventListener('keydown', (e) => {
 })
 
 // --- Init ---
-generateNoiseTexture()
 resize()
 requestAnimationFrame(render)
 
-// Send an initial message after the network has grown a bit
 setTimeout(() => {
   sendMessage('the forest floor remembers everything')
 }, 2500)

@@ -10,7 +10,87 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: #08080e; }
-  canvas { display: block; width: 100%; height: 100%; }
+
+  #scene {
+    position: fixed; inset: 0;
+    overflow: hidden;
+  }
+
+  /* Spark canvas — only used for particle effects, not text */
+  #spark-canvas {
+    position: fixed; inset: 0;
+    pointer-events: none; z-index: 5;
+  }
+
+  /* Vignette overlay */
+  #vignette {
+    position: fixed; inset: 0;
+    pointer-events: none; z-index: 6;
+    background: radial-gradient(ellipse at center, rgba(8,8,14,0) 35%, rgba(8,8,14,0.4) 100%);
+  }
+
+  .stream {
+    position: absolute;
+    top: 0; left: 0;
+    will-change: transform;
+    pointer-events: none;
+  }
+
+  .stream-label {
+    font: 500 13px 'Fraunces', Georgia, serif;
+    letter-spacing: 0.08em;
+    opacity: 0.7;
+    margin-bottom: 10px;
+    white-space: nowrap;
+  }
+
+  .stream-line {
+    font: 18px/28px 'Literata', Georgia, serif;
+    white-space: nowrap;
+    overflow: hidden;
+    height: 28px;
+    pointer-events: auto;
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  /* Collision zone container */
+  .collision-zone {
+    position: absolute;
+    top: 0; left: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 3;
+    will-change: transform;
+  }
+
+  .collision-glow {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .contact-label {
+    position: absolute;
+    font: italic 14px 'Fraunces', Georgia, serif;
+    color: #C49A3C;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  .pidgin-line {
+    font: 500 20px/28px 'Literata', Georgia, serif;
+    white-space: nowrap;
+    height: 28px;
+    pointer-events: auto;
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  .pidgin-char {
+    display: inline;
+    text-shadow: 0 0 6px #C49A3C;
+  }
 
   #intro {
     position: fixed; inset: 0; display: flex; flex-direction: column;
@@ -91,7 +171,9 @@
   <p>Languages drift. When they collide, something new is born.</p>
   <span class="start-hint">click anywhere to begin</span>
 </div>
-<canvas id="canvas"></canvas>
+<div id="scene"></div>
+<canvas id="spark-canvas"></canvas>
+<div id="vignette"></div>
 <div id="controls">
   <label>speed <input type="range" id="speed" min="0" max="3" step="0.1" value="0.6"></label>
   <select id="streamSelect">
@@ -122,13 +204,13 @@ const FONT_SIZE = 18
 const LINE_HEIGHT = 28
 const STREAM_WIDTH = 360
 const BG = '#08080e'
-const PIDGIN_COLOR = '#C49A3C'  // ochre/gold for pidgin text
+const PIDGIN_COLOR = '#C49A3C'
 
 const COLORS = {
-  english: '#C2714F',   // terracotta
-  arabic:  '#C49A3C',   // ochre
-  chinese: '#8B9E7E',   // sage
-  spanish: '#9B8EA8'    // lavender-dried
+  english: '#C2714F',
+  arabic:  '#C49A3C',
+  chinese: '#8B9E7E',
+  spanish: '#9B8EA8'
 }
 
 const LABEL_NAMES = {
@@ -138,105 +220,109 @@ const LABEL_NAMES = {
   spanish: 'Español'
 }
 
-// --- Canvas ---
+// --- Spark canvas (particles only, no text) ---
 
-const canvas = document.getElementById('canvas')
-const ctx = canvas.getContext('2d')
+const sparkCanvas = document.getElementById('spark-canvas')
+const sparkCtx = sparkCanvas.getContext('2d')
 let W, H, dpr
 
 function resize() {
   dpr = window.devicePixelRatio || 1
   W = window.innerWidth
   H = window.innerHeight
-  canvas.width = W * dpr
-  canvas.height = H * dpr
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  sparkCanvas.width = W * dpr
+  sparkCanvas.height = H * dpr
+  sparkCtx.setTransform(dpr, 0, 0, dpr, 0, 0)
 }
 resize()
 window.addEventListener('resize', resize)
 
+// --- Scene container ---
+
+const scene = document.getElementById('scene')
+
 // --- Stream state ---
 
 const streamFont = `${FONT_SIZE}px 'Literata', Georgia, serif`
-const labelFont = `500 13px 'Fraunces', Georgia, serif`
-const pidginFont = `500 ${FONT_SIZE + 2}px 'Literata', Georgia, serif`
-const contactLabelFont = `italic 14px 'Fraunces', Georgia, serif`
-
 const defaultTexts = [englishText, arabicText, chineseText, spanishText]
 const colorKeys = ['english', 'arabic', 'chinese', 'spanish']
 
 const streams = []
 
 // --- Phased introduction ---
-// Phase 0: Only English + Arabic, moving head-on
-// Phase 1: After first collision settles, introduce Chinese
-// Phase 2: Then Spanish
 let phase = 0
 let phaseTimer = 0
-const PHASE_1_DELAY = 480  // frames after first collision to add stream 2
-const PHASE_2_DELAY = 360  // frames after phase 1 to add stream 3
+const PHASE_1_DELAY = 480
+const PHASE_2_DELAY = 360
 let firstCollisionFrame = -1
 let streamsActive = [true, true, false, false]
 
 function initStreams() {
   const texts = defaultTexts.slice()
 
-  // Stream 0: English, enters from left, moves right
   streams[0] = {
     x: -STREAM_WIDTH - 40, y: H * 0.38,
     vx: 0.35, vy: 0,
     color: COLORS.english,
-    font: streamFont,
     text: texts[0],
     prepared: null,
     lines: null,
     name: 'english',
-    opacity: 1
+    opacity: 1,
+    el: null
   }
 
-  // Stream 1: Arabic, enters from right, moves left — HEAD-ON collision
   streams[1] = {
     x: W + 40, y: H * 0.38,
     vx: -0.35, vy: 0,
     color: COLORS.arabic,
-    font: streamFont,
     text: texts[1],
     prepared: null,
     lines: null,
     name: 'arabic',
-    opacity: 1
+    opacity: 1,
+    el: null
   }
 
-  // Stream 2: Chinese, enters from top — delayed
   streams[2] = {
     x: W * 0.55, y: -300,
     vx: 0, vy: 0.3,
     color: COLORS.chinese,
-    font: streamFont,
     text: texts[2],
     prepared: null,
     lines: null,
     name: 'chinese',
-    opacity: 0
+    opacity: 0,
+    el: null
   }
 
-  // Stream 3: Spanish, enters from bottom — delayed
   streams[3] = {
     x: W * 0.18, y: H + 40,
     vx: 0, vy: -0.3,
     color: COLORS.spanish,
-    font: streamFont,
     text: texts[3],
     prepared: null,
     lines: null,
     name: 'spanish',
-    opacity: 0
+    opacity: 0,
+    el: null
+  }
+
+  // Create DOM elements for each stream
+  for (let i = 0; i < 4; i++) {
+    const s = streams[i]
+    const el = document.createElement('div')
+    el.className = 'stream'
+    el.style.width = STREAM_WIDTH + 'px'
+    scene.appendChild(el)
+    s.el = el
   }
 }
 
 function prepareStream(s) {
-  s.prepared = prepareWithSegments(s.text, s.font)
+  s.prepared = prepareWithSegments(s.text, streamFont)
   s.lines = layoutAllLines(s.prepared)
+  rebuildStreamDOM(s)
 }
 
 function layoutAllLines(prepared) {
@@ -251,7 +337,29 @@ function layoutAllLines(prepared) {
   return lines
 }
 
-// --- Spark particles at collision ---
+function rebuildStreamDOM(s) {
+  if (!s.el || !s.lines) return
+  s.el.innerHTML = ''
+
+  // Label
+  const label = document.createElement('div')
+  label.className = 'stream-label'
+  label.style.color = s.color
+  label.textContent = LABEL_NAMES[s.name] || ''
+  s.el.appendChild(label)
+
+  // Text lines
+  for (const line of s.lines) {
+    const lineEl = document.createElement('div')
+    lineEl.className = 'stream-line'
+    lineEl.style.color = s.color
+    lineEl.style.opacity = '0.85'
+    lineEl.textContent = line.text
+    s.el.appendChild(lineEl)
+  }
+}
+
+// --- Spark particles (canvas-only, no text) ---
 
 const sparkParticles = []
 
@@ -288,21 +396,20 @@ function updateSparkParticles() {
 }
 
 function drawSparkParticles() {
+  sparkCtx.clearRect(0, 0, W, H)
   for (const p of sparkParticles) {
     const t = p.life / p.maxLife
     const alpha = t * 0.8
-    ctx.globalAlpha = alpha
-    ctx.fillStyle = p.color
-
-    // Draw a small glow around each spark
-    ctx.shadowColor = p.color
-    ctx.shadowBlur = 6 * t
-    ctx.beginPath()
-    ctx.arc(p.x, p.y, p.size * t, 0, Math.PI * 2)
-    ctx.fill()
+    sparkCtx.globalAlpha = alpha
+    sparkCtx.fillStyle = p.color
+    sparkCtx.shadowColor = p.color
+    sparkCtx.shadowBlur = 6 * t
+    sparkCtx.beginPath()
+    sparkCtx.arc(p.x, p.y, p.size * t, 0, Math.PI * 2)
+    sparkCtx.fill()
   }
-  ctx.shadowBlur = 0
-  ctx.globalAlpha = 1
+  sparkCtx.shadowBlur = 0
+  sparkCtx.globalAlpha = 1
 }
 
 // --- Collision detection ---
@@ -313,7 +420,7 @@ function getStreamBounds(s) {
     x: s.x,
     y: s.y,
     w: STREAM_WIDTH,
-    h: lineCount * LINE_HEIGHT
+    h: lineCount * LINE_HEIGHT + 38 // label height offset
   }
 }
 
@@ -336,6 +443,127 @@ function interleaveStrings(a, b) {
     if (i < b.length) result += b[i]
   }
   return result
+}
+
+// --- Collision zone DOM management ---
+
+const collisionZones = []
+
+function getOrCreateCollisionZone(idx) {
+  if (!collisionZones[idx]) {
+    const el = document.createElement('div')
+    el.className = 'collision-zone'
+    scene.appendChild(el)
+    collisionZones[idx] = { el, lastKey: '' }
+  }
+  return collisionZones[idx]
+}
+
+function hideCollisionZones(activeCount) {
+  for (let i = activeCount; i < collisionZones.length; i++) {
+    if (collisionZones[i]) {
+      collisionZones[i].el.style.display = 'none'
+    }
+  }
+}
+
+function buildCollisionZoneContent(zone, ov, sA, sB, t) {
+  const el = zone.el
+  el.style.display = 'block'
+  el.style.transform = `translate(${ov.x}px, ${ov.y}px)`
+  el.style.width = ov.w + 'px'
+  el.style.height = ov.h + 'px'
+
+  // Collect text lines from each stream in the overlap region
+  const linesA = []
+  // Account for label height (approx 38px)
+  const labelOffset = 38
+  for (let l = 0; l < sA.lines.length; l++) {
+    const ly = sA.y + labelOffset + l * LINE_HEIGHT
+    if (ly + LINE_HEIGHT > ov.y && ly < ov.y + ov.h) {
+      linesA.push({ text: sA.lines[l].text, y: ly })
+    }
+  }
+
+  const linesB = []
+  for (let l = 0; l < sB.lines.length; l++) {
+    const ly = sB.y + labelOffset + l * LINE_HEIGHT
+    if (ly + LINE_HEIGHT > ov.y && ly < ov.y + ov.h) {
+      linesB.push({ text: sB.lines[l].text, y: ly })
+    }
+  }
+
+  // Build a key to avoid rebuilding DOM every frame
+  const key = `${Math.round(ov.x)},${Math.round(ov.y)},${Math.round(ov.w)},${Math.round(ov.h)},${linesA.length},${linesB.length}`
+
+  // Only rebuild content when the line pairing changes significantly
+  if (zone.lastKey !== key) {
+    zone.lastKey = key
+    el.innerHTML = ''
+
+    // Glow background layers (CSS-based)
+    const shimmer = 0.25 + Math.sin(t * 0.002) * 0.1
+    const glow = document.createElement('div')
+    glow.className = 'collision-glow'
+    const radius = Math.max(ov.w, ov.h) * 0.9
+    glow.style.background = `
+      radial-gradient(ellipse at center, rgba(196,154,60,${(shimmer * 0.35).toFixed(3)}) 0%, rgba(194,113,79,${(shimmer * 0.15).toFixed(3)}) 40%, transparent 100%),
+      radial-gradient(ellipse at center, rgba(255,230,180,${(shimmer * 0.2).toFixed(3)}) 0%, transparent 100%)
+    `
+    glow.style.inset = `-${radius * 0.3}px`
+    el.appendChild(glow)
+
+    // Contact label
+    const contactLabel = document.createElement('div')
+    contactLabel.className = 'contact-label'
+    contactLabel.textContent = 'contact zone'
+    contactLabel.style.left = ((ov.w / 2) - 38) + 'px'
+    contactLabel.style.top = '-20px'
+    contactLabel.style.opacity = (0.5 + Math.sin(t * 0.003) * 0.15).toFixed(3)
+    el.appendChild(contactLabel)
+
+    // Pidgin text lines
+    for (let la = 0; la < linesA.length; la++) {
+      const lineA = linesA[la]
+      let closestB = linesB[0]
+      let closestDist = Infinity
+      for (const lb of linesB) {
+        const d = Math.abs(lb.y - lineA.y)
+        if (d < closestDist) { closestDist = d; closestB = lb }
+      }
+
+      if (closestB) {
+        const pidgin = interleaveStrings(lineA.text, closestB.text)
+        const pidginChars = [...pidgin]
+
+        const pidginLine = document.createElement('div')
+        pidginLine.className = 'pidgin-line'
+        pidginLine.style.position = 'absolute'
+        pidginLine.style.top = (lineA.y - ov.y) + 'px'
+        pidginLine.style.left = '0'
+        pidginLine.style.width = ov.w + 'px'
+        pidginLine.style.overflow = 'hidden'
+
+        for (let c = 0; c < pidginChars.length; c++) {
+          const charSpan = document.createElement('span')
+          charSpan.className = 'pidgin-char'
+          charSpan.textContent = pidginChars[c]
+
+          const phaseVal = Math.sin(t * 0.004 + c * 0.25) * 0.5 + 0.5
+          if (c % 3 === 0) {
+            charSpan.style.color = PIDGIN_COLOR
+          } else if (c % 3 === 1) {
+            charSpan.style.color = sA.color
+          } else {
+            charSpan.style.color = sB.color
+          }
+          charSpan.style.opacity = (0.75 + phaseVal * 0.25).toFixed(3)
+          pidginLine.appendChild(charSpan)
+        }
+        el.appendChild(pidginLine)
+      }
+    }
+  }
 }
 
 // --- Speed control ---
@@ -376,58 +604,6 @@ function wrapStream(s) {
   if (s.vy < 0 && s.y + bounds.h < -20) s.y = H + 20
 }
 
-// --- Draw stream label ---
-
-function drawStreamLabel(s) {
-  const label = LABEL_NAMES[s.name]
-  if (!label) return
-
-  ctx.save()
-  ctx.font = labelFont
-  ctx.globalAlpha = 0.7 * s.opacity
-  ctx.fillStyle = s.color
-  ctx.letterSpacing = '0.08em'
-
-  // Position label above the stream block
-  const lx = s.x
-  const ly = s.y - 10
-  ctx.fillText(label, lx, ly)
-  ctx.restore()
-}
-
-// --- Draw collision zone glow and label ---
-
-function drawCollisionGlow(ov, t) {
-  // Outer warm glow
-  const shimmer = 0.25 + Math.sin(t * 0.002) * 0.1
-  const cx = ov.x + ov.w / 2
-  const cy = ov.y + ov.h / 2
-  const radius = Math.max(ov.w, ov.h) * 0.9
-
-  // Layer 1: broad warm glow
-  const glow1 = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius)
-  glow1.addColorStop(0, `rgba(196, 154, 60, ${shimmer * 0.35})`)  // ochre center
-  glow1.addColorStop(0.4, `rgba(194, 113, 79, ${shimmer * 0.15})`)  // terracotta mid
-  glow1.addColorStop(1, `rgba(194, 113, 79, 0)`)
-  ctx.fillStyle = glow1
-  ctx.fillRect(ov.x - radius, ov.y - radius, ov.w + radius * 2, ov.h + radius * 2)
-
-  // Layer 2: brighter inner core
-  const glow2 = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius * 0.5)
-  glow2.addColorStop(0, `rgba(255, 230, 180, ${shimmer * 0.2})`)
-  glow2.addColorStop(1, `rgba(196, 154, 60, 0)`)
-  ctx.fillStyle = glow2
-  ctx.fillRect(ov.x - radius * 0.5, ov.y - radius * 0.5, ov.w + radius, ov.h + radius)
-
-  // "contact zone" label
-  ctx.save()
-  ctx.font = contactLabelFont
-  ctx.globalAlpha = 0.5 + Math.sin(t * 0.003) * 0.15
-  ctx.fillStyle = PIDGIN_COLOR
-  ctx.fillText('contact zone', cx - 38, ov.y - 14)
-  ctx.restore()
-}
-
 // --- Render ---
 
 let frameCount = 0
@@ -437,12 +613,6 @@ function render(t) {
   requestAnimationFrame(render)
   if (!started) return
   frameCount++
-
-  ctx.clearRect(0, 0, W, H)
-
-  // Background
-  ctx.fillStyle = BG
-  ctx.fillRect(0, 0, W, H)
 
   // Update phase: introduce streams over time
   if (phase === 0 && firstCollisionFrame > 0 && frameCount - firstCollisionFrame > PHASE_1_DELAY) {
@@ -471,6 +641,18 @@ function render(t) {
     wrapStream(s)
   }
 
+  // Update DOM positions for streams
+  for (let i = 0; i < 4; i++) {
+    const s = streams[i]
+    if (!streamsActive[i] || !s.el) {
+      if (s.el) s.el.style.display = 'none'
+      continue
+    }
+    s.el.style.display = 'block'
+    s.el.style.transform = `translate(${s.x}px, ${s.y}px)`
+    s.el.style.opacity = s.opacity
+  }
+
   // Find all collision pairs
   const collisions = []
   for (let i = 0; i < 4; i++) {
@@ -483,7 +665,6 @@ function render(t) {
       const overlap = overlapRect(boundsA, boundsB)
       if (overlap) {
         collisions.push({ i, j, overlap })
-        // Track first collision for phasing
         if (firstCollisionFrame < 0) {
           firstCollisionFrame = frameCount
         }
@@ -491,127 +672,34 @@ function render(t) {
     }
   }
 
-  // Draw each stream's text and label
-  for (let i = 0; i < 4; i++) {
-    if (!streamsActive[i]) continue
-    const s = streams[i]
-    if (!s.lines) continue
-
-    ctx.font = s.font
-    ctx.fillStyle = s.color
-    ctx.globalAlpha = 0.85 * s.opacity
-
-    for (let l = 0; l < s.lines.length; l++) {
-      const ly = s.y + l * LINE_HEIGHT + FONT_SIZE
-      ctx.fillText(s.lines[l].text, s.x, ly)
-    }
-
-    ctx.globalAlpha = 1
-    drawStreamLabel(s)
-  }
-
-  // Draw collision zones with pidgin interleaving
-  for (const col of collisions) {
+  // Update collision zones
+  for (let ci = 0; ci < collisions.length; ci++) {
+    const col = collisions[ci]
     const sA = streams[col.i]
     const sB = streams[col.j]
-    const ov = col.overlap
-
-    // Draw the glow behind
-    drawCollisionGlow(ov, t)
-
-    // Clip to overlap zone
-    ctx.save()
-    ctx.beginPath()
-    ctx.rect(ov.x, ov.y, ov.w, ov.h)
-    ctx.clip()
-
-    // Collect text lines from each stream in the overlap region
-    const linesA = []
-    for (let l = 0; l < sA.lines.length; l++) {
-      const ly = sA.y + l * LINE_HEIGHT + FONT_SIZE
-      if (ly + LINE_HEIGHT > ov.y && ly - LINE_HEIGHT < ov.y + ov.h) {
-        linesA.push({ text: sA.lines[l].text, y: ly })
-      }
-    }
-
-    const linesB = []
-    for (let l = 0; l < sB.lines.length; l++) {
-      const ly = sB.y + l * LINE_HEIGHT + FONT_SIZE
-      if (ly + LINE_HEIGHT > ov.y && ly - LINE_HEIGHT < ov.y + ov.h) {
-        linesB.push({ text: sB.lines[l].text, y: ly })
-      }
-    }
-
-    // Draw interleaved pidgin text in the collision zone
-    ctx.font = pidginFont
-
-    for (let la = 0; la < linesA.length; la++) {
-      const lineA = linesA[la]
-      let closestB = linesB[0]
-      let closestDist = Infinity
-      for (const lb of linesB) {
-        const d = Math.abs(lb.y - lineA.y)
-        if (d < closestDist) { closestDist = d; closestB = lb }
-      }
-
-      if (closestB) {
-        const pidgin = interleaveStrings(lineA.text, closestB.text)
-        const pidginChars = [...pidgin]
-        let cx = ov.x
-        for (let c = 0; c < pidginChars.length; c++) {
-          const phase = Math.sin(t * 0.004 + c * 0.25) * 0.5 + 0.5
-          // Pidgin characters alternate between source colors and gold
-          if (c % 3 === 0) {
-            ctx.fillStyle = PIDGIN_COLOR  // gold pidgin color
-          } else if (c % 3 === 1) {
-            ctx.fillStyle = sA.color
-          } else {
-            ctx.fillStyle = sB.color
-          }
-          ctx.globalAlpha = 0.75 + phase * 0.25
-          ctx.shadowColor = PIDGIN_COLOR
-          ctx.shadowBlur = 4 + phase * 4
-          const charW = ctx.measureText(pidginChars[c]).width
-          if (cx + charW > ov.x + ov.w) break
-          ctx.fillText(pidginChars[c], cx, lineA.y)
-          cx += charW
-        }
-      }
-    }
-
-    ctx.restore()
-    ctx.shadowBlur = 0
-    ctx.globalAlpha = 1
+    const zone = getOrCreateCollisionZone(ci)
+    buildCollisionZoneContent(zone, col.overlap, sA, sB, t)
 
     // Spawn spark particles at collision boundary edges
     if (frameCount % 4 === 0) {
-      // Top edge sparks
+      const ov = col.overlap
       spawnSpark(ov.x + Math.random() * ov.w, ov.y, sA.color, sB.color)
-      // Bottom edge sparks
       spawnSpark(ov.x + Math.random() * ov.w, ov.y + ov.h, sA.color, sB.color)
-      // Left/right edge sparks
       spawnSpark(ov.x, ov.y + Math.random() * ov.h, sA.color, sB.color)
       spawnSpark(ov.x + ov.w, ov.y + Math.random() * ov.h, sA.color, sB.color)
     }
   }
+  hideCollisionZones(collisions.length)
 
-  // Draw spark particles
+  // Draw spark particles on canvas (non-text visual effect)
   updateSparkParticles()
   drawSparkParticles()
-
-  // Subtle vignette
-  const vignette = ctx.createRadialGradient(W / 2, H / 2, W * 0.25, W / 2, H / 2, W * 0.7)
-  vignette.addColorStop(0, 'rgba(8, 8, 14, 0)')
-  vignette.addColorStop(1, 'rgba(8, 8, 14, 0.4)')
-  ctx.fillStyle = vignette
-  ctx.fillRect(0, 0, W, H)
 }
 
 // --- Init ---
 
 initStreams()
 
-// Prepare all streams then start
 Promise.all(streams.map(s => {
   return new Promise(resolve => {
     try {
@@ -627,7 +715,6 @@ Promise.all(streams.map(s => {
   setTimeout(() => loading.remove(), 800)
   requestAnimationFrame(render)
 
-  // Wait for user to click the intro to start
   const intro = document.getElementById('intro')
   intro.addEventListener('click', () => {
     intro.classList.add('hidden')

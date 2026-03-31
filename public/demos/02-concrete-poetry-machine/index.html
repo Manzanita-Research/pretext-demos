@@ -30,7 +30,6 @@
     flex-direction: column;
     align-items: center;
     overflow: hidden;
-    /* subtle paper texture */
     background-image:
       radial-gradient(ellipse at 20% 50%, #f5f0ea 0%, transparent 50%),
       radial-gradient(ellipse at 80% 50%, #f0ebe4 0%, transparent 50%);
@@ -241,7 +240,7 @@
     font-size: 0.75rem;
   }
 
-  .canvas-wrap {
+  .poem-wrap {
     flex: 1;
     width: 100%;
     display: flex;
@@ -249,10 +248,36 @@
     justify-content: center;
     padding: 1rem;
     min-height: 0;
+    overflow: hidden;
   }
 
-  canvas {
-    display: block;
+  #poem-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 732px;
+  }
+
+  .poem-line {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 19.5px;
+    text-align: center;
+    overflow: hidden;
+    white-space: nowrap;
+    transition: max-width 0.6s cubic-bezier(0.33, 1, 0.68, 1),
+                margin-left 0.6s cubic-bezier(0.33, 1, 0.68, 1),
+                opacity 0.4s;
+    color: var(--fg);
+  }
+
+  .poem-placeholder {
+    font-family: 'Fraunces', serif;
+    font-size: 18px;
+    font-style: italic;
+    color: var(--accent-soft);
+    user-select: none;
   }
 </style>
 </head>
@@ -284,17 +309,19 @@
       </div>
     </div>
   </div>
-  <div class="canvas-wrap">
-    <canvas id="canvas"></canvas>
+
+  <div class="poem-wrap">
+    <div id="poem-container">
+      <div class="poem-placeholder">words become shapes</div>
+    </div>
   </div>
 
 <script type="module">
 import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
 
-const canvas = document.getElementById('canvas')
-const ctx = canvas.getContext('2d')
 const input = document.getElementById('poem-input')
 const shapeLabel = document.getElementById('shape-label')
+const poemContainer = document.getElementById('poem-container')
 const keyBtn = document.getElementById('key-btn')
 const keyModal = document.getElementById('key-modal')
 const keyInput = document.getElementById('key-input')
@@ -340,7 +367,6 @@ saveKeyBtn.addEventListener('click', () => {
   setApiKey(keyInput.value.trim())
   keyModal.classList.remove('open')
   input.focus()
-  // Re-trigger detection with AI if there's text
   if (input.value.trim()) triggerAIDetection(input.value.trim())
 })
 
@@ -394,7 +420,7 @@ async function triggerAIDetection(text) {
       })
     })
 
-    if (requestId !== aiRequestId) return // stale request
+    if (requestId !== aiRequestId) return
 
     if (!res.ok) {
       console.warn('Anthropic API error:', res.status)
@@ -422,18 +448,13 @@ async function triggerAIDetection(text) {
 }
 
 // --- Shape definitions ---
-// Each shape returns an array of widths for N lines, given maxWidth and totalLines.
-// Widths should be DRAMATIC — shapes must be unmistakable.
-
 const SHAPES = {
   organic: {
     keywords: [],
     widths(maxW, total, time) {
-      // Gentle organic breathing shape — NOT a rectangle
       return Array.from({ length: total }, (_, i) => {
         const t = i / (total - 1)
-        // A soft blob: wider in the middle, tapered at edges, with gentle wobble
-        const base = Math.sin(t * Math.PI)  // 0→1→0 dome
+        const base = Math.sin(t * Math.PI)
         const wobble = Math.sin(t * 7 + (time || 0) * 0.3) * 0.05
         const w = 0.25 + base * 0.65 + wobble
         return maxW * Math.max(0.08, w)
@@ -443,13 +464,11 @@ const SHAPES = {
   circle: {
     keywords: ['circle', 'moon', 'sun', 'ball', 'dot', 'round', 'sphere', 'globe', 'orbit', 'zero', 'hole', 'ring', 'loop', 'wheel', 'coin', 'bubble', 'egg', 'eye'],
     widths(maxW, total) {
-      // True circle silhouette: width = 2 * sqrt(r^2 - y^2)
-      // Use nearly full maxW as diameter
       const r = total / 2
       return Array.from({ length: total }, (_, i) => {
-        const y = i - r + 0.5  // distance from center
+        const y = i - r + 0.5
         const halfChord = Math.sqrt(Math.max(0, r * r - y * y))
-        const fraction = halfChord / r  // 0..1
+        const fraction = halfChord / r
         return maxW * 0.95 * Math.max(0.04, fraction)
       })
     }
@@ -457,32 +476,26 @@ const SHAPES = {
   river: {
     keywords: ['river', 'stream', 'flow', 'creek', 'brook', 'snake', 'slither', 'wind', 'path', 'road', 'trail'],
     widths(maxW, total, time) {
-      // Dramatic S-curve: the CENTER of the line shifts left/right,
-      // with a consistent narrow width, creating a visible sinusoidal path
       const lineWidth = maxW * 0.3
       return Array.from({ length: total }, (_, i) => {
         const t = i / (total - 1)
-        // Sinusoidal offset for centering (handled in render), but for width:
-        // we vary width subtly to reinforce the curve
         const wave = Math.sin(t * Math.PI * 2.5 + (time || 0) * 0.6)
         return lineWidth + wave * maxW * 0.08
       })
     },
-    // River also needs center offsets to create the S-curve
     offsets(maxW, total, time) {
       return Array.from({ length: total }, (_, i) => {
         const t = i / (total - 1)
         const wave = Math.sin(t * Math.PI * 2.5 + (time || 0) * 0.6)
-        return wave * maxW * 0.3  // large lateral shift
+        return wave * maxW * 0.3
       })
     }
   },
   mountain: {
     keywords: ['mountain', 'peak', 'hill', 'summit', 'ridge', 'volcano', 'pyramid', 'tower', 'spire', 'tent'],
     widths(maxW, total) {
-      // Clear triangle: narrow point at top, wide base at bottom
       return Array.from({ length: total }, (_, i) => {
-        const t = i / (total - 1)  // 0 at top, 1 at bottom
+        const t = i / (total - 1)
         return maxW * 0.95 * Math.max(0.04, t)
       })
     }
@@ -490,12 +503,9 @@ const SHAPES = {
   wave: {
     keywords: ['wave', 'ocean', 'sea', 'tide', 'surf', 'ripple', 'pulse', 'breath', 'breathe'],
     widths(maxW, total, time) {
-      // Multiple obvious undulations — wide/narrow/wide/narrow
       return Array.from({ length: total }, (_, i) => {
         const t = i / (total - 1)
-        // 3 full waves across the height
         const wave = Math.sin(t * Math.PI * 6 + (time || 0) * 0.8)
-        // Map from [-1,1] to [narrow, wide]
         const w = 0.5 + wave * 0.42
         return maxW * Math.max(0.06, w)
       })
@@ -504,18 +514,14 @@ const SHAPES = {
   heart: {
     keywords: ['heart', 'love', 'adore', 'passion', 'desire', 'kiss', 'crush', 'valentine'],
     widths(maxW, total) {
-      // Heart: two bumps at top, tapers to point at bottom
       return Array.from({ length: total }, (_, i) => {
-        const t = i / (total - 1)  // 0 = top, 1 = bottom
+        const t = i / (total - 1)
         let w
         if (t < 0.15) {
-          // Very top: grow into the two lobes
           w = Math.sin((t / 0.15) * Math.PI * 0.5) * 0.75
         } else if (t < 0.35) {
-          // Two lobes — widest part, slight dip in center handled by offset
           w = 0.75 + Math.sin(((t - 0.15) / 0.2) * Math.PI) * 0.2
         } else {
-          // Taper smoothly to a point
           const s = (t - 0.35) / 0.65
           w = 0.95 * (1 - s) * (1 - s * 0.3)
         }
@@ -526,10 +532,8 @@ const SHAPES = {
   diamond: {
     keywords: ['diamond', 'gem', 'crystal', 'jewel', 'rhombus', 'kite'],
     widths(maxW, total) {
-      // Diamond/rhombus: narrow at top and bottom, widest in middle
       return Array.from({ length: total }, (_, i) => {
         const t = i / (total - 1)
-        // Triangle wave: 0→1→0
         const w = t < 0.5 ? t * 2 : (1 - t) * 2
         return maxW * 0.95 * Math.max(0.04, w)
       })
@@ -538,12 +542,10 @@ const SHAPES = {
   hourglass: {
     keywords: ['hourglass', 'waist', 'narrow', 'pinch', 'bow', 'bowtie', 'corset', 'time', 'timer'],
     widths(maxW, total) {
-      // Wide top and bottom, very narrow middle
       return Array.from({ length: total }, (_, i) => {
         const t = i / (total - 1)
-        // V-shape centered at 0.5
-        const dist = Math.abs(t - 0.5) * 2  // 1 at edges, 0 at center
-        const w = 0.08 + dist * dist * 0.87  // quadratic for dramatic pinch
+        const dist = Math.abs(t - 0.5) * 2
+        const w = 0.08 + dist * dist * 0.87
         return maxW * 0.95 * Math.max(0.05, w)
       })
     }
@@ -551,14 +553,11 @@ const SHAPES = {
   tree: {
     keywords: ['tree', 'forest', 'wood', 'oak', 'pine', 'redwood', 'grove', 'cypress', 'sequoia', 'cedar'],
     widths(maxW, total) {
-      // Wide canopy (top 70%), narrow trunk (bottom 30%)
       const trunkStart = Math.floor(total * 0.72)
       return Array.from({ length: total }, (_, i) => {
         if (i >= trunkStart) {
-          // Narrow trunk
           return maxW * 0.1
         }
-        // Canopy: oval shape
         const t = i / trunkStart
         const r = Math.sin(t * Math.PI)
         return maxW * 0.9 * Math.max(0.1, r)
@@ -568,7 +567,6 @@ const SHAPES = {
   spiral: {
     keywords: ['spiral', 'vortex', 'whirl', 'spin', 'tornado', 'cyclone', 'funnel', 'drain'],
     widths(maxW, total, time) {
-      // Wide at top, narrows with oscillation
       return Array.from({ length: total }, (_, i) => {
         const t = i / (total - 1)
         const decay = 1 - t * 0.85
@@ -580,10 +578,8 @@ const SHAPES = {
   cross: {
     keywords: ['cross', 'plus', 'church', 'faith', 'hospital', 'aid', 'holy'],
     widths(maxW, total) {
-      // Cross: narrow vertical bar with wide horizontal bar in upper third
       return Array.from({ length: total }, (_, i) => {
         const t = i / (total - 1)
-        // Horizontal bar between 25% and 40% from top
         if (t > 0.25 && t < 0.4) {
           return maxW * 0.9
         }
@@ -594,16 +590,13 @@ const SHAPES = {
   rain: {
     keywords: ['rain', 'drip', 'drop', 'tears', 'cry', 'weep', 'pour', 'mist', 'fog'],
     widths(maxW, total) {
-      // Alternating thin/thinner lines — like falling streaks
       return Array.from({ length: total }, (_, i) => {
-        const base = 0.15 + Math.random() * 0.15  // intentionally jittery
+        const base = 0.15 + Math.random() * 0.15
         const streak = (i % 3 === 0) ? 0.4 : base
         return maxW * streak
       })
     },
-    // Each line gets random offset for scattered look
     offsets(maxW, total) {
-      // Cache offsets so they don't change every frame
       if (!SHAPES.rain._cachedOffsets || SHAPES.rain._cachedTotal !== total) {
         SHAPES.rain._cachedOffsets = Array.from({ length: total }, () =>
           (Math.random() - 0.5) * maxW * 0.5
@@ -616,7 +609,6 @@ const SHAPES = {
   stairs: {
     keywords: ['stairs', 'steps', 'staircase', 'ladder', 'climb', 'ascend', 'descend', 'escalator'],
     widths(maxW, total) {
-      // Staircase: discrete width steps
       const numSteps = 6
       return Array.from({ length: total }, (_, i) => {
         const step = Math.floor((i / total) * numSteps)
@@ -629,7 +621,6 @@ const SHAPES = {
 
 // --- Shape detection ---
 function detectShape(text) {
-  // AI override takes priority when a key is set
   if (aiShapeOverride && getApiKey()) {
     const shape = SHAPES[aiShapeOverride]
     if (shape) {
@@ -657,24 +648,18 @@ let targetWidths = null
 let animProgress = 1
 let currentShapeName = 'organic'
 let animTime = 0
-let lastText = ''
 let rafId = null
+let lineDivs = []
 
 const FONT_SIZE = 13
 const LINE_HEIGHT = FONT_SIZE * 1.5
 const FONT = `${FONT_SIZE}px 'JetBrains Mono', monospace`
 
-function resize() {
-  const wrap = canvas.parentElement
-  const dpr = window.devicePixelRatio || 1
-  const w = wrap.clientWidth
-  const h = wrap.clientHeight
-  canvas.width = w * dpr
-  canvas.height = h * dpr
-  canvas.style.width = w + 'px'
-  canvas.style.height = h + 'px'
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-}
+// Hidden canvas for pretext measurement only
+const measureCanvas = document.createElement('canvas')
+const measureCtx = measureCanvas.getContext('2d')
+measureCanvas.width = 1
+measureCanvas.height = 1
 
 function lerp(a, b, t) {
   return a + (b - a) * t
@@ -688,24 +673,19 @@ function render(timestamp) {
   rafId = requestAnimationFrame(render)
   animTime = timestamp / 1000
 
-  const wrap = canvas.parentElement
-  const canvasW = wrap.clientWidth
-  const canvasH = wrap.clientHeight
-
-  // Check for resize
-  if (canvas.style.width !== canvasW + 'px' || canvas.style.height !== canvasH + 'px') {
-    resize()
-  }
-
-  ctx.clearRect(0, 0, canvasW, canvasH)
+  const wrap = poemContainer.parentElement
+  const areaW = wrap.clientWidth
+  const areaH = wrap.clientHeight
 
   const rawText = input.value.trim()
   if (!rawText) {
-    // Draw a faint prompt
-    ctx.font = `italic 18px 'Fraunces', serif`
-    ctx.fillStyle = '#C2714F44'
-    ctx.textAlign = 'center'
-    ctx.fillText('words become shapes', canvasW / 2, canvasH / 2)
+    // Show placeholder
+    if (poemContainer.children.length !== 1 || !poemContainer.querySelector('.poem-placeholder')) {
+      poemContainer.innerHTML = '<div class="poem-placeholder">words become shapes</div>'
+      lineDivs = []
+    }
+    shapeLabel.textContent = ''
+    shapeLabel.classList.remove('visible')
     return
   }
 
@@ -721,9 +701,9 @@ function render(timestamp) {
     shapeLabel.classList.remove('visible')
   }
 
-  // Compute target widths — use most of the canvas
-  const maxWidth = Math.min(canvasW - 32, 700)
-  const maxLines = Math.floor((canvasH - 16) / LINE_HEIGHT)
+  // Compute target widths
+  const maxWidth = Math.min(areaW - 32, 700)
+  const maxLines = Math.floor((areaH - 16) / LINE_HEIGHT)
   const totalLines = Math.max(12, Math.min(maxLines, 50))
 
   const isAnimated = ['river', 'wave', 'spiral', 'organic'].includes(name)
@@ -760,8 +740,8 @@ function render(timestamp) {
   // Build repeating text
   const repeatText = (rawText + '  ').repeat(Math.ceil(3000 / (rawText.length + 2)))
 
-  // Prepare text with pretext
-  ctx.font = FONT
+  // Prepare text with pretext (measurement only)
+  measureCtx.font = FONT
   let prepared
   try {
     prepared = prepareWithSegments(repeatText, FONT)
@@ -769,7 +749,7 @@ function render(timestamp) {
     return
   }
 
-  // Layout lines
+  // Layout lines using pretext
   const lines = []
   let cursor = { segmentIndex: 0, graphemeIndex: 0 }
 
@@ -777,7 +757,6 @@ function render(timestamp) {
     const w = Math.max(widths[i], FONT_SIZE * 2)
     const line = layoutNextLine(prepared, cursor, w)
     if (!line) {
-      // Reset cursor to loop the text
       cursor = { segmentIndex: 0, graphemeIndex: 0 }
       const line2 = layoutNextLine(prepared, cursor, w)
       if (!line2) break
@@ -791,34 +770,51 @@ function render(timestamp) {
 
   if (lines.length === 0) return
 
-  // Center the block vertically
-  const blockHeight = lines.length * LINE_HEIGHT
-  const startY = (canvasH - blockHeight) / 2 + FONT_SIZE
+  // Ensure we have the right number of line divs
+  while (lineDivs.length < lines.length) {
+    const div = document.createElement('div')
+    div.className = 'poem-line'
+    poemContainer.appendChild(div)
+    lineDivs.push(div)
+  }
+  while (lineDivs.length > lines.length) {
+    const removed = lineDivs.pop()
+    removed.remove()
+  }
 
-  ctx.font = FONT
-  ctx.textAlign = 'center'
+  // Remove placeholder if present
+  const placeholder = poemContainer.querySelector('.poem-placeholder')
+  if (placeholder) placeholder.remove()
 
-  // Draw each line centered on canvas, with optional offset
+  // Update each line div
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
-    const y = startY + i * LINE_HEIGHT
+    const div = lineDivs[i]
 
     // Subtle fade at top and bottom edges
     const edgeFade = Math.min(i, lines.length - 1 - i) / 4
     const alpha = Math.min(1, 0.35 + edgeFade * 0.3)
 
-    ctx.fillStyle = `rgba(44, 44, 44, ${alpha})`
-    const xCenter = canvasW / 2 + (line.offset || 0)
-    ctx.fillText(line.text, xCenter, y)
+    // Set text content (DOM — selectable, accessible, copy-pasteable)
+    if (div.textContent !== line.text) {
+      div.textContent = line.text
+    }
+
+    // Set width and offset via inline styles
+    const maxW = Math.round(line.width * 100) / 100
+    const offset = Math.round((line.offset || 0) * 100) / 100
+
+    div.style.maxWidth = maxW + 'px'
+    div.style.width = maxW + 'px'
+    div.style.opacity = alpha
+    div.style.marginLeft = offset + 'px'
   }
 }
 
 // --- Event listeners ---
 input.addEventListener('input', () => {
-  // Reset rain offsets cache on input change
   SHAPES.rain._cachedOffsets = null
 
-  // Debounced AI shape detection
   const text = input.value.trim()
   if (getApiKey() && text) {
     clearTimeout(aiDebounceTimer)
@@ -830,10 +826,7 @@ input.addEventListener('input', () => {
   }
 })
 
-window.addEventListener('resize', resize)
-
 // --- Init ---
-resize()
 rafId = requestAnimationFrame(render)
 
 // Focus input on any keypress when not focused

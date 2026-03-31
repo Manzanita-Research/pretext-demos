@@ -20,10 +20,57 @@
     flex-direction: column;
   }
 
-  canvas {
-    display: block;
+  #arena {
+    position: relative;
     flex: 1;
+    overflow: hidden;
     cursor: crosshair;
+  }
+
+  /* Word spans */
+  .word {
+    position: absolute;
+    top: 0;
+    left: 0;
+    font-family: Literata, Georgia, serif;
+    font-size: 14px;
+    line-height: 20px;
+    white-space: nowrap;
+    will-change: transform;
+    pointer-events: none;
+    user-select: text;
+  }
+
+  /* Sieve bar elements */
+  .sieve-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 5px;
+    background: rgba(155, 142, 168, 0.1);
+    border-top: 1px solid rgba(155, 142, 168, 0.18);
+    will-change: transform;
+    pointer-events: none;
+  }
+
+  /* Gap glow elements */
+  .sieve-gap {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 5px;
+    will-change: transform;
+    pointer-events: none;
+  }
+
+  /* Floor line */
+  #floor-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: rgba(155, 142, 168, 0.08);
+    pointer-events: none;
   }
 
   #ui {
@@ -90,7 +137,9 @@
 </head>
 <body>
 
-<canvas id="c"></canvas>
+<div id="arena">
+  <div id="floor-line"></div>
+</div>
 
 <div id="ui">
   <div id="stats">
@@ -105,6 +154,8 @@
 </div>
 
 <script type="module">
+import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext';
+
 // ── Word pool ──────────────────────────────────────────────────────
 const WORD_POOL = [
   // tiny
@@ -142,7 +193,6 @@ const GRAVITY = 0.18;
 const FRICTION = 0.92;
 const BOUNCE = 0.3;
 const FONT_SIZE = 14;
-const FONT = `${FONT_SIZE}px Literata, Georgia, serif`;
 const LINE_HEIGHT = FONT_SIZE + 6;
 const NUM_SIEVE_LEVELS = 5;
 const INITIAL_WORDS = 35;
@@ -150,63 +200,64 @@ const BATCH_INTERVAL = 2800;
 const BATCH_SIZE = 4;
 const FLOOR_MARGIN = 50;
 
-// ── Canvas setup ───────────────────────────────────────────────────
-const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d');
+// ── Arena setup ────────────────────────────────────────────────────
+const arena = document.getElementById('arena');
+const floorLine = document.getElementById('floor-line');
 let W, H;
 
-function resize() {
-  const dpr = window.devicePixelRatio || 1;
-  W = window.innerWidth;
-  H = window.innerHeight;
-  canvas.width = W * dpr;
-  canvas.height = H * dpr;
-  canvas.style.width = W + 'px';
-  canvas.style.height = H + 'px';
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  buildSieve();
-}
-window.addEventListener('resize', resize);
-
-// ── Measure word widths ────────────────────────────────────────────
+// ── Pretext measurement ────────────────────────────────────────────
+// We use pretext's prepareWithSegments to measure word widths accurately
+// matching the DOM font rendering
 function measureWord(word) {
-  ctx.font = FONT;
-  return ctx.measureText(word).width;
+  const cursor = prepareWithSegments(
+    [{ text: word, style: { fontFamily: 'Literata, Georgia, serif', fontSize: FONT_SIZE } }],
+    { lineWidth: 99999 }
+  );
+  const line = layoutNextLine(cursor);
+  if (!line) return word.length * FONT_SIZE * 0.6; // fallback
+  // line width is the total advance
+  return line.width;
 }
 
 // ── Color by width ─────────────────────────────────────────────────
 function colorForWidth(w) {
-  // short=sage #8B9E7E, medium=ochre #C49A3C, long=terracotta #C2714F
   const minW = 8, maxW = 180;
   const t = Math.min(1, Math.max(0, (w - minW) / (maxW - minW)));
   if (t < 0.35) {
-    // sage → ochre transition
     const s = t / 0.35;
-    const r = Math.round(139 + s * 57);   // 139 → 196
-    const g = Math.round(158 - s * 4);     // 158 → 154
-    const b = Math.round(126 - s * 66);    // 126 → 60
+    const r = Math.round(139 + s * 57);
+    const g = Math.round(158 - s * 4);
+    const b = Math.round(126 - s * 66);
     return `rgb(${r},${g},${b})`;
   } else if (t < 0.65) {
-    // ochre
     const s = (t - 0.35) / 0.3;
-    const r = Math.round(196 - s * 2);     // 196 → 194
-    const g = Math.round(154 - s * 41);    // 154 → 113
-    const b = Math.round(60 + s * 19);     // 60 → 79
+    const r = Math.round(196 - s * 2);
+    const g = Math.round(154 - s * 41);
+    const b = Math.round(60 + s * 19);
     return `rgb(${r},${g},${b})`;
   } else {
-    // ochre → terracotta
     const s = (t - 0.65) / 0.35;
-    const r = Math.round(194 - s * 34);    // 194 → 160
-    const g = Math.round(113 - s * 31);    // 113 → 82
-    const b = Math.round(79 - s * 34);     // 79 → 45
+    const r = Math.round(194 - s * 34);
+    const g = Math.round(113 - s * 31);
+    const b = Math.round(79 - s * 34);
     return `rgb(${r},${g},${b})`;
   }
 }
 
 // ── Sieve bars ─────────────────────────────────────────────────────
 let sieveLevels = [];
+let barElements = [];  // DOM elements for bars
+let gapElements = [];  // DOM elements for gap glows
+
+function clearSieveDOM() {
+  for (const el of barElements) el.remove();
+  for (const el of gapElements) el.remove();
+  barElements = [];
+  gapElements = [];
+}
 
 function buildSieve() {
+  clearSieveDOM();
   sieveLevels = [];
   const topMargin = 60;
   const bottomMargin = FLOOR_MARGIN + 60;
@@ -215,12 +266,10 @@ function buildSieve() {
 
   for (let i = 0; i < NUM_SIEVE_LEVELS; i++) {
     const y = topMargin + levelSpacing * (i + 1);
-    // Each level: array of bars with gaps between them
-    const numGaps = 3 + i; // more gaps lower down
+    const numGaps = 3 + i;
     const bars = [];
-    const totalGaps = numGaps;
-    const totalBars = totalGaps + 1;
-    const avgBarWidth = W / (totalBars + totalGaps * 0.6);
+    const totalBars = numGaps + 1;
+    const avgBarWidth = W / (totalBars + numGaps * 0.6);
 
     let x = 0;
     for (let b = 0; b < totalBars; b++) {
@@ -228,7 +277,7 @@ function buildSieve() {
       bars.push({
         x: x,
         width: barWidth,
-        baseGap: 30 + Math.random() * 50, // base gap width after this bar
+        baseGap: 30 + Math.random() * 50,
         gapPhase: Math.random() * Math.PI * 2,
         gapSpeed: 0.3 + Math.random() * 0.7,
       });
@@ -244,7 +293,24 @@ function buildSieve() {
       bar.baseGap *= scale;
     }
 
-    sieveLevels.push({ y, bars, thickness: 5 });
+    // Create DOM elements for each bar and gap
+    const barEls = [];
+    const gapEls = [];
+    for (const bar of bars) {
+      const barEl = document.createElement('div');
+      barEl.className = 'sieve-bar';
+      arena.appendChild(barEl);
+      barEls.push(barEl);
+
+      const gapEl = document.createElement('div');
+      gapEl.className = 'sieve-gap';
+      arena.appendChild(gapEl);
+      gapEls.push(gapEl);
+    }
+    barElements.push(...barEls);
+    gapElements.push(...gapEls);
+
+    sieveLevels.push({ y, bars, thickness: 5, barEls, gapEls });
   }
 }
 
@@ -256,7 +322,7 @@ function getBarRects(level, time) {
   for (let i = 0; i < bars.length; i++) {
     const bar = bars[i];
     const gapOsc = Math.sin(time * bar.gapSpeed + bar.gapPhase);
-    const gapWidth = bar.baseGap * (0.5 + 0.5 * gapOsc); // oscillate 0-100% of base
+    const gapWidth = bar.baseGap * (0.5 + 0.5 * gapOsc);
 
     rects.push({
       x: x,
@@ -289,6 +355,12 @@ let wordIdCounter = 0;
 
 function createWord(text, x, y) {
   const width = measureWord(text);
+  const el = document.createElement('span');
+  el.className = 'word';
+  el.textContent = text;
+  el.style.color = colorForWidth(width);
+  arena.appendChild(el);
+
   return {
     id: wordIdCounter++,
     text,
@@ -298,12 +370,13 @@ function createWord(text, x, y) {
     vy: Math.random() * 0.5,
     width,
     height: LINE_HEIGHT,
-    mass: width, // mass proportional to measured width
+    mass: width,
     color: colorForWidth(width),
     settled: false,
     settledTime: 0,
     throughSieve: false,
     alpha: 1,
+    el,
   };
 }
 
@@ -340,7 +413,6 @@ function simulate(time, dt) {
     // Collision with sieve bars
     for (const barRects of allBarRects) {
       for (const bar of barRects) {
-        // Is the word overlapping this bar horizontally?
         const wordLeft = nx;
         const wordRight = nx + w.width;
         const barLeft = bar.x;
@@ -352,7 +424,6 @@ function simulate(time, dt) {
         const barTop = bar.y;
         const barBottom = bar.y + bar.height;
         const wordBottom = ny + w.height;
-        const wordTop = ny;
 
         // Falling onto top of bar
         if (w.vy > 0 && wordBottom > barTop && w.y + w.height <= barTop + w.vy + 2) {
@@ -372,21 +443,18 @@ function simulate(time, dt) {
               nearestDist = dist;
               nearestGapX = gapCenter;
 
-              // Can we fit through this gap?
               if (b.gapAfter > w.width + 4) {
-                // Slide toward it
                 const slideForce = 0.08 * w.mass * 0.005;
                 w.vx += (gapCenter - wordCenter) > 0 ? slideForce : -slideForce;
               }
             }
           }
 
-          // Small random jitter to prevent perfect stacking
           w.vx += (Math.random() - 0.5) * 0.15;
         }
 
         // Rising into bottom of bar
-        if (w.vy < 0 && wordTop < barBottom && w.y >= barBottom + w.vy - 2) {
+        if (w.vy < 0 && ny < barBottom && w.y >= barBottom + w.vy - 2) {
           ny = barBottom;
           w.vy = -w.vy * BOUNCE * 0.5;
         }
@@ -416,7 +484,7 @@ function simulate(time, dt) {
     w.y = ny;
   }
 
-  // Simple word-word collision (push apart vertically when overlapping)
+  // Simple word-word collision (push apart when overlapping)
   for (let i = 0; i < words.length; i++) {
     const a = words[i];
     if (a.settled && a.vy === 0) continue;
@@ -427,12 +495,10 @@ function simulate(time, dt) {
       const vOverlap = a.y + a.height > b.y && a.y < b.y + b.height;
 
       if (hOverlap && vOverlap) {
-        // Push apart
         const overlapY = Math.min(a.y + a.height - b.y, b.y + b.height - a.y);
         const overlapX = Math.min(a.x + a.width - b.x, b.x + b.width - a.x);
 
         if (overlapY < overlapX) {
-          // Separate vertically
           if (a.y < b.y) {
             a.y -= overlapY * 0.5;
             b.y += overlapY * 0.5;
@@ -451,7 +517,6 @@ function simulate(time, dt) {
             }
           }
         } else {
-          // Separate horizontally
           if (a.x < b.x) {
             a.x -= overlapX * 0.3;
             b.x += overlapX * 0.3;
@@ -459,13 +524,11 @@ function simulate(time, dt) {
             b.x -= overlapX * 0.3;
             a.x += overlapX * 0.3;
           }
-          // Exchange some horizontal velocity
           const avgVx = (a.vx + b.vx) * 0.5;
           a.vx = avgVx + (a.vx - avgVx) * 0.5;
           b.vx = avgVx + (b.vx - avgVx) * 0.5;
         }
 
-        // Unsettle both
         a.settled = false;
         a.settledTime = 0;
         b.settled = false;
@@ -485,51 +548,34 @@ function simulate(time, dt) {
   }
 }
 
-// ── Rendering ──────────────────────────────────────────────────────
+// ── Rendering (DOM updates) ────────────────────────────────────────
 function render(time) {
-  ctx.clearRect(0, 0, W, H);
+  // Update sieve bar positions
+  for (const level of sieveLevels) {
+    const rects = getBarRects(level, time);
+    for (let i = 0; i < rects.length; i++) {
+      const r = rects[i];
+      const barEl = level.barEls[i];
+      const gapEl = level.gapEls[i];
 
-  // Draw sieve bars
-  const allBarRects = sieveLevels.map(l => getBarRects(l, time));
-  for (const barRects of allBarRects) {
-    for (const bar of barRects) {
-      ctx.fillStyle = 'rgba(155, 142, 168, 0.1)';
-      ctx.fillRect(bar.x, bar.y, bar.width, bar.height);
+      barEl.style.transform = `translate3d(${r.x}px, ${r.y}px, 0)`;
+      barEl.style.width = r.width + 'px';
 
-      // Subtle edge highlight
-      ctx.fillStyle = 'rgba(155, 142, 168, 0.18)';
-      ctx.fillRect(bar.x, bar.y, bar.width, 1);
+      // Gap glow
+      const gapX = r.x + r.width;
+      const gapW = r.gapAfter;
+      gapEl.style.transform = `translate3d(${gapX}px, ${r.y}px, 0)`;
+      gapEl.style.width = gapW + 'px';
+      gapEl.style.background = `rgba(200, 200, 208, ${0.02 + 0.02 * Math.min(1, gapW / 80)})`;
     }
   }
 
-  // Draw gap indicators (subtle)
-  for (const barRects of allBarRects) {
-    for (const bar of barRects) {
-      const gapX = bar.x + bar.width;
-      const gapW = bar.gapAfter;
-      if (gapW > 0) {
-        ctx.fillStyle = `rgba(200, 200, 208, ${0.02 + 0.02 * Math.min(1, gapW / 80)})`;
-        ctx.fillRect(gapX, bar.y, gapW, bar.height);
-      }
-    }
-  }
-
-  // Draw words
-  ctx.font = FONT;
-  ctx.textBaseline = 'top';
+  // Update word positions
   for (const w of words) {
     const alpha = w.alpha * (w.settled ? 0.6 : 1);
-    ctx.fillStyle = w.color.replace('rgb', 'rgba').replace(')', `,${alpha})`);
-    ctx.fillText(w.text, w.x, w.y + 3);
+    w.el.style.transform = `translate3d(${w.x}px, ${w.y}px, 0)`;
+    w.el.style.opacity = alpha;
   }
-
-  // Floor line
-  const floorY = H - FLOOR_MARGIN;
-  ctx.strokeStyle = 'rgba(155, 142, 168, 0.08)';
-  ctx.beginPath();
-  ctx.moveTo(0, floorY);
-  ctx.lineTo(W, floorY);
-  ctx.stroke();
 }
 
 // ── Stats ──────────────────────────────────────────────────────────
@@ -579,9 +625,18 @@ function frame(ts) {
   requestAnimationFrame(frame);
 }
 
+// ── Resize ─────────────────────────────────────────────────────────
+function resize() {
+  W = window.innerWidth;
+  H = window.innerHeight;
+  floorLine.style.top = (H - FLOOR_MARGIN) + 'px';
+  buildSieve();
+}
+window.addEventListener('resize', resize);
+
 // ── Input ──────────────────────────────────────────────────────────
-canvas.addEventListener('click', (e) => {
-  const rect = canvas.getBoundingClientRect();
+arena.addEventListener('click', (e) => {
+  const rect = arena.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
   for (let i = 0; i < 3; i++) {
@@ -593,7 +648,6 @@ const wordInput = document.getElementById('word-input');
 wordInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && wordInput.value.trim()) {
     const text = wordInput.value.trim();
-    // Split on spaces and drop each word
     const parts = text.split(/\s+/);
     for (const part of parts) {
       if (part.length > 0) {
@@ -633,9 +687,14 @@ setInterval(() => {
 // Cull words that have been settled too long at the very bottom to keep performance
 setInterval(() => {
   if (words.length > 150) {
+    const before = words.length;
     words = words.filter(w => {
       if (w.settled && w.settledTime > 10 && w.throughSieve) {
-        return Math.random() > 0.3; // fade out some settled-through words
+        if (Math.random() > 0.3) {
+          return true;
+        }
+        w.el.remove(); // clean up DOM element
+        return false;
       }
       return true;
     });

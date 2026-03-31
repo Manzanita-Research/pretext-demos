@@ -9,17 +9,189 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=Literata:ital,opsz,wght@0,7..72,200..900;1,7..72,200..900&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; height: 100%; overflow: hidden; background: #08080e; }
-  canvas { display: block; width: 100%; height: 100%; cursor: grab; }
-  canvas.dragging { cursor: grabbing; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: #08080e;
+    font-family: Georgia, "Times New Roman", serif;
+  }
+
+  #stage {
+    position: relative;
+    width: 100%; height: 100%;
+    overflow: hidden;
+  }
+
+  /* --- Header --- */
+  .header {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    text-align: center;
+    z-index: 10;
+    pointer-events: none;
+  }
+  .header h1 {
+    font-family: Fraunces, Georgia, serif;
+    font-weight: 300;
+    font-size: 28px;
+    color: #a89e8e;
+    margin-top: 18px;
+    font-variation-settings: 'WONK' 1, 'SOFT' 100;
+  }
+  .header p {
+    font-family: Literata, Georgia, serif;
+    font-size: 13px;
+    color: #5C5C5C;
+    margin-top: 4px;
+  }
+
+  /* --- Columns --- */
+  .columns {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    padding: 0 40px;
+    gap: 24px;
+  }
+
+  .col {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .col-bg {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .col[data-script="latin"] .col-bg { background: rgba(194, 113, 79, 0.05); }
+  .col[data-script="arabic"] .col-bg { background: rgba(196, 154, 60, 0.05); }
+  .col[data-script="chinese"] .col-bg { background: rgba(139, 158, 126, 0.05); }
+
+  .col-label {
+    position: absolute;
+    top: 80px;
+    left: 0; right: 0;
+    text-align: center;
+    font-family: Fraunces, Georgia, serif;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    pointer-events: none;
+    z-index: 5;
+  }
+  .col[data-script="latin"] .col-label { color: #C2714F; }
+  .col[data-script="arabic"] .col-label { color: #C49A3C; }
+  .col[data-script="chinese"] .col-label { color: #8B9E7E; }
+
+  .col-rule {
+    position: absolute;
+    top: 88px;
+    left: 0; right: 0;
+    height: 1px;
+    pointer-events: none;
+    z-index: 5;
+  }
+  .col[data-script="latin"] .col-rule { background: rgba(194, 113, 79, 0.25); }
+  .col[data-script="arabic"] .col-rule { background: rgba(196, 154, 60, 0.25); }
+  .col[data-script="chinese"] .col-rule { background: rgba(139, 158, 126, 0.25); }
+
+  .col-lines {
+    position: absolute;
+    top: 100px;
+    left: 12px; right: 12px;
+    bottom: 40px;
+    overflow: hidden;
+  }
+
+  .col[data-script="arabic"] .col-lines {
+    direction: rtl;
+  }
+
+  .text-line {
+    white-space: pre;
+    font-size: 15px;
+    line-height: 24px;
+    height: 24px;
+    overflow: hidden;
+    text-overflow: clip;
+  }
+  .col[data-script="latin"] .text-line { color: #e8d4c8; font-family: Georgia, "Times New Roman", serif; }
+  .col[data-script="arabic"] .text-line { color: #e8dcc0; font-family: "Geeza Pro", "Traditional Arabic", "Simplified Arabic", serif; }
+  .col[data-script="chinese"] .text-line { color: #c8d8c4; font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; }
+
+  .line-count {
+    position: absolute;
+    bottom: 14px;
+    left: 0; right: 0;
+    text-align: center;
+    font-family: Fraunces, Georgia, serif;
+    font-size: 11px;
+    pointer-events: none;
+    z-index: 5;
+  }
+  .col[data-script="latin"] .line-count { color: rgba(194, 113, 79, 0.5); }
+  .col[data-script="arabic"] .line-count { color: rgba(196, 154, 60, 0.5); }
+  .col[data-script="chinese"] .line-count { color: rgba(139, 158, 126, 0.5); }
+
+  /* --- Obstacle (stone) --- */
+  .stone {
+    position: absolute;
+    z-index: 20;
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
+  }
+  .stone.dragging { cursor: grabbing; }
+
+  .stone svg {
+    display: block;
+    filter: drop-shadow(0 0 40px rgba(200, 180, 140, 0.08));
+  }
+
+  /* Selection colors per column */
+  .col[data-script="latin"] .text-line::selection { background: rgba(194, 113, 79, 0.3); }
+  .col[data-script="arabic"] .text-line::selection { background: rgba(196, 154, 60, 0.3); }
+  .col[data-script="chinese"] .text-line::selection { background: rgba(139, 158, 126, 0.3); }
 </style>
 </head>
 <body>
-<canvas id="c"></canvas>
+<div id="stage">
+  <div class="header">
+    <h1>The Rosetta Engine</h1>
+    <p>Drag the stone to see how three writing systems solve the same spatial problem</p>
+  </div>
+
+  <div class="columns" id="columns">
+    <div class="col" data-script="latin">
+      <div class="col-bg"></div>
+      <div class="col-label">LATIN</div>
+      <div class="col-rule"></div>
+      <div class="col-lines" id="lines-latin"></div>
+      <div class="line-count" id="count-latin"></div>
+    </div>
+    <div class="col" data-script="arabic">
+      <div class="col-bg"></div>
+      <div class="col-label">ARABIC</div>
+      <div class="col-rule"></div>
+      <div class="col-lines" id="lines-arabic"></div>
+      <div class="line-count" id="count-arabic"></div>
+    </div>
+    <div class="col" data-script="chinese">
+      <div class="col-bg"></div>
+      <div class="col-label">CHINESE</div>
+      <div class="col-rule"></div>
+      <div class="col-lines" id="lines-chinese"></div>
+      <div class="line-count" id="count-chinese"></div>
+    </div>
+  </div>
+
+  <div class="stone" id="stone"></div>
+</div>
+
 <script type="module">
 import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
 
-// --- Text content: three scripts, same theme ---
+// --- Text content ---
 
 const latinText = `Language is the oldest technology. Before wheels, before fire pits lined with stone, humans shaped breath into meaning. Every sentence is an act of compression — centuries of shared experience packed into vibrations that cross the air between two people. Writing pushed that further. Marks on clay, ink on paper, pixels on glass: each leap let us speak across time. The Latin alphabet descends from Phoenician traders who scratched consonants onto pottery. Romans carved it into empire. Monks copied it by candlelight. Gutenberg stamped it into metal. And now it flows through fiber optic cables at the speed of light, still carrying the same fundamental impulse: I have something to say, and I need you to hear it. Typography is how we give that impulse a body.`
 
@@ -27,107 +199,21 @@ const arabicText = `اللغة هي أقدم تقنية عرفها الإنسا�
 
 const chineseText = `语言是人类最古老的技术。在车轮之前，在石砌火坑之前，人类就将呼吸塑造成意义。每一个句子都是一次压缩——几个世纪的共同经验被浓缩在两个人之间穿越空气的振动中。书写将这一切推得更远。泥板上的刻痕、纸上的墨迹、玻璃上的像素：每一次飞跃都让我们跨越时间说话。汉字起源于商代的甲骨文，龟甲上的裂纹被解读为神谕。秦始皇统一了文字，僧侣们用毛笔抄写经卷，毕昇发明了活字印刷。如今，文字以光速穿过光纤电缆，承载着同样根本的冲动：我有话要说，我需要你听到。字体排印，就是我们赋予这种冲动以形体的方式。`
 
-// --- Canvas setup ---
+// --- Layout constants ---
 
-const canvas = document.getElementById('c')
-const ctx = canvas.getContext('2d')
-let dpr = window.devicePixelRatio || 1
-let W, H
-
-function resize() {
-  dpr = window.devicePixelRatio || 1
-  W = window.innerWidth
-  H = window.innerHeight
-  canvas.width = W * dpr
-  canvas.height = H * dpr
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-}
-resize()
-window.addEventListener('resize', () => { resize(); prepareFonts() })
-
-// --- Obstacle state ---
-
-let obs = { x: 0, y: 0, r: 70 }
-let dragging = false
-let dragOffset = { x: 0, y: 0 }
-
-// Center the obstacle initially
-obs.x = W / 2
-obs.y = H / 2
-
-// --- Drag handling ---
-
-function getPos(e) {
-  if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY }
-  return { x: e.clientX, y: e.clientY }
-}
-
-function hitTest(px, py) {
-  const dx = px - obs.x, dy = py - obs.y
-  return dx * dx + dy * dy <= (obs.r + 10) * (obs.r + 10)
-}
-
-canvas.addEventListener('mousedown', e => {
-  const p = getPos(e)
-  if (hitTest(p.x, p.y)) {
-    dragging = true
-    dragOffset.x = p.x - obs.x
-    dragOffset.y = p.y - obs.y
-    canvas.classList.add('dragging')
-  }
-})
-
-canvas.addEventListener('mousemove', e => {
-  if (dragging) {
-    const p = getPos(e)
-    obs.x = p.x - dragOffset.x
-    obs.y = p.y - dragOffset.y
-  } else {
-    const p = getPos(e)
-    canvas.style.cursor = hitTest(p.x, p.y) ? 'grab' : 'default'
-  }
-})
-
-canvas.addEventListener('mouseup', () => {
-  dragging = false
-  canvas.classList.remove('dragging')
-})
-
-canvas.addEventListener('touchstart', e => {
-  e.preventDefault()
-  const p = getPos(e)
-  if (hitTest(p.x, p.y)) {
-    dragging = true
-    dragOffset.x = p.x - obs.x
-    dragOffset.y = p.y - obs.y
-  }
-}, { passive: false })
-
-canvas.addEventListener('touchmove', e => {
-  e.preventDefault()
-  if (dragging) {
-    const p = getPos(e)
-    obs.x = p.x - dragOffset.x
-    obs.y = p.y - dragOffset.y
-  }
-}, { passive: false })
-
-canvas.addEventListener('touchend', () => { dragging = false })
-
-// --- Column layout ---
-
-const MARGIN = 40
-const GAP = 24
-const TOP_MARGIN = 100
-const FONT_SIZE = 15
 const LINE_HEIGHT = 24
-const TITLE_SIZE = 11
+const FONT_SIZE = 15
+const OBS_R = 70
+const TOP_OFFSET = 100 // matches .col-lines top
+const COL_PAD = 12     // matches .col-lines left/right
 
-// --- Prepare text with pretext ---
+// --- Fonts for pretext measurement ---
 
 const latinFont = `${FONT_SIZE}px Georgia, "Times New Roman", serif`
 const arabicFont = `${FONT_SIZE}px "Geeza Pro", "Traditional Arabic", "Simplified Arabic", serif`
 const chineseFont = `${FONT_SIZE}px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif`
+
+// --- Prepare text ---
 
 let preparedLatin, preparedArabic, preparedChinese
 
@@ -138,14 +224,107 @@ function prepareFonts() {
 }
 prepareFonts()
 
-// --- Compute available width for a line given the obstacle ---
+// --- DOM refs ---
 
-function getLineWidth(y, lineH, colLeft, colRight, obsX, obsY, obsR) {
-  // Check if the obstacle circle overlaps this line's vertical band
-  const lineTop = y - lineH * 0.8 // approximate ascent
-  const lineBot = y + lineH * 0.2 // approximate descent
+const stoneEl = document.getElementById('stone')
+const lineContainers = [
+  document.getElementById('lines-latin'),
+  document.getElementById('lines-arabic'),
+  document.getElementById('lines-chinese'),
+]
+const countEls = [
+  document.getElementById('count-latin'),
+  document.getElementById('count-arabic'),
+  document.getElementById('count-chinese'),
+]
 
-  // Find the vertical distance from circle center to closest point in line band
+// --- Obstacle state ---
+
+let obs = { x: window.innerWidth / 2, y: window.innerHeight / 2, r: OBS_R }
+
+// --- Build stone SVG ---
+
+function buildStoneSVG() {
+  const d = obs.r * 2
+  let rings = ''
+  for (let r = 15; r < obs.r; r += 12) {
+    const opacity = (0.04 + (r / obs.r) * 0.04).toFixed(3)
+    rings += `<circle cx="${obs.r}" cy="${obs.r}" r="${r}" fill="none" stroke="rgba(200,180,140,${opacity})" stroke-width="0.5"/>`
+  }
+  stoneEl.innerHTML = `<svg width="${d}" height="${d}" viewBox="0 0 ${d} ${d}">
+    <circle cx="${obs.r}" cy="${obs.r}" r="${obs.r}" fill="#1a1a24" stroke="rgba(200,180,140,0.3)" stroke-width="1.5"/>
+    ${rings}
+    <text x="${obs.r}" y="${obs.r - 4}" text-anchor="middle" fill="rgba(200,180,140,0.5)" font-family="Fraunces, Georgia, serif" font-size="9">ROSETTA</text>
+    <text x="${obs.r}" y="${obs.r + 8}" text-anchor="middle" fill="rgba(200,180,140,0.5)" font-family="Fraunces, Georgia, serif" font-size="9">STONE</text>
+  </svg>`
+}
+buildStoneSVG()
+
+function positionStone() {
+  stoneEl.style.left = (obs.x - obs.r) + 'px'
+  stoneEl.style.top = (obs.y - obs.r) + 'px'
+}
+positionStone()
+
+// --- Drag handling ---
+
+let isDragging = false
+let dragOffset = { x: 0, y: 0 }
+
+function getPos(e) {
+  if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY }
+  return { x: e.clientX, y: e.clientY }
+}
+
+stoneEl.addEventListener('mousedown', e => {
+  isDragging = true
+  const p = getPos(e)
+  dragOffset.x = p.x - obs.x
+  dragOffset.y = p.y - obs.y
+  stoneEl.classList.add('dragging')
+  e.preventDefault()
+})
+
+window.addEventListener('mousemove', e => {
+  if (!isDragging) return
+  const p = getPos(e)
+  obs.x = p.x - dragOffset.x
+  obs.y = p.y - dragOffset.y
+  positionStone()
+  layout()
+})
+
+window.addEventListener('mouseup', () => {
+  isDragging = false
+  stoneEl.classList.remove('dragging')
+})
+
+stoneEl.addEventListener('touchstart', e => {
+  e.preventDefault()
+  isDragging = true
+  const p = getPos(e)
+  dragOffset.x = p.x - obs.x
+  dragOffset.y = p.y - obs.y
+}, { passive: false })
+
+window.addEventListener('touchmove', e => {
+  if (!isDragging) return
+  e.preventDefault()
+  const p = getPos(e)
+  obs.x = p.x - dragOffset.x
+  obs.y = p.y - dragOffset.y
+  positionStone()
+  layout()
+}, { passive: false })
+
+window.addEventListener('touchend', () => { isDragging = false })
+
+// --- Obstacle intersection logic ---
+
+function getLineWidth(yAbsolute, lineH, colLeft, colRight, obsX, obsY, obsR) {
+  const lineTop = yAbsolute - lineH * 0.8
+  const lineBot = yAbsolute + lineH * 0.2
+
   let closestY = obsY
   if (obsY < lineTop) closestY = lineTop
   else if (obsY > lineBot) closestY = lineBot
@@ -154,19 +333,16 @@ function getLineWidth(y, lineH, colLeft, colRight, obsX, obsY, obsR) {
   const maxDx = Math.sqrt(Math.max(0, obsR * obsR - dy * dy))
 
   if (maxDx <= 0) {
-    // No intersection
     return { width: colRight - colLeft, xStart: colLeft }
   }
 
   const circleLeft = obsX - maxDx
   const circleRight = obsX + maxDx
 
-  // Does the circle intersection overlap our column?
   if (circleRight <= colLeft || circleLeft >= colRight) {
     return { width: colRight - colLeft, xStart: colLeft }
   }
 
-  // Obstacle clips into our column. Decide which side has more space.
   const spaceLeft = Math.max(0, Math.min(circleLeft, colRight) - colLeft)
   const spaceRight = Math.max(0, colRight - Math.max(circleRight, colLeft))
 
@@ -177,89 +353,45 @@ function getLineWidth(y, lineH, colLeft, colRight, obsX, obsY, obsR) {
   }
 }
 
-// --- Colors ---
+// --- Layout ---
 
-const COL_TINTS = [
-  { bg: 'rgba(194, 113, 79, 0.05)', text: '#e8d4c8', label: '#C2714F', name: 'Latin' },
-  { bg: 'rgba(196, 154, 60, 0.05)', text: '#e8dcc0', label: '#C49A3C', name: 'Arabic' },
-  { bg: 'rgba(139, 158, 126, 0.05)', text: '#c8d8c4', label: '#8B9E7E', name: 'Chinese' },
-]
+const prepared = [null, null, null]
+const fonts = [latinFont, arabicFont, chineseFont]
+const isRTL = [false, true, false]
 
-// --- Render ---
+function layout() {
+  prepared[0] = preparedLatin
+  prepared[1] = preparedArabic
+  prepared[2] = preparedChinese
 
-function render() {
-  ctx.clearRect(0, 0, W, H)
-
-  // Background
-  ctx.fillStyle = '#08080e'
-  ctx.fillRect(0, 0, W, H)
-
-  const colWidth = (W - MARGIN * 2 - GAP * 2) / 3
-  const columns = [
-    { left: MARGIN, right: MARGIN + colWidth },
-    { left: MARGIN + colWidth + GAP, right: MARGIN + colWidth * 2 + GAP },
-    { left: MARGIN + colWidth * 2 + GAP * 2, right: MARGIN + colWidth * 3 + GAP * 2 },
-  ]
-
-  // Draw column backgrounds
-  for (let i = 0; i < 3; i++) {
-    ctx.fillStyle = COL_TINTS[i].bg
-    ctx.fillRect(columns[i].left, 0, columns[i].right - columns[i].left, H)
-  }
-
-  // Draw title
-  ctx.fillStyle = '#a89e8e'
-  ctx.font = `300 28px Fraunces, Georgia, serif`
-  ctx.fontVariationSettings = "'WONK' 1, 'SOFT' 100"
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'alphabetic'
-  ctx.fillText('The Rosetta Engine', W / 2, 50)
-
-  // Draw subtitle
-  ctx.fillStyle = '#5C5C5C'
-  ctx.font = `13px Literata, Georgia, serif`
-  ctx.fillText('Drag the stone to see how three writing systems solve the same spatial problem', W / 2, 72)
-
-  // Draw column labels
-  ctx.font = `${TITLE_SIZE}px Fraunces, Georgia, serif`
-  ctx.textBaseline = 'alphabetic'
-  for (let i = 0; i < 3; i++) {
-    ctx.fillStyle = COL_TINTS[i].label
-    ctx.textAlign = 'center'
-    ctx.fillText(COL_TINTS[i].name.toUpperCase(), (columns[i].left + columns[i].right) / 2, TOP_MARGIN - 14)
-
-    // Thin top rule
-    ctx.strokeStyle = COL_TINTS[i].label + '40'
-    ctx.lineWidth = 0.5
-    ctx.beginPath()
-    ctx.moveTo(columns[i].left, TOP_MARGIN - 6)
-    ctx.lineTo(columns[i].right, TOP_MARGIN - 6)
-    ctx.stroke()
-  }
-
-  // --- Layout and render each column ---
-
-  const prepared = [preparedLatin, preparedArabic, preparedChinese]
-  const fonts = [latinFont, arabicFont, chineseFont]
-  const isRTL = [false, true, false]
+  const colEls = document.querySelectorAll('.col')
 
   for (let col = 0; col < 3; col++) {
-    const colLeft = columns[col].left + 12
-    const colRight = columns[col].right - 12
+    const container = lineContainers[col]
+    const colEl = colEls[col]
 
-    ctx.font = fonts[col]
-    ctx.textBaseline = 'alphabetic'
+    // Get the column's absolute position
+    const colRect = colEl.getBoundingClientRect()
+    const linesRect = container.getBoundingClientRect()
+
+    const colLeft = colRect.left + COL_PAD
+    const colRight = colRect.right - COL_PAD
+    const maxY = linesRect.bottom
 
     let cursor = { segmentIndex: 0, graphemeIndex: 0 }
-    let y = TOP_MARGIN + LINE_HEIGHT
-    let lineCount = 0
+    let lineIndex = 0
+    let y = linesRect.top + LINE_HEIGHT // first baseline
 
-    while (y < H - 40) {
+    // Collect line data
+    const lines = []
+
+    while (y < maxY) {
       const info = getLineWidth(y, LINE_HEIGHT, colLeft, colRight, obs.x, obs.y, obs.r)
       const lineW = info.width
 
       if (lineW < 30) {
-        // Skip this line if no room
+        // No room — push an empty spacer line
+        lines.push({ text: '', xStart: info.xStart, width: info.width, skip: true })
         y += LINE_HEIGHT
         continue
       }
@@ -267,79 +399,93 @@ function render() {
       const line = layoutNextLine(prepared[col], cursor, lineW)
       if (line === null) break
 
-      ctx.fillStyle = COL_TINTS[col].text
-
-      if (isRTL[col]) {
-        // Arabic: right-to-left
-        ctx.save()
-        ctx.direction = 'rtl'
-        ctx.textAlign = 'right'
-        // The xStart from getLineWidth gives left edge of available space
-        // For RTL, we draw from the right edge of that available space
-        const rightEdge = info.xStart + info.width
-        ctx.fillText(line.text, rightEdge, y)
-        ctx.restore()
-      } else {
-        ctx.textAlign = 'left'
-        ctx.direction = 'ltr'
-        ctx.fillText(line.text, info.xStart, y)
-      }
+      lines.push({
+        text: line.text,
+        xStart: info.xStart,
+        width: info.width,
+        colLeft,
+        colRight,
+      })
 
       cursor = line.end
       y += LINE_HEIGHT
-      lineCount++
+      lineIndex++
     }
 
-    // Line count indicator at bottom
-    ctx.font = `${TITLE_SIZE}px Fraunces, Georgia, serif`
-    ctx.fillStyle = COL_TINTS[col].label + '80'
-    ctx.textAlign = 'center'
-    ctx.direction = 'ltr'
-    ctx.fillText(`${lineCount} lines`, (columns[col].left + columns[col].right) / 2, H - 20)
+    // Render DOM lines — reuse existing divs when possible
+    const existingChildren = container.children
+    const needed = lines.length
+
+    // Remove excess
+    while (container.children.length > needed) {
+      container.removeChild(container.lastChild)
+    }
+
+    // Add missing
+    while (container.children.length < needed) {
+      const div = document.createElement('div')
+      div.className = 'text-line'
+      container.appendChild(div)
+    }
+
+    // Update content and positioning
+    for (let i = 0; i < needed; i++) {
+      const div = container.children[i]
+      const lineData = lines[i]
+
+      if (lineData.skip) {
+        if (div.textContent !== '') div.textContent = ''
+        div.style.paddingLeft = ''
+        div.style.paddingRight = ''
+        div.style.textAlign = ''
+        continue
+      }
+
+      if (div.textContent !== lineData.text) {
+        div.textContent = lineData.text
+      }
+
+      // Calculate indent from obstacle
+      if (isRTL[col]) {
+        // For RTL: indent is from the right side
+        const rightIndent = lineData.colRight - (lineData.xStart + lineData.width)
+        const leftIndent = lineData.xStart - lineData.colLeft
+        div.style.paddingLeft = leftIndent > 1 ? leftIndent + 'px' : ''
+        div.style.paddingRight = rightIndent > 1 ? rightIndent + 'px' : ''
+        div.style.textAlign = 'right'
+      } else {
+        const leftIndent = lineData.xStart - lineData.colLeft
+        const rightIndent = lineData.colRight - (lineData.xStart + lineData.width)
+        div.style.paddingLeft = leftIndent > 1 ? leftIndent + 'px' : ''
+        div.style.paddingRight = rightIndent > 1 ? rightIndent + 'px' : ''
+        div.style.textAlign = 'left'
+      }
+    }
+
+    // Update line count
+    const textLines = lines.filter(l => !l.skip).length
+    countEls[col].textContent = textLines + ' lines'
   }
-
-  // --- Draw obstacle ---
-
-  // Outer glow
-  const gradient = ctx.createRadialGradient(obs.x, obs.y, obs.r * 0.3, obs.x, obs.y, obs.r * 1.8)
-  gradient.addColorStop(0, 'rgba(200, 180, 140, 0.08)')
-  gradient.addColorStop(1, 'rgba(200, 180, 140, 0)')
-  ctx.fillStyle = gradient
-  ctx.beginPath()
-  ctx.arc(obs.x, obs.y, obs.r * 1.8, 0, Math.PI * 2)
-  ctx.fill()
-
-  // Stone circle
-  ctx.beginPath()
-  ctx.arc(obs.x, obs.y, obs.r, 0, Math.PI * 2)
-  ctx.fillStyle = '#1a1a24'
-  ctx.fill()
-  ctx.strokeStyle = 'rgba(200, 180, 140, 0.3)'
-  ctx.lineWidth = 1.5
-  ctx.stroke()
-
-  // Stone texture — concentric rings
-  for (let r = 15; r < obs.r; r += 12) {
-    ctx.beginPath()
-    ctx.arc(obs.x, obs.y, r, 0, Math.PI * 2)
-    ctx.strokeStyle = `rgba(200, 180, 140, ${0.04 + (r / obs.r) * 0.04})`
-    ctx.lineWidth = 0.5
-    ctx.stroke()
-  }
-
-  // Rosetta label
-  ctx.fillStyle = 'rgba(200, 180, 140, 0.5)'
-  ctx.font = `9px Fraunces, Georgia, serif`
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.direction = 'ltr'
-  ctx.fillText('ROSETTA', obs.x, obs.y - 6)
-  ctx.fillText('STONE', obs.x, obs.y + 6)
-
-  requestAnimationFrame(render)
 }
 
-requestAnimationFrame(render)
+// --- Init and resize ---
+
+function init() {
+  prepareFonts()
+  layout()
+}
+
+window.addEventListener('resize', () => {
+  // Keep stone roughly centered if it was near center
+  init()
+})
+
+// Initial layout after fonts are ready
+if (document.fonts && document.fonts.ready) {
+  document.fonts.ready.then(init)
+} else {
+  setTimeout(init, 200)
+}
 </script>
 </body>
 </html>

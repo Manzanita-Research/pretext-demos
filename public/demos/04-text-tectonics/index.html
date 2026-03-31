@@ -9,9 +9,106 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=Literata:ital,opsz,wght@0,7..72,200..900;1,7..72,200..900&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; height: 100%; overflow: hidden; background: #08080e; }
-  canvas { display: block; width: 100%; height: 100%; cursor: grab; }
-  canvas.grabbing { cursor: grabbing; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: #08080e;
+    font-family: Georgia, serif;
+  }
+
+  #scene {
+    position: fixed; inset: 0;
+    overflow: hidden;
+    cursor: grab;
+  }
+  #scene.grabbing { cursor: grabbing; }
+
+  /* Background fault lines — CSS-only subtle vertical stripes */
+  #fault-lines {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    opacity: 0.012;
+    background: repeating-linear-gradient(
+      90deg,
+      transparent 0px,
+      transparent 69px,
+      rgba(255,255,255,1) 69px,
+      rgba(255,255,255,1) 70px
+    );
+  }
+
+  /* Rift glow between plates */
+  #rift-glow {
+    position: absolute;
+    top: 0; bottom: 0;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.05s;
+  }
+  #rift-glow-inner {
+    width: 100%; height: 100%;
+    background: radial-gradient(ellipse at center, rgba(210,170,60,0.3) 0%, rgba(196,154,60,0) 70%);
+  }
+  #rift-line {
+    position: absolute;
+    top: 0; bottom: 0;
+    left: 50%;
+    width: 2px;
+    margin-left: -1px;
+    pointer-events: none;
+    background: rgba(196,154,60,0.4);
+    opacity: 0;
+  }
+
+  /* Plate containers */
+  .plate {
+    position: absolute;
+    top: 0; left: 0;
+    will-change: transform;
+    padding: 14px;
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  .plate-line {
+    white-space: pre;
+    will-change: transform, opacity;
+    line-height: 22px;
+    font-size: 15px;
+    font-family: Georgia, serif;
+  }
+
+  .plate-a .plate-line { color: #C2714F; }
+  .plate-b .plate-line { color: #8B9E7E; }
+
+  /* Debris particles */
+  .debris {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    will-change: transform, opacity;
+    background: rgb(120, 70, 45);
+  }
+
+  /* HUD */
+  #hud {
+    position: fixed;
+    bottom: 18px;
+    left: 0; right: 0;
+    text-align: center;
+    pointer-events: none;
+    z-index: 10;
+  }
+  #hud-title {
+    font: 10px Fraunces, Georgia;
+    color: rgba(255,255,255,0.18);
+    letter-spacing: 0.15em;
+    margin-bottom: 4px;
+  }
+  #hud-hint {
+    font: 10px Literata, Georgia;
+    color: rgba(255,255,255,0.09);
+  }
+
   #loading {
     position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
     color: #665544; font: 15px Literata, Georgia; letter-spacing: 0.04em;
@@ -22,7 +119,19 @@
 </head>
 <body>
 <div id="loading">deep time loading...</div>
-<canvas id="canvas"></canvas>
+<div id="scene">
+  <div id="fault-lines"></div>
+  <div id="rift-glow"><div id="rift-glow-inner"></div></div>
+  <div id="rift-line"></div>
+  <div id="plate-a" class="plate plate-a"></div>
+  <div id="plate-b" class="plate plate-b"></div>
+  <div id="debris-layer"></div>
+</div>
+<div id="hud">
+  <div id="hud-title">T E X T &nbsp; T E C T O N I C S</div>
+  <div id="hud-hint">drag plates to move them</div>
+</div>
+
 <script type="module">
 import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
 
@@ -40,20 +149,20 @@ const PAD = 14
 const COLOR_A = '#C2714F'
 const COLOR_B = '#8B9E7E'
 
-const canvas = document.getElementById('canvas')
-const ctx = canvas.getContext('2d')
-let W, H, dpr
+const scene = document.getElementById('scene')
+const plateElA = document.getElementById('plate-a')
+const plateElB = document.getElementById('plate-b')
+const riftGlow = document.getElementById('rift-glow')
+const riftLine = document.getElementById('rift-line')
+const debrisLayer = document.getElementById('debris-layer')
 
-function resize() {
-  dpr = window.devicePixelRatio || 1
+let W = window.innerWidth
+let H = window.innerHeight
+
+window.addEventListener('resize', () => {
   W = window.innerWidth
   H = window.innerHeight
-  canvas.width = W * dpr
-  canvas.height = H * dpr
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-}
-resize()
-window.addEventListener('resize', resize)
+})
 
 // Prepare text with pretext
 const prepA = prepareWithSegments(TEXT_A, FONT)
@@ -61,16 +170,13 @@ const prepB = prepareWithSegments(TEXT_B, FONT)
 
 // Plate state
 const plates = [
-  { x: 0, y: 0, vx: 0.4, vy: 0, prep: prepA, color: COLOR_A },
-  { x: 0, y: 0, vx: -0.4, vy: 0, prep: prepB, color: COLOR_B }
+  { x: 0, y: 0, vx: 0.4, vy: 0, prep: prepA, el: plateElA, color: COLOR_A, lineEls: [] },
+  { x: 0, y: 0, vx: -0.4, vy: 0, prep: prepB, el: plateElB, color: COLOR_B, lineEls: [] }
 ]
 
 // Initialize positions off-screen
-function initPositions() {
-  plates[0].x = -PLATE_WIDTH - 80
-  plates[1].x = W + 80
-}
-initPositions()
+plates[0].x = -PLATE_WIDTH - 80
+plates[1].x = W + 80
 
 // Layout a plate into lines at a given width
 function layoutLines(prep, width) {
@@ -86,53 +192,63 @@ function layoutLines(prep, width) {
   return lines
 }
 
-// Approximate plate height
 function plateHeight(lineCount) {
   return lineCount * LINE_HEIGHT
+}
+
+// Ensure a plate has enough line DOM elements, reuse them
+function ensureLineEls(plate, count) {
+  while (plate.lineEls.length < count) {
+    const div = document.createElement('div')
+    div.className = 'plate-line'
+    plate.el.appendChild(div)
+    plate.lineEls.push(div)
+  }
+  // Hide extras
+  for (let i = 0; i < plate.lineEls.length; i++) {
+    plate.lineEls[i].style.display = i < count ? '' : 'none'
+  }
 }
 
 // --- Interaction ---
 let dragging = null
 let dragOX = 0, dragOY = 0
 
-function ptr(e) {
-  const r = canvas.getBoundingClientRect()
-  return { x: e.clientX - r.left, y: e.clientY - r.top }
-}
-
-canvas.addEventListener('pointerdown', e => {
-  const p = ptr(e)
+scene.addEventListener('pointerdown', e => {
+  const px = e.clientX
+  const py = e.clientY
   // Check plates in reverse order (top first)
   for (let i = 1; i >= 0; i--) {
     const pl = plates[i]
     const lines = layoutLines(pl.prep, PLATE_WIDTH)
     const ph = plateHeight(lines.length)
-    const py = H / 2 - ph / 2 + pl.y
-    if (p.x >= pl.x && p.x <= pl.x + PLATE_WIDTH + PAD * 2 &&
-        p.y >= py - PAD && p.y <= py + ph + PAD) {
+    const plateY = H / 2 - ph / 2 + pl.y
+    const plateLeft = pl.x
+    const plateRight = pl.x + PLATE_WIDTH + PAD * 2
+    if (px >= plateLeft && px <= plateRight &&
+        py >= plateY - PAD && py <= plateY + ph + PAD) {
       dragging = i
-      dragOX = p.x - pl.x
-      dragOY = p.y - pl.y
-      canvas.classList.add('grabbing')
-      canvas.setPointerCapture(e.pointerId)
+      dragOX = px - pl.x
+      dragOY = py - pl.y
+      scene.classList.add('grabbing')
+      scene.setPointerCapture(e.pointerId)
       return
     }
   }
 })
 
-canvas.addEventListener('pointermove', e => {
+scene.addEventListener('pointermove', e => {
   if (dragging !== null) {
-    const p = ptr(e)
-    plates[dragging].x = p.x - dragOX
-    plates[dragging].y = p.y - dragOY
+    plates[dragging].x = e.clientX - dragOX
+    plates[dragging].y = e.clientY - dragOY
     plates[dragging].vx = 0
     plates[dragging].vy = 0
   }
 })
 
-canvas.addEventListener('pointerup', () => {
+scene.addEventListener('pointerup', () => {
   dragging = null
-  canvas.classList.remove('grabbing')
+  scene.classList.remove('grabbing')
 })
 
 // --- Quake state ---
@@ -146,11 +262,37 @@ function quakeShake() {
   }
 }
 
-// --- Persistent particles for collision debris ---
+// --- Debris particles as DOM elements ---
 const debris = []
+const MAX_DEBRIS_ELS = 120
+const debrisPool = []
+
+function getDebrisEl() {
+  if (debrisPool.length > 0) {
+    const el = debrisPool.pop()
+    el.style.display = ''
+    return el
+  }
+  if (debrisLayer.children.length >= MAX_DEBRIS_ELS) return null
+  const el = document.createElement('div')
+  el.className = 'debris'
+  debrisLayer.appendChild(el)
+  return el
+}
+
+function releaseDebrisEl(el) {
+  el.style.display = 'none'
+  debrisPool.push(el)
+}
+
 function spawnDebris(cx, yMin, yMax, count) {
   for (let i = 0; i < count; i++) {
+    const el = getDebrisEl()
+    if (!el) continue
     const lifespan = 40 + Math.random() * 60
+    const size = 1 + Math.random() * 2
+    el.style.width = size + 'px'
+    el.style.height = size + 'px'
     debris.push({
       x: cx + (Math.random() - 0.5) * 20,
       y: yMin + Math.random() * (yMax - yMin),
@@ -158,7 +300,7 @@ function spawnDebris(cx, yMin, yMax, count) {
       vy: -0.5 - Math.random() * 2,
       life: lifespan,
       maxLife: lifespan,
-      size: 1 + Math.random() * 2
+      el
     })
   }
 }
@@ -168,17 +310,15 @@ function updateDebris() {
     const d = debris[i]
     d.x += d.vx
     d.y += d.vy
-    d.vy += 0.02 // slight gravity
+    d.vy += 0.02
     d.life--
-    if (d.life <= 0) debris.splice(i, 1)
-  }
-}
-
-function drawDebris() {
-  for (const d of debris) {
     const a = (d.life / d.maxLife) * 0.5
-    ctx.fillStyle = `rgba(${107 + Math.random() * 30 | 0}, ${58 + Math.random() * 20 | 0}, ${42 + Math.random() * 10 | 0}, ${a})`
-    ctx.fillRect(d.x, d.y, d.size, d.size)
+    d.el.style.transform = `translate(${d.x}px, ${d.y}px)`
+    d.el.style.opacity = a
+    if (d.life <= 0) {
+      releaseDebrisEl(d.el)
+      debris.splice(i, 1)
+    }
   }
 }
 
@@ -186,14 +326,11 @@ function drawDebris() {
 let lastCollisionSpawn = 0
 
 function render(t) {
-  ctx.clearRect(0, 0, W, H)
-
   // --- Physics update ---
   for (let i = 0; i < 2; i++) {
     if (dragging !== i) {
       plates[i].x += plates[i].vx
       plates[i].y += plates[i].vy
-      // Dampen vertical drift
       plates[i].vy *= 0.98
     }
   }
@@ -201,32 +338,25 @@ function render(t) {
   // Edges of the two plates facing each other
   const rightEdgeA = plates[0].x + PLATE_WIDTH + PAD * 2
   const leftEdgeB = plates[1].x
-  const gap = leftEdgeB - rightEdgeA  // positive = separated, negative = overlapping
+  const gap = leftEdgeB - rightEdgeA
   const overlap = -gap
 
   // Collision response
   if (overlap > 0) {
-    // Plates are overlapping
     if (dragging === null) {
-      // Slow both plates down, then gently push them apart
       plates[0].vx *= 0.995
       plates[1].vx *= 0.995
-
-      // Resist further overlap
       const pushForce = 0.001 + overlap * 0.00005
       plates[0].vx -= pushForce
       plates[1].vx += pushForce
-
-      // Clamp velocities so plates don't fly apart
       plates[0].vx = Math.max(plates[0].vx, -0.3)
       plates[1].vx = Math.min(plates[1].vx, 0.3)
     }
 
-    // Quake builds with overlap
     quakeIntensity += overlap * 0.002
     quakeIntensity = Math.min(quakeIntensity, 10)
 
-    // Spawn debris particles at collision zone
+    // Spawn debris
     if (t - lastCollisionSpawn > 100 && overlap > 5) {
       const cx = (rightEdgeA + leftEdgeB) / 2
       const linesA = layoutLines(prepA, PLATE_WIDTH)
@@ -236,7 +366,7 @@ function render(t) {
       lastCollisionSpawn = t
     }
   } else {
-    // Plates separated: auto-drift toward center
+    // Auto-drift toward center
     if (dragging !== 0) {
       const targetA = W / 2 - PLATE_WIDTH - PAD * 2 - 10
       const diffA = targetA - plates[0].x
@@ -253,55 +383,29 @@ function render(t) {
 
   quakeIntensity *= 0.95
 
-  // --- Background fault lines ---
-  ctx.strokeStyle = 'rgba(255,255,255,0.012)'
-  ctx.lineWidth = 0.5
-  for (let x = 0; x < W; x += 70) {
-    const off = Math.sin(x * 0.008 + t * 0.0004) * 6
-    ctx.beginPath()
-    ctx.moveTo(x + off, 0)
-    ctx.lineTo(x - off, H)
-    ctx.stroke()
-  }
-
   // --- Rift glow when plates separated ---
   if (gap > 15) {
     const riftL = rightEdgeA
     const riftR = leftEdgeB
     const riftW = riftR - riftL
-    const riftCX = riftL + riftW / 2
-
+    const intensity = Math.min(riftW * 0.001, 0.3)
     const linesA = layoutLines(prepA, PLATE_WIDTH)
     const ph = plateHeight(linesA.length)
     const baseY = H / 2 - ph / 2
 
-    // Magma glow gradient — ochre #C49A3C
-    const intensity = Math.min(riftW * 0.001, 0.3)
-    const grad = ctx.createLinearGradient(riftL, 0, riftR, 0)
-    grad.addColorStop(0, 'rgba(196, 154, 60, 0)')
-    grad.addColorStop(0.25, `rgba(196, 154, 60, ${intensity * 0.4})`)
-    grad.addColorStop(0.5, `rgba(210, 170, 60, ${intensity})`)
-    grad.addColorStop(0.75, `rgba(196, 154, 60, ${intensity * 0.4})`)
-    grad.addColorStop(1, 'rgba(196, 154, 60, 0)')
-    ctx.fillStyle = grad
-    ctx.fillRect(riftL, baseY - 30, riftW, ph + 60)
+    riftGlow.style.left = riftL + 'px'
+    riftGlow.style.width = riftW + 'px'
+    riftGlow.style.top = (baseY - 30) + 'px'
+    riftGlow.style.height = (ph + 60) + 'px'
+    riftGlow.style.opacity = intensity
 
-    // Jagged rift line — ochre tinted
-    ctx.strokeStyle = `rgba(196, 154, 60, ${Math.min(0.5, intensity * 1.5)})`
-    ctx.lineWidth = 1.5
-    ctx.beginPath()
-    let first = true
-    for (let y = baseY - 15; y < baseY + ph + 15; y += 2.5) {
-      const jx = Math.sin(y * 0.12 + t * 0.002) * 4 + Math.sin(y * 0.3) * 2
-      if (first) { ctx.moveTo(riftCX + jx, y); first = false }
-      else ctx.lineTo(riftCX + jx, y)
-    }
-    ctx.stroke()
-
-    // Secondary faint glow — ochre
-    ctx.strokeStyle = `rgba(196, 154, 60, ${intensity * 0.3})`
-    ctx.lineWidth = 4
-    ctx.stroke()
+    riftLine.style.left = (riftL + riftW / 2) + 'px'
+    riftLine.style.top = (baseY - 15) + 'px'
+    riftLine.style.height = (ph + 30) + 'px'
+    riftLine.style.opacity = Math.min(0.5, intensity * 1.5)
+  } else {
+    riftGlow.style.opacity = 0
+    riftLine.style.opacity = 0
   }
 
   // --- Render plates ---
@@ -310,8 +414,7 @@ function render(t) {
   for (let pi = 0; pi < 2; pi++) {
     const plate = plates[pi]
 
-    // Compression: narrow the plate width at the collision edge
-    // The compression factor affects how many chars fit per line
+    // Compression
     const compressionRatio = overlapClamped > 0
       ? Math.max(0.4, 1 - overlapClamped / (PLATE_WIDTH * 2))
       : 1
@@ -322,99 +425,90 @@ function render(t) {
 
     const shake = quakeShake()
 
-    // For the left plate, text anchors at left edge.
-    // For the right plate, text anchors at the plate's x position.
-    const anchorX = plate.x + PAD + shake.x
+    const anchorX = plate.x + shake.x
     const anchorY = baseY + plate.y + shake.y
 
-    ctx.save()
+    // Position plate container
+    plate.el.style.transform = `translate(${anchorX}px, ${anchorY}px)`
+    plate.el.style.width = (effectiveW + PAD * 2) + 'px'
+
+    // Ensure enough line elements
+    ensureLineEls(plate, lines.length)
 
     for (let li = 0; li < lines.length; li++) {
       const line = lines[li]
-      const ly = anchorY + li * LINE_HEIGHT
+      const lineEl = plate.lineEls[li]
+      const ly = li * LINE_HEIGHT
 
-      if (ly < -LINE_HEIGHT * 2 || ly > H + LINE_HEIGHT * 2) continue
+      // Skip off-screen lines
+      if (anchorY + ly < -LINE_HEIGHT * 2 || anchorY + ly > H + LINE_HEIGHT * 2) {
+        lineEl.style.display = 'none'
+        continue
+      }
+      lineEl.style.display = ''
 
       let dx = 0, dy = 0, sx = 1, alpha = 1, fs = FONT_SIZE
 
       if (overlapClamped > 0) {
-        // How close is this line to the collision boundary?
-        // Collision happens at the meeting point of the two plates.
         const collisionX = (rightEdgeA + leftEdgeB) / 2
-
-        // For left plate: right side is collision edge
-        // For right plate: left side is collision edge
         let lineCenter
         if (pi === 0) {
-          lineCenter = anchorX + effectiveW  // right edge of left plate text
+          lineCenter = anchorX + PAD + effectiveW
         } else {
-          lineCenter = anchorX               // left edge of right plate text
+          lineCenter = anchorX + PAD
         }
 
         const distFromCollision = Math.abs(lineCenter - collisionX)
         const proximity = Math.max(0, 1 - distFromCollision / (PLATE_WIDTH * 0.6))
 
-        // --- Mountain building ---
-        // Lines near the collision get pushed upward
+        // Mountain building
         const mountainAmp = proximity * Math.min(overlapClamped * 0.5, 50)
-        // Vary by line index for a folded/crumpled look
         const fold = Math.sin(li * 0.8 + t * 0.0008) * proximity * 5
         const bucklePeak = Math.sin(li * 1.7) * proximity * Math.min(overlapClamped * 0.15, 12)
         dy = -mountainAmp + fold + bucklePeak
 
-        // --- Horizontal crumple ---
+        // Horizontal crumple
         const crumpleAmt = proximity * Math.min(overlapClamped * 0.0015, 0.12)
         sx = 1 - crumpleAmt
 
-        // --- Subduction: right plate slides under ---
+        // Subduction: right plate slides under
         if (pi === 1 && overlapClamped > 20) {
           const subDepth = Math.min((overlapClamped - 20) / 250, 0.8)
           const subFactor = proximity * subDepth
           alpha = 1 - subFactor * 0.65
           fs = FONT_SIZE * (1 - subFactor * 0.3)
-          dy += subFactor * 12 // sink downward
+          dy += subFactor * 12
         }
 
-        // --- Overthrust: left plate rides up slightly ---
+        // Overthrust: left plate rides up
         if (pi === 0 && overlapClamped > 20) {
           const thrustDepth = Math.min((overlapClamped - 20) / 300, 0.5)
           const thrustFactor = proximity * thrustDepth
           dy -= thrustFactor * 8
         }
 
-        // Slight horizontal jitter from seismic stress
+        // Seismic jitter
         if (proximity > 0.2) {
           dx += Math.sin(li * 3.1 + t * 0.004) * proximity * 1.5
         }
       }
 
-      ctx.save()
-      ctx.globalAlpha = alpha
-      ctx.font = `${fs}px Georgia`
-      ctx.fillStyle = plate.color
-      ctx.translate(anchorX + dx, ly + dy)
-      ctx.scale(sx, 1)
-      ctx.fillText(line.text, 0, 0)
-      ctx.restore()
-    }
+      // Apply transform and styles to line element
+      lineEl.style.transform = `translate(${dx}px, ${ly + dy}px) scaleX(${sx})`
+      lineEl.style.opacity = alpha
+      lineEl.style.fontSize = fs + 'px'
 
-    ctx.restore()
+      // Update text content only when it changes
+      const text = line.text
+      if (lineEl._cachedText !== text) {
+        lineEl.textContent = text
+        lineEl._cachedText = text
+      }
+    }
   }
 
-  // --- Draw debris ---
+  // --- Debris ---
   updateDebris()
-  drawDebris()
-
-  // --- HUD ---
-  ctx.save()
-  ctx.font = '10px Fraunces, Georgia'
-  ctx.fillStyle = 'rgba(255,255,255,0.18)'
-  ctx.textAlign = 'center'
-  ctx.fillText('T E X T   T E C T O N I C S', W / 2, H - 18)
-  ctx.fillStyle = 'rgba(255,255,255,0.09)'
-  ctx.font = '10px Literata, Georgia'
-  ctx.fillText('drag plates to move them', W / 2, H - 34)
-  ctx.restore()
 
   requestAnimationFrame(render)
 }

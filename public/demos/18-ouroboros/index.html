@@ -10,7 +10,6 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: #08080e; }
-  canvas { display: block; width: 100%; height: 100%; cursor: default; }
 
   #loading {
     position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
@@ -95,24 +94,150 @@
   #hint.faded { opacity: 0; }
   #hint span { color: #C49A3C; opacity: 0.5; }
 
-  /* --- Iteration counter --- */
-  #iteration-counter {
-    position: fixed;
-    font-family: 'Literata', Georgia, serif;
-    font-size: 12px;
-    color: rgba(232, 228, 220, 0);
-    letter-spacing: 0.04em;
-    z-index: 15;
+  /* --- Main layout container --- */
+  #stage {
+    position: fixed; inset: 0;
+    display: flex; justify-content: center;
     pointer-events: none;
+    z-index: 1;
+  }
+
+  #text-container {
+    position: relative;
+    font: 16px/28px Literata, Georgia, serif;
+    color: rgba(232, 228, 220, 0.7);
+    pointer-events: auto;
+  }
+
+  #text-container .line {
+    white-space: pre;
+    height: 28px;
+    position: relative;
+  }
+
+  /* --- Meta value spans --- */
+  .meta {
+    position: relative;
+    border-radius: 2px;
+    padding: 0 2px;
+    margin: 0 -2px;
     transition: color 0.3s ease;
-    white-space: nowrap;
   }
-  #iteration-counter.visible {
-    color: rgba(232, 228, 220, 0.4);
+  .meta-bg {
+    position: absolute; inset: -1px -2px;
+    border-radius: 2px;
+    pointer-events: none;
+    z-index: -1;
   }
-  #iteration-counter .attempt-num {
-    color: #C49A3C;
-    font-weight: 600;
+
+  .meta.ochre { color: #C49A3C; }
+  .meta.sage { color: #8B9E7E; }
+  .meta.terracotta { color: #C2714F; }
+  .meta.ochre .meta-bg { background: rgba(196, 154, 60, 0.08); }
+  .meta.sage .meta-bg { background: rgba(139, 158, 126, 0.08); }
+  .meta.terracotta .meta-bg { background: rgba(194, 113, 79, 0.08); }
+
+  /* Flash animation on value change */
+  @keyframes meta-flash {
+    0% { filter: brightness(1.8); }
+    100% { filter: brightness(1); }
+  }
+  .meta.flash {
+    animation: meta-flash 0.6s ease-out;
+  }
+  @keyframes bg-flash {
+    0% { opacity: 0.25; }
+    100% { opacity: 1; }
+  }
+  .meta.flash .meta-bg {
+    animation: bg-flash 0.6s ease-out;
+  }
+
+  /* --- Status line --- */
+  #status-bar {
+    position: absolute; top: -26px; left: 0; right: 0;
+    display: flex; justify-content: space-between;
+    font: 11px Literata, Georgia, serif;
+    pointer-events: none;
+  }
+  #status-text { transition: color 0.3s; }
+  #width-label { color: rgba(232, 228, 220, 0.15); }
+
+  /* --- Iteration dots --- */
+  #iteration-area {
+    position: absolute; left: 0;
+    display: flex; align-items: center; gap: 0;
+    font: 10px Literata, Georgia, serif;
+    color: rgba(232, 228, 220, 0.18);
+    pointer-events: none;
+  }
+  #iteration-area .label { margin-right: 12px; }
+  .dot-container {
+    display: flex; align-items: center;
+  }
+  .iter-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  .iter-dot.visible {
+    transform: scale(1);
+    opacity: 0.4;
+  }
+  .iter-dot.last {
+    width: 9px; height: 9px;
+    opacity: 0.8;
+  }
+  .iter-dot.last.visible {
+    opacity: 0.8;
+  }
+  .dot-line {
+    width: 10px; height: 1px;
+    background: rgba(232, 228, 220, 0.06);
+    flex-shrink: 0;
+  }
+  .converge-check {
+    margin-left: 8px;
+    color: rgba(139, 158, 126, 0.5);
+    font-size: 10px;
+  }
+
+  /* --- Container edge guides --- */
+  #edge-left, #edge-right {
+    position: absolute; top: -32px; width: 1px;
+    pointer-events: none;
+  }
+  #edge-left { left: -1px; }
+  #edge-right { right: -1px; }
+
+  /* --- Convergence glow --- */
+  #glow {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 1s ease;
+    background: radial-gradient(ellipse at center, rgba(139, 158, 126, 0.06) 0%, transparent 70%);
+  }
+  #glow.active { opacity: 1; }
+
+  /* --- Footer --- */
+  #footer {
+    position: fixed; bottom: 20px;
+    font: 10px Literata, Georgia, serif;
+    color: rgba(232, 228, 220, 0.1);
+    letter-spacing: 0.04em;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  /* --- Oscillation crossfade --- */
+  .osc-layer {
+    position: absolute; top: 0; left: 0; right: 0;
+    transition: opacity 0.05s linear;
   }
 </style>
 </head>
@@ -126,58 +251,72 @@
   </div>
 </div>
 
-<canvas id="canvas"></canvas>
+<div id="stage">
+  <div id="text-container">
+    <div id="glow"></div>
+    <div id="status-bar">
+      <span id="status-text"></span>
+      <span id="width-label"></span>
+    </div>
+    <div id="text-body"></div>
+    <div id="iteration-area">
+      <span class="label">attempts</span>
+      <div id="dots-row" style="display:flex;align-items:center;gap:0;"></div>
+    </div>
+    <div id="edge-left"></div>
+    <div id="edge-right"></div>
+  </div>
+</div>
+
 <div id="handle"></div>
 <div id="hint">Try <span>resizing the right edge</span> to change the shape</div>
-<div id="iteration-counter"></div>
+<div id="footer">OUROBOROS</div>
 
 <script type="module">
 import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
 
-// --- Brand tokens (dark mode) ---
+// --- Brand tokens ---
 const OCHRE = '#C49A3C'
 const SAGE = '#8B9E7E'
 const TERRACOTTA = '#C2714F'
 const CREAM = '#E8E5DF'
-const FOG = '#5C5C5C'
-const BG = '#08080e'
-
-const OCHRE_RGB = [196, 154, 60]
-const SAGE_RGB = [139, 158, 126]
-const TERRACOTTA_RGB = [194, 113, 79]
-const CREAM_RGB = [232, 228, 220]
-const FOG_RGB = [92, 92, 92]
 
 const FONT_SIZE = 16
 const FONT = `${FONT_SIZE}px Literata, Georgia, serif`
 const LINE_HEIGHT = 28
 const MARGIN = 50
 
-const canvas = document.getElementById('canvas')
-const ctx = canvas.getContext('2d')
 const handle = document.getElementById('handle')
 const hint = document.getElementById('hint')
-const iterCounter = document.getElementById('iteration-counter')
+const textContainer = document.getElementById('text-container')
+const textBody = document.getElementById('text-body')
+const statusTextEl = document.getElementById('status-text')
+const widthLabelEl = document.getElementById('width-label')
+const iterationArea = document.getElementById('iteration-area')
+const dotsRow = document.getElementById('dots-row')
+const glowEl = document.getElementById('glow')
+const edgeLeft = document.getElementById('edge-left')
+const edgeRight = document.getElementById('edge-right')
+const footerEl = document.getElementById('footer')
 
-let W, H, dpr
+let W, H
 let containerWidth = 560
 let dragging = false
 let needsRecalc = true
 let hasInteracted = false
 
 function resize() {
-  dpr = window.devicePixelRatio || 1
   W = window.innerWidth
   H = window.innerHeight
-  canvas.width = W * dpr
-  canvas.height = H * dpr
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   containerWidth = Math.min(containerWidth, W - MARGIN * 2)
-  positionHandle()
+  positionElements()
 }
 
-function positionHandle() {
+function positionElements() {
+  // Position handle
   handle.style.left = `${(W + containerWidth) / 2 - 6}px`
+  // Position footer
+  footerEl.style.left = `${(W - containerWidth) / 2}px`
 }
 
 resize()
@@ -201,7 +340,7 @@ window.addEventListener('pointermove', (e) => {
   if (!dragging) return
   const halfW = Math.max(160, Math.min((W - MARGIN) / 2, e.clientX - W / 2))
   containerWidth = Math.round(halfW * 2)
-  positionHandle()
+  positionElements()
   scheduleRecalc()
 })
 window.addEventListener('pointerup', () => {
@@ -212,7 +351,7 @@ function scheduleRecalc() {
   needsRecalc = true
 }
 
-// --- Layout ---
+// --- Layout using pretext for measurement only ---
 function layoutText(text, maxWidth) {
   const prepared = prepareWithSegments(text, FONT)
   const lines = []
@@ -259,10 +398,7 @@ function getMetrics(lines) {
   }
 }
 
-// Generate description — returns { text, metaRanges, metaValues, metaLabels }
-// metaRanges: array of [start, end] for highlighted values
-// metaValues: the numeric values at each range
-// metaLabels: the metric key for each range (for correctness checking)
+// Generate description with meta ranges
 function generateDescription(m) {
   const parts = []
   const ranges = []
@@ -303,11 +439,14 @@ function generateDescription(m) {
   return { text: parts.join(''), metaRanges: ranges, metaValues: values, metaLabels: labels }
 }
 
-// Canonical key for metrics comparison
 function metricsKey(m) {
   return [m.lineCount, m.maxWidth, m.minWidth, m.totalHeight,
     m.firstLineWords, m.lastLineWords, m.widestLine,
     m.totalChars, m.totalWords].join(',')
+}
+
+function checkCorrectness(values, labels, actualMetrics) {
+  return labels.map((label, i) => values[i] === actualMetrics[label])
 }
 
 function findFixedPoint(maxWidth, maxIter = 6) {
@@ -329,8 +468,6 @@ function findFixedPoint(maxWidth, maxIter = 6) {
     const lines = layoutText(text, maxWidth)
     const metrics = getMetrics(lines)
     const key = metricsKey(metrics)
-
-    // Check which values are correct vs incorrect
     const correctness = checkCorrectness(metaValues, metaLabels, metrics)
 
     history.push({ text, metaRanges, metaValues, metaLabels, metrics, lines, key, correctness })
@@ -338,7 +475,6 @@ function findFixedPoint(maxWidth, maxIter = 6) {
     const newDesc = generateDescription(metrics)
     const newText = newDesc.text
 
-    // Converged?
     if (newText === text) {
       return {
         converged: true,
@@ -348,7 +484,6 @@ function findFixedPoint(maxWidth, maxIter = 6) {
       }
     }
 
-    // Check for cycles
     const newLines = layoutText(newText, maxWidth)
     const newMetrics = getMetrics(newLines)
     const newKey = metricsKey(newMetrics)
@@ -394,221 +529,200 @@ function findFixedPoint(maxWidth, maxIter = 6) {
   }
 }
 
-function checkCorrectness(values, labels, actualMetrics) {
-  return labels.map((label, i) => values[i] === actualMetrics[label])
+// --- DOM Rendering ---
+
+// Track previous meta values for flash detection
+let prevMetaValues = null
+let changedIndices = new Set()
+
+// Build DOM for a text state — returns array of line divs
+function buildLineDOMs(state, showCorrectness) {
+  const { lines, metaRanges, metaValues, metaLabels, correctness } = state
+  const fragment = document.createDocumentFragment()
+  let charOffset = 0
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const lineText = line.text
+    const lineDiv = document.createElement('div')
+    lineDiv.className = 'line'
+
+    // Build segments: runs of meta vs non-meta text
+    let pos = 0
+    while (pos < lineText.length) {
+      const absPos = charOffset + pos
+      // Check if this position is inside a meta range
+      let metaIdx = -1
+      for (let r = 0; r < metaRanges.length; r++) {
+        if (absPos >= metaRanges[r][0] && absPos < metaRanges[r][1]) {
+          metaIdx = r
+          break
+        }
+      }
+
+      if (metaIdx >= 0) {
+        // Meta span — find how much of this meta range is on this line
+        const rangeEnd = metaRanges[metaIdx][1]
+        const lineEnd = charOffset + lineText.length
+        const segEnd = Math.min(rangeEnd, lineEnd) - charOffset
+        const segment = lineText.slice(pos, segEnd)
+
+        const span = document.createElement('span')
+        span.className = 'meta'
+
+        // Color class based on correctness
+        if (showCorrectness && correctness) {
+          span.classList.add(correctness[metaIdx] ? 'sage' : 'terracotta')
+        } else {
+          span.classList.add('ochre')
+        }
+
+        // Flash if value changed
+        if (changedIndices.has(metaIdx)) {
+          span.classList.add('flash')
+        }
+
+        // Background highlight
+        const bg = document.createElement('span')
+        bg.className = 'meta-bg'
+        span.appendChild(bg)
+        span.appendChild(document.createTextNode(segment))
+        lineDiv.appendChild(span)
+        pos = segEnd
+      } else {
+        // Plain text — find the end of this non-meta run
+        let runEnd = pos + 1
+        while (runEnd < lineText.length) {
+          const testAbs = charOffset + runEnd
+          let inMeta = false
+          for (let r = 0; r < metaRanges.length; r++) {
+            if (testAbs >= metaRanges[r][0] && testAbs < metaRanges[r][1]) {
+              inMeta = true
+              break
+            }
+          }
+          if (inMeta) break
+          runEnd++
+        }
+        lineDiv.appendChild(document.createTextNode(lineText.slice(pos, runEnd)))
+        pos = runEnd
+      }
+    }
+
+    fragment.appendChild(lineDiv)
+    charOffset += lineText.length
+  }
+
+  return fragment
 }
 
 // --- Rendering state ---
 let result = null
 let oscillationTime = 0
-let convergenceGlow = 0
-let statusText = ''
-let statusColor = TERRACOTTA_RGB
-
-// Animation state for iteration reveal
-let iterationRevealStart = 0
-let currentIterationShowing = 0
-let animPhase = 'idle' // 'iterating', 'converged', 'oscillating', 'idle'
 let animStartTime = 0
+let oscAnimFrame = null
 
-// Track previous values for flash animation
-let prevMetaValues = null
-let flashTimers = [] // per-meta-range flash progress (1 = just changed, fades to 0)
-
-// --- Determine which characters in a line are meta ---
-function getLineMetaInfo(lineText, lineStartInFullText, metaRanges) {
-  // Returns array of { isMeta, rangeIndex } per character
-  const info = []
-  for (let c = 0; c < lineText.length; c++) {
-    let found = -1
-    const absPos = lineStartInFullText + c
-    for (let r = 0; r < metaRanges.length; r++) {
-      if (absPos >= metaRanges[r][0] && absPos < metaRanges[r][1]) {
-        found = r
-        break
-      }
-    }
-    info.push(found)
-  }
-  return info
-}
-
-function lerp(a, b, t) { return a + (b - a) * t }
-function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)) }
-
-// --- Draw a single text state ---
-function drawState(state, baseX, textTop, alpha, showCorrectness) {
-  const { lines, metaRanges, correctness } = state
-  ctx.font = FONT
-  ctx.textBaseline = 'top'
-
-  let charOffset = 0
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    const lineText = line.text
-    const y = textTop + i * LINE_HEIGHT
-    const metaInfo = getLineMetaInfo(lineText, charOffset, metaRanges)
-
-    let x = baseX
-    let runStart = 0
-    while (runStart < lineText.length) {
-      const rangeIdx = metaInfo[runStart]
-      let runEnd = runStart + 1
-      while (runEnd < lineText.length && metaInfo[runEnd] === rangeIdx) runEnd++
-
-      const segment = lineText.slice(runStart, runEnd)
-      if (rangeIdx >= 0) {
-        // This is a self-referential number
-        let r, g, b
-        const flash = flashTimers[rangeIdx] || 0
-
-        if (showCorrectness && correctness) {
-          if (correctness[rangeIdx]) {
-            // Correct: sage
-            r = SAGE_RGB[0]; g = SAGE_RGB[1]; b = SAGE_RGB[2]
-          } else {
-            // Incorrect: terracotta
-            r = TERRACOTTA_RGB[0]; g = TERRACOTTA_RGB[1]; b = TERRACOTTA_RGB[2]
-          }
-        } else {
-          // Default ochre with convergence blend to sage
-          r = lerp(OCHRE_RGB[0], SAGE_RGB[0], convergenceGlow * 0.8)
-          g = lerp(OCHRE_RGB[1], SAGE_RGB[1], convergenceGlow * 0.8)
-          b = lerp(OCHRE_RGB[2], SAGE_RGB[2], convergenceGlow * 0.8)
-        }
-
-        // Flash effect: brighten toward white
-        if (flash > 0) {
-          r = lerp(r, 255, flash * 0.5)
-          g = lerp(g, 255, flash * 0.5)
-          b = lerp(b, 255, flash * 0.5)
-        }
-
-        const baseAlpha = alpha * (0.95 + flash * 0.05)
-        ctx.fillStyle = `rgba(${r|0}, ${g|0}, ${b|0}, ${baseAlpha})`
-
-        // Draw a subtle background highlight behind the number
-        if (alpha > 0.3) {
-          const tw = ctx.measureText(segment).width
-          ctx.save()
-          ctx.fillStyle = `rgba(${r|0}, ${g|0}, ${b|0}, ${alpha * 0.08 + flash * 0.12})`
-          const pad = 2
-          ctx.fillRect(x - pad, y - 1, tw + pad * 2, FONT_SIZE + 4)
-          ctx.restore()
-          // Re-set text color
-          ctx.fillStyle = `rgba(${r|0}, ${g|0}, ${b|0}, ${baseAlpha})`
-        }
-      } else {
-        ctx.fillStyle = `rgba(${CREAM_RGB[0]}, ${CREAM_RGB[1]}, ${CREAM_RGB[2]}, ${alpha * 0.7})`
-      }
-      ctx.fillText(segment, x, y)
-      x += ctx.measureText(segment).width
-      runStart = runEnd
-    }
-
-    charOffset += lineText.length
-  }
-}
-
-// --- Main render ---
-let lastTime = 0
-
-function render(time) {
-  requestAnimationFrame(render)
-  const dt = Math.min(time - lastTime, 50)
-  lastTime = time
-
-  if (needsRecalc) {
-    needsRecalc = false
-    oscillationTime = 0
-    animPhase = 'iterating'
-    animStartTime = time
-    currentIterationShowing = 0
-
-    // Save previous values for flash detection
-    if (result && result.current) {
-      prevMetaValues = result.current.metaValues ? [...result.current.metaValues] : null
-    }
-
-    result = findFixedPoint(containerWidth)
-
-    // Detect which values changed and trigger flash
-    if (result.current.metaValues) {
-      flashTimers = result.current.metaValues.map((v, i) => {
-        if (prevMetaValues && prevMetaValues[i] !== undefined && prevMetaValues[i] !== v) {
-          return 1.0 // full flash
-        }
-        return 0
-      })
-    }
-
-    if (result.converged) {
-      statusText = `converged after ${result.iterations} iteration${result.iterations !== 1 ? 's' : ''}`
-      statusColor = SAGE_RGB
-      animPhase = 'converged'
-    } else if (result.oscillating) {
-      statusText = `oscillating · period ${result.period} · ${result.iterations} iterations`
-      statusColor = TERRACOTTA_RGB
-      animPhase = 'oscillating'
-    } else {
-      statusText = `drifting · ${result.iterations} iterations · no fixed point found`
-      statusColor = TERRACOTTA_RGB
-      animPhase = 'oscillating'
-    }
-  }
-
+function renderResult() {
   if (!result) return
 
-  // Decay flash timers
-  for (let i = 0; i < flashTimers.length; i++) {
-    if (flashTimers[i] > 0) {
-      flashTimers[i] = Math.max(0, flashTimers[i] - dt * 0.003)
-    }
-  }
-
-  // Animate
-  if (result.oscillating) {
-    oscillationTime += dt * 0.001
-  }
-  const targetGlow = result.converged ? 1 : 0
-  convergenceGlow += (targetGlow - convergenceGlow) * 0.04
-
-  // Iteration counter animation
-  const iterElapsed = time - animStartTime
-  if (animPhase === 'iterating' || animPhase === 'converged' || animPhase === 'oscillating') {
-    currentIterationShowing = Math.min(result.history.length, Math.floor(iterElapsed / 120) + 1)
-  }
-
-  // Clear
-  ctx.clearRect(0, 0, W, H)
-
-  const baseX = (W - containerWidth) / 2
   const maxLines = result.oscillating && result.states
     ? Math.max(...result.states.map(s => s.lines.length))
     : result.current.lines.length
-
-  // Compute intro height to offset text below it
   const introHeight = Math.min(window.innerHeight * 0.08, 48) + 80
   const totalH = maxLines * LINE_HEIGHT
   const textTop = Math.max(introHeight + 30, (H - totalH) / 2 + 20)
 
-  // Position iteration counter
-  iterCounter.style.left = `${baseX}px`
-  iterCounter.style.top = `${textTop - 28}px`
+  // Position container
+  textContainer.style.width = `${containerWidth}px`
+  textContainer.style.top = `${textTop}px`
+  textContainer.style.left = `${(W - containerWidth) / 2}px`
+  textContainer.style.position = 'fixed'
 
-  // Convergence glow (soft sage shadow behind text)
-  if (convergenceGlow > 0.01) {
-    const cx = W / 2, cy = textTop + totalH / 2
-    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(containerWidth, totalH) * 0.7)
-    grad.addColorStop(0, `rgba(${SAGE_RGB[0]}, ${SAGE_RGB[1]}, ${SAGE_RGB[2]}, ${convergenceGlow * 0.06})`)
-    grad.addColorStop(1, 'transparent')
-    ctx.fillStyle = grad
-    ctx.fillRect(0, 0, W, H)
+  // Edge guides
+  const edgeH = totalH + 54
+  edgeLeft.style.height = `${edgeH}px`
+  edgeRight.style.height = `${edgeH}px`
+  const edgeAlpha = result.converged ? 0.06 : 0.04
+  const edgeColor = `rgba(232, 228, 220, ${edgeAlpha})`
+  edgeLeft.style.background = edgeColor
+  edgeRight.style.background = edgeColor
+
+  // Status
+  if (result.converged) {
+    statusTextEl.style.color = `rgba(139, 158, 126, 0.55)`
+    statusTextEl.textContent = `converged after ${result.iterations} iteration${result.iterations !== 1 ? 's' : ''}`
+  } else if (result.oscillating) {
+    statusTextEl.style.color = `rgba(194, 113, 79, 0.45)`
+    statusTextEl.textContent = `oscillating · period ${result.period} · ${result.iterations} iterations`
+  } else {
+    statusTextEl.style.color = `rgba(194, 113, 79, 0.45)`
+    statusTextEl.textContent = `drifting · ${result.iterations} iterations · no fixed point found`
+  }
+  widthLabelEl.textContent = `${containerWidth}px`
+
+  // Convergence glow
+  if (result.converged) {
+    const glowSize = Math.max(containerWidth, totalH) * 1.4
+    glowEl.style.width = `${glowSize}px`
+    glowEl.style.height = `${glowSize}px`
+    glowEl.style.left = `${(containerWidth - glowSize) / 2}px`
+    glowEl.style.top = `${(totalH - glowSize) / 2}px`
+    glowEl.classList.add('active')
+  } else {
+    glowEl.classList.remove('active')
   }
 
-  // Draw text states
+  // Render text
+  textBody.innerHTML = ''
   if (result.oscillating && result.states && result.states.length >= 2) {
-    const period = result.states.length
+    startOscillation()
+  } else {
+    stopOscillation()
+    const dom = buildLineDOMs(result.current, result.converged)
+    textBody.appendChild(dom)
+  }
+
+  // Iteration dots
+  renderDots()
+
+  // Iteration area position
+  iterationArea.style.top = `${totalH + 30}px`
+}
+
+// --- Oscillation animation (DOM crossfade) ---
+let oscIndex = 0
+let oscLayerA = null
+let oscLayerB = null
+let oscPhase = 0
+
+function startOscillation() {
+  stopOscillation()
+  oscIndex = 0
+  oscPhase = 0
+
+  // Create two layers for crossfade
+  oscLayerA = document.createElement('div')
+  oscLayerA.className = 'osc-layer'
+  oscLayerB = document.createElement('div')
+  oscLayerB.className = 'osc-layer'
+  oscLayerB.style.opacity = '0'
+
+  const states = result.states
+  oscLayerA.appendChild(buildLineDOMs(states[0], true))
+  oscLayerB.appendChild(buildLineDOMs(states[1 % states.length], true))
+
+  textBody.appendChild(oscLayerA)
+  textBody.appendChild(oscLayerB)
+
+  oscillationTime = 0
+  animStartTime = performance.now()
+
+  function oscTick(now) {
+    const dt = Math.min(now - (oscTick._last || now), 50)
+    oscTick._last = now
+    oscillationTime += dt * 0.001
+
+    const period = states.length
     const phase = oscillationTime * 0.6
     const raw = phase % period
     const idx = Math.floor(raw)
@@ -617,103 +731,121 @@ function render(time) {
       ? 2 * frac * frac
       : 1 - 2 * (1 - frac) * (1 - frac)
 
-    const stateA = result.states[idx % period]
-    const stateB = result.states[(idx + 1) % period]
-
-    drawState(stateA, baseX, textTop, 1 - eased, true)
-    drawState(stateB, baseX, textTop, eased, true)
-  } else {
-    drawState(result.current, baseX, textTop, 1, result.converged)
-  }
-
-  // --- Status line ---
-  ctx.font = '11px Literata, Georgia, serif'
-  ctx.textBaseline = 'top'
-  let statusAlpha = 0.55
-  if (result.oscillating) {
-    statusAlpha = 0.3 + 0.25 * (0.5 + 0.5 * Math.sin(oscillationTime * 3))
-  }
-  ctx.fillStyle = `rgba(${statusColor[0]}, ${statusColor[1]}, ${statusColor[2]}, ${statusAlpha})`
-  ctx.fillText(statusText, baseX, textTop - 26)
-
-  // Container width label
-  ctx.fillStyle = `rgba(${CREAM_RGB[0]}, ${CREAM_RGB[1]}, ${CREAM_RGB[2]}, 0.15)`
-  const wLabel = `${containerWidth}px`
-  ctx.fillText(wLabel, baseX + containerWidth - ctx.measureText(wLabel).width, textTop - 26)
-
-  // --- Iteration dots ---
-  if (result.history.length > 1) {
-    const dotY = textTop + totalH + 30
-    const dotSpacing = 18
-    ctx.font = '10px Literata, Georgia, serif'
-    ctx.fillStyle = `rgba(${CREAM_RGB[0]}, ${CREAM_RGB[1]}, ${CREAM_RGB[2]}, 0.18)`
-    ctx.fillText('attempts', baseX, dotY - 4)
-
-    const visibleCount = Math.min(currentIterationShowing, result.history.length)
-
-    for (let i = 0; i < visibleCount; i++) {
-      const x = baseX + 68 + i * dotSpacing
-      const isLast = i === result.history.length - 1
-
-      let similarity = 0
-      if (i < result.history.length - 1) {
-        similarity = result.history[i].key === result.history[i + 1].key ? 1 : 0.3
-      } else if (result.converged) {
-        similarity = 1
-      }
-
-      const r = lerp(TERRACOTTA_RGB[0], SAGE_RGB[0], similarity)
-      const g = lerp(TERRACOTTA_RGB[1], SAGE_RGB[1], similarity)
-      const b = lerp(TERRACOTTA_RGB[2], SAGE_RGB[2], similarity)
-
-      // Animate dot appearance
-      const dotAge = clamp((time - animStartTime - i * 120) / 200, 0, 1)
-      const dotScale = dotAge < 1 ? 0.5 + dotAge * 0.5 : 1
-
-      ctx.beginPath()
-      const radius = (isLast ? 4.5 : 3) * dotScale
-      ctx.arc(x, dotY + 3, radius, 0, Math.PI * 2)
-      ctx.fillStyle = `rgba(${r|0}, ${g|0}, ${b|0}, ${(isLast ? 0.8 : 0.4) * dotAge})`
-      ctx.fill()
-
-      // Attempt number on hover area
-      if (isLast && result.converged) {
-        // Subtle check mark for converged
-        ctx.font = '10px Literata, Georgia, serif'
-        ctx.fillStyle = `rgba(${SAGE_RGB[0]}, ${SAGE_RGB[1]}, ${SAGE_RGB[2]}, 0.5)`
-        ctx.fillText('✓', x + 8, dotY - 2)
-      }
-
-      if (i < visibleCount - 1) {
-        ctx.strokeStyle = `rgba(${CREAM_RGB[0]}, ${CREAM_RGB[1]}, ${CREAM_RGB[2]}, 0.06)`
-        ctx.lineWidth = 1
-        ctx.beginPath()
-        ctx.moveTo(x + 4, dotY + 3)
-        ctx.lineTo(x + dotSpacing - 4, dotY + 3)
-        ctx.stroke()
-      }
+    // Update layers if index changed
+    if (idx !== oscIndex) {
+      oscIndex = idx
+      // Swap layers: A becomes current, B becomes next
+      oscLayerA.innerHTML = ''
+      oscLayerA.appendChild(buildLineDOMs(states[idx % period], true))
+      oscLayerB.innerHTML = ''
+      oscLayerB.appendChild(buildLineDOMs(states[(idx + 1) % period], true))
     }
+
+    oscLayerA.style.opacity = String(1 - eased)
+    oscLayerB.style.opacity = String(eased)
+
+    // Pulse the status text opacity
+    const statusAlpha = 0.3 + 0.25 * (0.5 + 0.5 * Math.sin(oscillationTime * 3))
+    statusTextEl.style.color = `rgba(194, 113, 79, ${statusAlpha})`
+
+    oscAnimFrame = requestAnimationFrame(oscTick)
   }
 
-  // --- Container edge guides ---
-  const edgeAlpha = result.converged ? 0.06 : 0.04
-  ctx.strokeStyle = `rgba(${CREAM_RGB[0]}, ${CREAM_RGB[1]}, ${CREAM_RGB[2]}, ${edgeAlpha})`
-  ctx.lineWidth = 1
-  ctx.beginPath()
-  ctx.moveTo(baseX - 1, textTop - 32)
-  ctx.lineTo(baseX - 1, textTop + totalH + 22)
-  ctx.stroke()
-  ctx.beginPath()
-  ctx.moveTo(baseX + containerWidth + 1, textTop - 32)
-  ctx.lineTo(baseX + containerWidth + 1, textTop + totalH + 22)
-  ctx.stroke()
+  oscAnimFrame = requestAnimationFrame(oscTick)
+}
 
-  // --- Footer ---
-  ctx.font = '10px Literata, Georgia, serif'
-  ctx.fillStyle = `rgba(${CREAM_RGB[0]}, ${CREAM_RGB[1]}, ${CREAM_RGB[2]}, 0.1)`
-  ctx.textBaseline = 'bottom'
-  ctx.fillText('OUROBOROS', baseX, H - 20)
-  ctx.textBaseline = 'top'
+function stopOscillation() {
+  if (oscAnimFrame) {
+    cancelAnimationFrame(oscAnimFrame)
+    oscAnimFrame = null
+  }
+  oscLayerA = null
+  oscLayerB = null
+}
+
+// --- Iteration dots ---
+function renderDots() {
+  dotsRow.innerHTML = ''
+  if (!result || result.history.length <= 1) {
+    iterationArea.style.display = 'none'
+    return
+  }
+  iterationArea.style.display = 'flex'
+
+  const count = result.history.length
+  for (let i = 0; i < count; i++) {
+    const isLast = i === count - 1
+
+    // Similarity coloring
+    let similarity = 0
+    if (i < count - 1) {
+      similarity = result.history[i].key === result.history[i + 1].key ? 1 : 0.3
+    } else if (result.converged) {
+      similarity = 1
+    }
+
+    const r = Math.round(lerp(194, 139, similarity)) // terracotta -> sage
+    const g = Math.round(lerp(113, 158, similarity))
+    const b = Math.round(lerp(79, 126, similarity))
+
+    const dot = document.createElement('div')
+    dot.className = 'iter-dot' + (isLast ? ' last' : '')
+    dot.style.background = `rgb(${r}, ${g}, ${b})`
+
+    // Stagger reveal
+    const delay = i * 120
+    setTimeout(() => dot.classList.add('visible'), delay)
+
+    const wrapper = document.createElement('div')
+    wrapper.className = 'dot-container'
+    wrapper.appendChild(dot)
+
+    // Connecting line (except after last)
+    if (i < count - 1) {
+      const line = document.createElement('div')
+      line.className = 'dot-line'
+      wrapper.appendChild(line)
+    }
+
+    dotsRow.appendChild(wrapper)
+  }
+
+  // Converged checkmark
+  if (result.converged) {
+    const check = document.createElement('span')
+    check.className = 'converge-check'
+    check.textContent = '✓'
+    dotsRow.appendChild(check)
+  }
+}
+
+function lerp(a, b, t) { return a + (b - a) * t }
+
+// --- Main loop ---
+function tick() {
+  requestAnimationFrame(tick)
+
+  if (needsRecalc) {
+    needsRecalc = false
+
+    // Detect changed values for flash
+    if (result && result.current && result.current.metaValues) {
+      prevMetaValues = [...result.current.metaValues]
+    }
+
+    result = findFixedPoint(containerWidth)
+
+    changedIndices = new Set()
+    if (result.current.metaValues && prevMetaValues) {
+      result.current.metaValues.forEach((v, i) => {
+        if (prevMetaValues[i] !== undefined && prevMetaValues[i] !== v) {
+          changedIndices.add(i)
+        }
+      })
+    }
+
+    renderResult()
+  }
 }
 
 // --- Init ---
@@ -721,7 +853,7 @@ document.fonts.ready.then(() => {
   const loading = document.getElementById('loading')
   loading.classList.add('hidden')
   setTimeout(() => loading.remove(), 1000)
-  requestAnimationFrame(render)
+  requestAnimationFrame(tick)
 })
 </script>
 </body>

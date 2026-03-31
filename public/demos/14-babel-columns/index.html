@@ -10,11 +10,144 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: #08080e; }
-  canvas { display: block; width: 100%; height: 100%; }
+
+  #stage {
+    position: relative;
+    width: 100%; height: 100%;
+    overflow: hidden;
+  }
+
+  .title {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    text-align: center;
+    font-family: Fraunces, Georgia, serif;
+    font-weight: 300;
+    font-size: 24px;
+    color: #a89e8e;
+    padding-top: 12px;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  .columns-wrap {
+    position: absolute;
+    top: 80px;
+    left: 32px;
+    right: 32px;
+    bottom: 30px;
+    display: flex;
+    gap: 0;
+  }
+
+  .column {
+    position: relative;
+    overflow: hidden;
+    padding: 0 10px;
+    flex-shrink: 0;
+  }
+
+  .column-label {
+    position: absolute;
+    top: -28px;
+    left: 0; right: 0;
+    text-align: center;
+    font-family: Fraunces, Georgia, serif;
+    font-size: 10px;
+    pointer-events: none;
+  }
+
+  .column-width-label {
+    position: absolute;
+    top: -14px;
+    left: 0; right: 0;
+    text-align: center;
+    font-family: Fraunces, Georgia, serif;
+    font-size: 10px;
+    pointer-events: none;
+  }
+
+  .column-rule {
+    position: absolute;
+    top: -4px;
+    left: 0; right: 0;
+    height: 0;
+    border: none;
+    pointer-events: none;
+  }
+
+  .column-lines {
+    position: relative;
+    width: 100%;
+  }
+
+  .text-line {
+    white-space: pre;
+    overflow: hidden;
+    text-overflow: clip;
+    line-height: 24px;
+    height: 24px;
+  }
+
+  .line-count {
+    position: absolute;
+    bottom: -22px;
+    left: 0; right: 0;
+    text-align: center;
+    font-family: Fraunces, Georgia, serif;
+    font-size: 10px;
+    pointer-events: none;
+  }
+
+  .divider {
+    width: 16px;
+    flex-shrink: 0;
+    position: relative;
+    cursor: col-resize;
+    z-index: 5;
+  }
+
+  .divider-line {
+    position: absolute;
+    top: -10px;
+    bottom: -10px;
+    left: 50%;
+    width: 1px;
+    transform: translateX(-0.5px);
+    pointer-events: none;
+  }
+
+  .divider-handle {
+    position: absolute;
+    top: -20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 6px;
+    height: 14px;
+    border-radius: 3px;
+    pointer-events: none;
+  }
+
+  .hint {
+    position: absolute;
+    bottom: 12px;
+    left: 0; right: 0;
+    text-align: center;
+    font-family: Literata, Georgia, serif;
+    font-size: 11px;
+    color: #5C5C5C;
+    pointer-events: none;
+    z-index: 10;
+  }
 </style>
 </head>
 <body>
-<canvas id="c"></canvas>
+<div id="stage">
+  <div class="title">Babel Columns</div>
+  <div class="columns-wrap" id="columns-wrap"></div>
+  <div class="hint">drag the dividers to override the animation</div>
+</div>
+
 <script type="module">
 import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
 
@@ -26,25 +159,7 @@ const arabicText = `اللغة هي أقدم تقنية عرفها الإنسا�
 
 const chineseText = `语言是人类最古老的技术。在车轮之前，在石砌火坑之前，人类就将呼吸塑造成意义。每一个句子都是一次压缩——几个世纪的共同经验被浓缩在两个人之间穿越空气的振动中。书写将这一切推得更远。泥板上的刻痕、纸上的墨迹、玻璃上的像素：每一次飞跃都让我们跨越时间说话。汉字起源于商代的甲骨文，龟甲上的裂纹被解读为神谕。秦始皇统一了文字，僧侣们用毛笔抄写经卷，毕昇发明了活字印刷。如今，文字以光速穿过光纤电缆，承载着同样根本的冲动：我有话要说，我需要你听到。字体排印，就是我们赋予这种冲动以形体的方式。交流不仅仅是信息的传递。它是共同现实的建构。当两个人交谈时，他们正在一起建造一个世界——脆弱的、短暂的、悬挂在两个独立心灵之间，如同用呼吸筑成的桥梁。每一次误解都揭示了奇迹：我们居然能够理解彼此。`
 
-// --- Canvas setup ---
-
-const canvas = document.getElementById('c')
-const ctx = canvas.getContext('2d')
-let dpr = window.devicePixelRatio || 1
-let W, H
-
-function resize() {
-  dpr = window.devicePixelRatio || 1
-  W = window.innerWidth
-  H = window.innerHeight
-  canvas.width = W * dpr
-  canvas.height = H * dpr
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-}
-resize()
-window.addEventListener('resize', () => { resize(); prepareFonts() })
-
-// --- Fonts and preparation ---
+// --- Constants ---
 
 const FONT_SIZE = 15
 const LINE_HEIGHT = 24
@@ -56,33 +171,132 @@ const englishFont = `${FONT_SIZE}px Literata, Georgia, "Times New Roman", serif`
 const arabicFont = `${FONT_SIZE}px "Geeza Pro", "Traditional Arabic", "Simplified Arabic", "Noto Naskh Arabic", serif`
 const chineseFont = `${FONT_SIZE}px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif`
 
-let preparedEn, preparedAr, preparedZh
+// --- Column config ---
+
+const COL = [
+  { text: '#e8d4c8', label: '#C2714F', name: 'English', bg: 'rgba(194, 113, 79, 0.04)', font: englishFont, fontFamily: 'Literata, Georgia, "Times New Roman", serif', dir: 'ltr' },
+  { text: '#e8dcc0', label: '#C49A3C', name: 'العربية', bg: 'rgba(196, 154, 60, 0.04)', font: arabicFont, fontFamily: '"Geeza Pro", "Traditional Arabic", "Simplified Arabic", "Noto Naskh Arabic", serif', dir: 'rtl' },
+  { text: '#c8d8c4', label: '#8B9E7E', name: '中文', bg: 'rgba(139, 158, 126, 0.04)', font: chineseFont, fontFamily: '"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif', dir: 'ltr' },
+]
+
+const texts = [englishText, arabicText, chineseText]
+const fonts = [englishFont, arabicFont, chineseFont]
+
+// --- Prepare text for layout ---
+
+let prepared = []
 
 function prepareFonts() {
-  preparedEn = prepareWithSegments(englishText, englishFont)
-  preparedAr = prepareWithSegments(arabicText, arabicFont)
-  preparedZh = prepareWithSegments(chineseText, chineseFont)
+  prepared = [
+    prepareWithSegments(englishText, englishFont),
+    prepareWithSegments(arabicText, arabicFont),
+    prepareWithSegments(chineseText, chineseFont),
+  ]
 }
 prepareFonts()
 
-// --- Column colors ---
+// --- Build DOM ---
 
-const COL = [
-  { text: '#e8d4c8', label: '#C2714F', name: 'English', bg: 'rgba(194, 113, 79, 0.04)' },
-  { text: '#e8dcc0', label: '#C49A3C', name: 'العربية', bg: 'rgba(196, 154, 60, 0.04)' },
-  { text: '#c8d8c4', label: '#8B9E7E', name: '中文', bg: 'rgba(139, 158, 126, 0.04)' },
-]
+const wrap = document.getElementById('columns-wrap')
+
+// Column elements
+const colEls = []
+const colLabelEls = []
+const colWidthEls = []
+const colRuleEls = []
+const colLineContainers = []
+const colLineCountEls = []
+const dividerEls = []
+const dividerLineEls = []
+const dividerHandleEls = []
+
+for (let i = 0; i < 3; i++) {
+  // Column
+  const col = document.createElement('div')
+  col.className = 'column'
+  col.style.background = COL[i].bg
+  col.style.direction = COL[i].dir
+
+  // Label (script name)
+  const label = document.createElement('div')
+  label.className = 'column-label'
+  label.textContent = COL[i].name
+  label.style.color = COL[i].label
+  col.appendChild(label)
+  colLabelEls.push(label)
+
+  // Width readout
+  const widthLabel = document.createElement('div')
+  widthLabel.className = 'column-width-label'
+  widthLabel.style.color = COL[i].label + '99'
+  col.appendChild(widthLabel)
+  colWidthEls.push(widthLabel)
+
+  // Top rule
+  const rule = document.createElement('div')
+  rule.className = 'column-rule'
+  rule.style.borderTop = `0.5px solid ${COL[i].label}30`
+  col.appendChild(rule)
+  colRuleEls.push(rule)
+
+  // Lines container
+  const lines = document.createElement('div')
+  lines.className = 'column-lines'
+  col.appendChild(lines)
+  colLineContainers.push(lines)
+
+  // Line count
+  const lc = document.createElement('div')
+  lc.className = 'line-count'
+  lc.style.color = COL[i].label + '60'
+  col.appendChild(lc)
+  colLineCountEls.push(lc)
+
+  colEls.push(col)
+  wrap.appendChild(col)
+
+  // Divider (between columns, not after last)
+  if (i < 2) {
+    const divider = document.createElement('div')
+    divider.className = 'divider'
+
+    const dLine = document.createElement('div')
+    dLine.className = 'divider-line'
+    divider.appendChild(dLine)
+    dividerLineEls.push(dLine)
+
+    const dHandle = document.createElement('div')
+    dHandle.className = 'divider-handle'
+    divider.appendChild(dHandle)
+    dividerHandleEls.push(dHandle)
+
+    dividerEls.push(divider)
+    wrap.appendChild(divider)
+  }
+}
+
+// --- Sizing ---
+
+let W = window.innerWidth
+let H = window.innerHeight
+
+function onResize() {
+  W = window.innerWidth
+  H = window.innerHeight
+  prepareFonts()
+}
+window.addEventListener('resize', onResize)
 
 // --- Adversarial width system ---
 
 const totalUsable = () => W - MARGIN * 2 - GAP * 2
 const BASE_RATIO = 1 / 3
-const AMPLITUDE = 0.15 // max deviation from base ratio
+const AMPLITUDE = 0.15
 
-let animating = true
 let manualOverride = false
 let manualRatios = [1/3, 1/3, 1/3]
 let animTime = 0
+let currentWidths = [100, 100, 100]
 
 function getAdversarialWidths(t) {
   if (manualOverride) {
@@ -94,18 +308,13 @@ function getAdversarialWidths(t) {
   const rawB = Math.sin(t * 1.1 + Math.PI / 3)
   const rawC = Math.sin(t * 0.9 + 2 * Math.PI / 3)
 
-  // Map to ratios centered on BASE_RATIO
   let rA = BASE_RATIO + rawA * AMPLITUDE
   let rB = BASE_RATIO + rawB * AMPLITUDE
   let rC = BASE_RATIO + rawC * AMPLITUDE
 
-  // Normalize so they sum to 1
   const sum = rA + rB + rC
-  rA /= sum
-  rB /= sum
-  rC /= sum
+  rA /= sum; rB /= sum; rC /= sum
 
-  // Enforce minimum width
   const MIN_RATIO = 0.12
   const clamp = (ratios) => {
     let clamped = ratios.map(r => Math.max(r, MIN_RATIO))
@@ -120,141 +329,114 @@ function getAdversarialWidths(t) {
 
 // --- Divider dragging ---
 
-let draggingDivider = -1 // -1 = none, 0 = between col 0 and 1, 1 = between col 1 and 2
+let draggingDivider = -1
 let dragStartX = 0
 let resumeTimer = null
 
-function getDividerPositions(widths) {
-  const x0 = MARGIN + widths[0]
-  const x1 = MARGIN + widths[0] + GAP + widths[1]
-  return [x0 + GAP / 2, x1 + GAP / 2]
+function startDrag(dividerIndex, clientX) {
+  draggingDivider = dividerIndex
+  dragStartX = clientX
+  manualOverride = true
+  manualRatios = currentWidths.map(w => w / totalUsable())
+  if (resumeTimer) clearTimeout(resumeTimer)
 }
 
-function hitDivider(mx) {
-  const widths = currentWidths
-  const divs = getDividerPositions(widths)
-  for (let i = 0; i < divs.length; i++) {
-    if (Math.abs(mx - divs[i]) < 12) return i
-  }
-  return -1
-}
+function moveDrag(clientX) {
+  const dx = clientX - dragStartX
+  dragStartX = clientX
+  const total = totalUsable()
+  const dRatio = dx / total
 
-let currentWidths = [100, 100, 100]
-
-canvas.addEventListener('mousedown', e => {
-  const d = hitDivider(e.clientX)
-  if (d >= 0) {
-    draggingDivider = d
-    dragStartX = e.clientX
-    manualOverride = true
-    manualRatios = currentWidths.map(w => w / totalUsable())
-    if (resumeTimer) clearTimeout(resumeTimer)
-    e.preventDefault()
-  }
-})
-
-canvas.addEventListener('mousemove', e => {
-  if (draggingDivider >= 0) {
-    const dx = e.clientX - dragStartX
-    dragStartX = e.clientX
-    const total = totalUsable()
-    const dRatio = dx / total
-
-    if (draggingDivider === 0) {
-      manualRatios[0] += dRatio
-      manualRatios[1] -= dRatio
-    } else {
-      manualRatios[1] += dRatio
-      manualRatios[2] -= dRatio
-    }
-
-    // Clamp
-    const MIN = 0.08
-    for (let i = 0; i < 3; i++) {
-      if (manualRatios[i] < MIN) {
-        const deficit = MIN - manualRatios[i]
-        manualRatios[i] = MIN
-        // Redistribute deficit
-        const other = i === 0 ? 1 : i === 2 ? 1 : (draggingDivider === 0 ? 0 : 2)
-        manualRatios[other] -= deficit
-      }
-    }
-
-    // Re-normalize
-    const s = manualRatios.reduce((a, b) => a + b, 0)
-    manualRatios = manualRatios.map(r => r / s)
+  if (draggingDivider === 0) {
+    manualRatios[0] += dRatio
+    manualRatios[1] -= dRatio
   } else {
-    // Update cursor
-    const d = hitDivider(e.clientX)
-    canvas.style.cursor = d >= 0 ? 'col-resize' : 'default'
+    manualRatios[1] += dRatio
+    manualRatios[2] -= dRatio
   }
-})
 
-canvas.addEventListener('mouseup', () => {
-  if (draggingDivider >= 0) {
-    draggingDivider = -1
-    // Resume animation after 3 seconds
-    if (resumeTimer) clearTimeout(resumeTimer)
-    resumeTimer = setTimeout(() => {
-      manualOverride = false
-    }, 3000)
-  }
-})
-
-// Touch support
-canvas.addEventListener('touchstart', e => {
-  const touch = e.touches[0]
-  const d = hitDivider(touch.clientX)
-  if (d >= 0) {
-    draggingDivider = d
-    dragStartX = touch.clientX
-    manualOverride = true
-    manualRatios = currentWidths.map(w => w / totalUsable())
-    if (resumeTimer) clearTimeout(resumeTimer)
-    e.preventDefault()
-  }
-}, { passive: false })
-
-canvas.addEventListener('touchmove', e => {
-  if (draggingDivider >= 0) {
-    const touch = e.touches[0]
-    const dx = touch.clientX - dragStartX
-    dragStartX = touch.clientX
-    const total = totalUsable()
-    const dRatio = dx / total
-
-    if (draggingDivider === 0) {
-      manualRatios[0] += dRatio
-      manualRatios[1] -= dRatio
-    } else {
-      manualRatios[1] += dRatio
-      manualRatios[2] -= dRatio
+  const MIN = 0.08
+  for (let i = 0; i < 3; i++) {
+    if (manualRatios[i] < MIN) {
+      const deficit = MIN - manualRatios[i]
+      manualRatios[i] = MIN
+      const other = i === 1 ? (draggingDivider === 0 ? 0 : 2) : 1
+      manualRatios[other] -= deficit
     }
-
-    const MIN = 0.08
-    for (let i = 0; i < 3; i++) {
-      if (manualRatios[i] < MIN) {
-        const deficit = MIN - manualRatios[i]
-        manualRatios[i] = MIN
-        const other = i === 1 ? (draggingDivider === 0 ? 0 : 2) : 1
-        manualRatios[other] -= deficit
-      }
-    }
-    const s = manualRatios.reduce((a, b) => a + b, 0)
-    manualRatios = manualRatios.map(r => r / s)
-    e.preventDefault()
   }
-}, { passive: false })
 
-canvas.addEventListener('touchend', () => {
+  const s = manualRatios.reduce((a, b) => a + b, 0)
+  manualRatios = manualRatios.map(r => r / s)
+}
+
+function endDrag() {
   if (draggingDivider >= 0) {
     draggingDivider = -1
     if (resumeTimer) clearTimeout(resumeTimer)
     resumeTimer = setTimeout(() => { manualOverride = false }, 3000)
   }
+}
+
+// Mouse events on dividers
+dividerEls.forEach((div, i) => {
+  div.addEventListener('mousedown', e => {
+    startDrag(i, e.clientX)
+    e.preventDefault()
+  })
+  div.addEventListener('touchstart', e => {
+    startDrag(i, e.touches[0].clientX)
+    e.preventDefault()
+  }, { passive: false })
 })
 
-// --- Render ---
+window.addEventListener('mousemove', e => {
+  if (draggingDivider >= 0) {
+    moveDrag(e.clientX)
+  }
+})
+
+window.addEventListener('mouseup', endDrag)
+
+window.addEventListener('touchmove', e => {
+  if (draggingDivider >= 0) {
+    moveDrag(e.touches[0].clientX)
+    e.preventDefault()
+  }
+}, { passive: false })
+
+window.addEventListener('touchend', endDrag)
+
+// --- Line element pool per column ---
+
+const linePools = [[], [], []]
+
+function ensureLineEls(colIndex, count) {
+  const container = colLineContainers[colIndex]
+  const pool = linePools[colIndex]
+
+  // Add elements if needed
+  while (pool.length < count) {
+    const el = document.createElement('div')
+    el.className = 'text-line'
+    el.style.color = COL[colIndex].text
+    el.style.font = COL[colIndex].font
+    el.style.fontFamily = COL[colIndex].fontFamily
+    el.style.fontSize = FONT_SIZE + 'px'
+    el.style.direction = COL[colIndex].dir
+    if (COL[colIndex].dir === 'rtl') {
+      el.style.textAlign = 'right'
+    }
+    container.appendChild(el)
+    pool.push(el)
+  }
+
+  // Show/hide
+  for (let i = 0; i < pool.length; i++) {
+    pool[i].style.display = i < count ? '' : 'none'
+  }
+}
+
+// --- Render loop ---
 
 function render(timestamp) {
   requestAnimationFrame(render)
@@ -263,139 +445,59 @@ function render(timestamp) {
     animTime = timestamp * 0.001
   }
 
-  ctx.clearRect(0, 0, W, H)
-  ctx.fillStyle = '#08080e'
-  ctx.fillRect(0, 0, W, H)
-
   const widths = getAdversarialWidths(animTime)
   currentWidths = widths
 
-  // Column x positions
-  const colX = [
-    MARGIN,
-    MARGIN + widths[0] + GAP,
-    MARGIN + widths[0] + GAP + widths[1] + GAP,
-  ]
+  // Available height for text
+  const availH = H - TOP_MARGIN - 30
 
-  // --- Draw column backgrounds ---
-  for (let i = 0; i < 3; i++) {
-    ctx.fillStyle = COL[i].bg
-    ctx.fillRect(colX[i], 0, widths[i], H)
-  }
-
-  // --- Draw dividers ---
-  const dividerX = [
-    MARGIN + widths[0] + GAP / 2,
-    MARGIN + widths[0] + GAP + widths[1] + GAP / 2,
-  ]
-
-  for (let i = 0; i < 2; i++) {
-    const x = dividerX[i]
-    // Animated divider — pulse opacity
-    const pulse = 0.12 + 0.06 * Math.sin(animTime * 2 + i * Math.PI)
-    ctx.strokeStyle = `rgba(200, 200, 208, ${pulse})`
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    ctx.moveTo(x, TOP_MARGIN - 10)
-    ctx.lineTo(x, H - 20)
-    ctx.stroke()
-
-    // Small drag handle
-    const handleAlpha = draggingDivider === i ? 0.5 : 0.2
-    ctx.fillStyle = `rgba(200, 200, 208, ${handleAlpha})`
-    ctx.beginPath()
-    ctx.roundRect(x - 3, TOP_MARGIN - 20, 6, 14, 3)
-    ctx.fill()
-  }
-
-  // --- Title ---
-  ctx.fillStyle = '#a89e8e'
-  ctx.font = '300 24px Fraunces, Georgia, serif'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'alphabetic'
-  ctx.fillText('Babel Columns', W / 2, 36)
-
-  // --- Column width labels and names ---
-  ctx.font = '10px Fraunces, Georgia, serif'
-  ctx.textBaseline = 'alphabetic'
-
-  for (let i = 0; i < 3; i++) {
-    const cx = colX[i] + widths[i] / 2
-
-    // Column name
-    ctx.fillStyle = COL[i].label
-    ctx.textAlign = 'center'
-    ctx.fillText(COL[i].name, cx, TOP_MARGIN - 24)
-
-    // Width in pixels
-    ctx.fillStyle = COL[i].label + '99'
-    ctx.fillText(`${Math.round(widths[i])}px`, cx, TOP_MARGIN - 10)
-
-    // Top rule
-    ctx.strokeStyle = COL[i].label + '30'
-    ctx.lineWidth = 0.5
-    ctx.beginPath()
-    ctx.moveTo(colX[i], TOP_MARGIN - 4)
-    ctx.lineTo(colX[i] + widths[i], TOP_MARGIN - 4)
-    ctx.stroke()
-  }
-
-  // --- Layout and render text ---
-
-  const prepared = [preparedEn, preparedAr, preparedZh]
-  const fonts = [englishFont, arabicFont, chineseFont]
-  const isRTL = [false, true, false]
-  const padding = 10
-
+  // Update column widths and layout text
   for (let col = 0; col < 3; col++) {
-    const x = colX[col] + padding
-    const colW = widths[col] - padding * 2
+    const colW = widths[col]
+    const textW = colW - 20 // padding
 
-    if (colW < 20) continue
+    colEls[col].style.width = colW + 'px'
+    colWidthEls[col].textContent = `${Math.round(colW)}px`
 
-    ctx.font = fonts[col]
-    ctx.textBaseline = 'alphabetic'
-    ctx.fillStyle = COL[col].text
-
-    let cursor = { segmentIndex: 0, graphemeIndex: 0 }
-    let y = TOP_MARGIN + LINE_HEIGHT
-    let lineCount = 0
-
-    while (y < H - 30) {
-      const line = layoutNextLine(prepared[col], cursor, colW)
-      if (line === null) break
-
-      if (isRTL[col]) {
-        ctx.save()
-        ctx.direction = 'rtl'
-        ctx.textAlign = 'right'
-        ctx.fillText(line.text, x + colW, y)
-        ctx.restore()
-      } else {
-        ctx.textAlign = 'left'
-        ctx.direction = 'ltr'
-        ctx.fillText(line.text, x, y)
-      }
-
-      cursor = line.end
-      y += LINE_HEIGHT
-      lineCount++
+    if (textW < 20) {
+      ensureLineEls(col, 0)
+      colLineCountEls[col].textContent = '0 lines'
+      continue
     }
 
-    // Line count at bottom
-    ctx.font = '10px Fraunces, Georgia, serif'
-    ctx.fillStyle = COL[col].label + '60'
-    ctx.textAlign = 'center'
-    ctx.direction = 'ltr'
-    ctx.fillText(`${lineCount} lines`, colX[col] + widths[col] / 2, H - 12)
+    // Layout with pretext
+    let cursor = { segmentIndex: 0, graphemeIndex: 0 }
+    const lineTexts = []
+
+    while (lineTexts.length * LINE_HEIGHT < availH) {
+      const line = layoutNextLine(prepared[col], cursor, textW)
+      if (line === null) break
+      lineTexts.push(line.text)
+      cursor = line.end
+    }
+
+    // Update DOM
+    ensureLineEls(col, lineTexts.length)
+    const pool = linePools[col]
+
+    for (let i = 0; i < lineTexts.length; i++) {
+      const el = pool[i]
+      if (el._cachedText !== lineTexts[i]) {
+        el.textContent = lineTexts[i]
+        el._cachedText = lineTexts[i]
+      }
+    }
+
+    colLineCountEls[col].textContent = `${lineTexts.length} lines`
   }
 
-  // --- Hint text ---
-  ctx.font = '11px Literata, Georgia, serif'
-  ctx.fillStyle = '#5C5C5C'
-  ctx.textAlign = 'center'
-  ctx.direction = 'ltr'
-  ctx.fillText('drag the dividers to override the animation', W / 2, H - 12)
+  // Update divider appearance
+  for (let i = 0; i < 2; i++) {
+    const pulse = 0.12 + 0.06 * Math.sin(animTime * 2 + i * Math.PI)
+    dividerLineEls[i].style.background = `rgba(200, 200, 208, ${pulse})`
+    const handleAlpha = draggingDivider === i ? 0.5 : 0.2
+    dividerHandleEls[i].style.background = `rgba(200, 200, 208, ${handleAlpha})`
+  }
 }
 
 requestAnimationFrame(render)

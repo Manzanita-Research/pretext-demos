@@ -16,10 +16,66 @@
     color: #e8e4dc;
   }
 
-  canvas {
-    display: block;
-    width: 100%;
-    height: 100%;
+  #stage {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+  }
+
+  /* Radial stage glow via CSS */
+  #stage-bg {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 50% calc(50% - 40px), #201810 0%, #18120c 40%, #1a1410 100%);
+  }
+
+  /* Floor line */
+  #floor-line {
+    position: absolute;
+    top: 78%;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(to right, transparent 15%, rgba(194, 113, 79, 0.08) 30%, rgba(194, 113, 79, 0.14) 50%, rgba(194, 113, 79, 0.08) 70%, transparent 85%);
+  }
+
+  /* Dancer text containers */
+  .dancer {
+    position: absolute;
+    will-change: transform, opacity;
+    transform-origin: 0 0;
+    pointer-events: none;
+  }
+
+  .dancer-inner {
+    position: relative;
+    pointer-events: auto;
+  }
+
+  .dancer-bg {
+    position: absolute;
+    inset: -16px;
+    background: rgba(30, 22, 16, 0.4);
+    border-radius: 3px;
+    pointer-events: none;
+  }
+
+  .dancer-line {
+    font-family: 'Literata', Georgia, serif;
+    font-size: 15px;
+    line-height: 22px;
+    white-space: pre;
+    user-select: text;
+    cursor: text;
+  }
+
+  /* Dancer shadow */
+  .dancer-shadow {
+    position: absolute;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.15);
+    pointer-events: none;
+    will-change: transform, opacity;
   }
 
   #controls {
@@ -195,7 +251,12 @@
 </style>
 </head>
 <body>
-<canvas id="canvas"></canvas>
+
+<div id="stage">
+  <div id="stage-bg"></div>
+  <div id="floor-line"></div>
+  <!-- Shadows and dancers are injected here -->
+</div>
 
 <!-- Laban staff notation (simplified) -->
 <div id="laban-staff">
@@ -243,23 +304,17 @@ const FONT_SIZE = 15
 const FONT = `${FONT_SIZE}px Literata, Georgia, serif`
 const LINE_HEIGHT = 22
 
-const canvas = document.getElementById('canvas')
-const ctx = canvas.getContext('2d')
-
-let W, H, dpr
+let W = window.innerWidth
+let H = window.innerHeight
 
 function resize() {
-  dpr = window.devicePixelRatio || 1
   W = window.innerWidth
   H = window.innerHeight
-  canvas.width = W * dpr
-  canvas.height = H * dpr
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 }
 resize()
 window.addEventListener('resize', resize)
 
-// Prepare text
+// Prepare text for measurement/line-breaking
 const preparedA = prepareWithSegments(DANCE_TEXT_A, FONT)
 const preparedB = prepareWithSegments(DANCE_TEXT_B, FONT)
 
@@ -299,7 +354,6 @@ function interpolateKeyframes(keyframes, time, duration, easeFn) {
   if (totalKeys === 0) return { x: 0, y: 0, width: 300, rotation: 0, scale: 1, opacity: 1, label: '' }
   if (totalKeys === 1) return { ...keyframes[0] }
 
-  // Clamp time into [0, duration) — JS modulo can go negative
   const clampedTime = ((time % duration) + duration) % duration
   const normalizedTime = Math.min(clampedTime / duration, 0.999999)
   const segmentCount = totalKeys - 1
@@ -322,15 +376,11 @@ function interpolateKeyframes(keyframes, time, duration, easeFn) {
       result[key] = from[key]
     }
   }
-  // Carry forward label from 'from' keyframe
   result.label = from.label || ''
   return result
 }
 
 // --- Dance Sequences ---
-// Each sequence defines keyframes for one or two dancers
-// Properties: x, y (relative to center), width, rotation (radians), scale, opacity, label
-
 const centerX = () => W / 2
 const centerY = () => H / 2 - 60
 
@@ -412,7 +462,6 @@ const sequences = {
       const cx = centerX(), cy = centerY()
       const offsetX = 160
       return [
-        // Dancer A (left)
         [
           { x: cx - offsetX - 100, y: cy - 20, width: 280, rotation: 0.02, scale: 1, opacity: 1, label: 'approach', ease: easeInOutSine },
           { x: cx - offsetX + 20, y: cy, width: 260, rotation: 0.01, scale: 1.01, opacity: 1, label: 'reach', ease: easeInOutCubic },
@@ -422,7 +471,6 @@ const sequences = {
           { x: cx - offsetX - 60, y: cy + 10, width: 280, rotation: 0.03, scale: 0.99, opacity: 1, label: 'retreat', ease: easeInOutSine },
           { x: cx - offsetX - 100, y: cy - 20, width: 280, rotation: 0.02, scale: 1, opacity: 1, label: 'reset', ease: easeInOutSine },
         ],
-        // Dancer B (right) — mirrors A
         [
           { x: cx + offsetX + 100, y: cy - 20, width: 280, rotation: -0.02, scale: 1, opacity: 1, label: 'approach', ease: easeInOutSine },
           { x: cx + offsetX - 20, y: cy, width: 260, rotation: -0.01, scale: 1.01, opacity: 1, label: 'receive', ease: easeInOutCubic },
@@ -449,6 +497,41 @@ let currentSequence = 'waltz'
 let playing = true
 let startTime = performance.now()
 let pausedAt = 0
+
+// --- DOM elements for dancers ---
+const stage = document.getElementById('stage')
+
+// Create dancer A elements
+const shadowA = document.createElement('div')
+shadowA.className = 'dancer-shadow'
+stage.appendChild(shadowA)
+
+const dancerA = document.createElement('div')
+dancerA.className = 'dancer'
+const dancerAInner = document.createElement('div')
+dancerAInner.className = 'dancer-inner'
+const dancerABg = document.createElement('div')
+dancerABg.className = 'dancer-bg'
+dancerAInner.appendChild(dancerABg)
+dancerA.appendChild(dancerAInner)
+stage.appendChild(dancerA)
+
+// Create dancer B elements
+const shadowB = document.createElement('div')
+shadowB.className = 'dancer-shadow'
+shadowB.style.display = 'none'
+stage.appendChild(shadowB)
+
+const dancerB = document.createElement('div')
+dancerB.className = 'dancer'
+dancerB.style.display = 'none'
+const dancerBInner = document.createElement('div')
+dancerBInner.className = 'dancer-inner'
+const dancerBBg = document.createElement('div')
+dancerBBg.className = 'dancer-bg'
+dancerBInner.appendChild(dancerBBg)
+dancerB.appendChild(dancerBInner)
+stage.appendChild(dancerB)
 
 // --- Controls ---
 const playBtn = document.getElementById('play-btn')
@@ -500,9 +583,9 @@ scrubber.addEventListener('pointerdown', () => { scrubbing = true })
 
 // --- Laban staff rendering ---
 const labanColors = {
-  high: '#8B9E7E',   // sage — high level
-  mid: '#6d8a60',    // deep sage — middle
-  low: '#4a6b4a',    // forest sage — low level
+  high: '#8B9E7E',
+  mid: '#6d8a60',
+  low: '#4a6b4a',
 }
 
 function updateLabanStaff(time) {
@@ -531,7 +614,7 @@ function updateLabanStaff(time) {
   })
 }
 
-// --- Layout text into lines ---
+// --- Layout text into lines using pretext ---
 function layoutText(prepared, width) {
   const lines = []
   let cursor = { segmentIndex: 0, graphemeIndex: 0 }
@@ -545,104 +628,71 @@ function layoutText(prepared, width) {
   return lines
 }
 
-// --- Render a text block ---
-function renderDancer(prepared, state, color, secondaryColor) {
-  const { x, y, width, rotation, scale, opacity } = state
+// --- Render text lines into a dancer container ---
+// Track previous width per dancer to avoid unnecessary re-layout
+let prevWidthA = -1
+let prevWidthB = -1
 
-  ctx.save()
-  ctx.globalAlpha = opacity
-  ctx.translate(x, y)
-  ctx.rotate(rotation)
-  ctx.scale(scale, scale)
+function renderDancerLines(prepared, innerEl, bgEl, width, color, prevWidth) {
+  const roundedWidth = Math.round(width)
+  if (roundedWidth === prevWidth) return prevWidth
 
-  const lines = layoutText(prepared, width)
-  const totalHeight = lines.length * LINE_HEIGHT
-  const startY = -totalHeight / 2
+  const lines = layoutText(prepared, roundedWidth)
 
-  // Subtle text block background
-  const pad = 16
-  ctx.fillStyle = `rgba(30, 22, 16, ${0.4 * opacity})`
-  const bgWidth = width + pad * 2
-  const bgHeight = totalHeight + pad * 2
-  const bgX = -pad
-  const bgY = startY - pad - 2
-  const radius = 3
-
-  ctx.beginPath()
-  ctx.moveTo(bgX + radius, bgY)
-  ctx.lineTo(bgX + bgWidth - radius, bgY)
-  ctx.quadraticCurveTo(bgX + bgWidth, bgY, bgX + bgWidth, bgY + radius)
-  ctx.lineTo(bgX + bgWidth, bgY + bgHeight - radius)
-  ctx.quadraticCurveTo(bgX + bgWidth, bgY + bgHeight, bgX + bgWidth - radius, bgY + bgHeight)
-  ctx.lineTo(bgX + radius, bgY + bgHeight)
-  ctx.quadraticCurveTo(bgX, bgY + bgHeight, bgX, bgY + bgHeight - radius)
-  ctx.lineTo(bgX, bgY + radius)
-  ctx.quadraticCurveTo(bgX, bgY, bgX + radius, bgY)
-  ctx.closePath()
-  ctx.fill()
-
-  // Render text
-  ctx.font = FONT
-  ctx.textBaseline = 'top'
-
-  for (let i = 0; i < lines.length; i++) {
-    const lineY = startY + i * LINE_HEIGHT
-    // Slight color variation per line for depth
-    const lineAlpha = 0.75 + 0.25 * (1 - i / Math.max(lines.length, 1))
-    ctx.fillStyle = color
-    ctx.globalAlpha = opacity * lineAlpha
-    ctx.fillText(lines[i].text, 0, lineY)
+  // Remove old line divs (keep bgEl at index 0)
+  while (innerEl.childNodes.length > 1) {
+    innerEl.removeChild(innerEl.lastChild)
   }
 
-  ctx.restore()
+  for (let i = 0; i < lines.length; i++) {
+    const lineDiv = document.createElement('div')
+    lineDiv.className = 'dancer-line'
+    lineDiv.textContent = lines[i].text
+    // Slight opacity variation per line for depth, matching original canvas behavior
+    const lineAlpha = 0.75 + 0.25 * (1 - i / Math.max(lines.length, 1))
+    lineDiv.style.color = color
+    lineDiv.style.opacity = lineAlpha
+    innerEl.appendChild(lineDiv)
+  }
+
+  return roundedWidth
 }
 
-// --- Stage background ---
-function drawStage() {
-  // Warm stage-like gradient
-  const grad = ctx.createRadialGradient(W / 2, H / 2 - 40, 50, W / 2, H / 2, Math.max(W, H) * 0.7)
-  grad.addColorStop(0, '#201810')
-  grad.addColorStop(0.4, '#18120c')
-  grad.addColorStop(1, '#1a1410')
-  ctx.fillStyle = grad
-  ctx.fillRect(0, 0, W, H)
+// --- Position a dancer DOM element ---
+function positionDancer(dancerEl, shadowEl, state, prepared, innerEl, bgEl, color, prevWidth) {
+  const { x, y, width, rotation, scale, opacity } = state
 
-  // Floor line
-  const floorY = H * 0.78
-  const floorGrad = ctx.createLinearGradient(W * 0.15, 0, W * 0.85, 0)
-  floorGrad.addColorStop(0, 'transparent')
-  floorGrad.addColorStop(0.3, 'rgba(194, 113, 79, 0.08)')
-  floorGrad.addColorStop(0.5, 'rgba(194, 113, 79, 0.14)')
-  floorGrad.addColorStop(0.7, 'rgba(194, 113, 79, 0.08)')
-  floorGrad.addColorStop(1, 'transparent')
-  ctx.fillStyle = floorGrad
-  ctx.fillRect(0, floorY, W, 1)
-}
+  // Layout text and get actual height
+  const newPrevWidth = renderDancerLines(prepared, innerEl, bgEl, width, color, prevWidth)
 
-// --- Shadow beneath dancer ---
-function drawShadow(state) {
-  const { x, y, width, scale } = state
+  // Count line elements (children minus the bg div)
+  const lineCount = innerEl.childNodes.length - 1
+  const totalHeight = lineCount * LINE_HEIGHT
+  const offsetY = -totalHeight / 2
+
+  // Position dancer: translate so text is centered vertically at (x, y)
+  dancerEl.style.transform = `translate(${x}px, ${y + offsetY}px) rotate(${rotation}rad) scale(${scale})`
+  dancerEl.style.opacity = opacity
+  dancerEl.style.display = ''
+
+  // Position shadow on floor
   const floorY = H * 0.78
-  // Shadow is an ellipse on the floor
   const shadowWidth = width * scale * 0.6
-  const shadowHeight = 4
-  // Shadow opacity decreases as dancer rises (y decreases)
   const distFromFloor = Math.max(0, floorY - y) / 200
   const shadowAlpha = Math.max(0, 0.15 - distFromFloor * 0.08)
+  shadowEl.style.width = `${shadowWidth}px`
+  shadowEl.style.height = '8px'
+  shadowEl.style.left = `${x + width * 0.3 - shadowWidth / 2}px`
+  shadowEl.style.top = `${floorY}px`
+  shadowEl.style.opacity = shadowAlpha
+  shadowEl.style.display = ''
 
-  ctx.save()
-  ctx.fillStyle = `rgba(0, 0, 0, ${shadowAlpha})`
-  ctx.beginPath()
-  ctx.ellipse(x + width * 0.3, floorY + 2, shadowWidth, shadowHeight, 0, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.restore()
+  return newPrevWidth
 }
 
 // --- Colors ---
-const dancerColorA = '#C2714F'   // terracotta
-const dancerColorSecA = '#9a5a3e'
-const dancerColorB = '#8B9E7E'   // sage
-const dancerColorSecB = '#6d7a62'
+const dancerColorA = '#C2714F'
+const dancerColorB = '#8B9E7E'
 
 // --- Main render loop ---
 function render(timestamp) {
@@ -655,7 +705,6 @@ function render(timestamp) {
     elapsed = pausedAt
   }
 
-  // Loop the sequence
   const loopedTime = elapsed % seq.duration
 
   // Update scrubber
@@ -664,29 +713,23 @@ function render(timestamp) {
   }
   timeDisplay.textContent = (loopedTime / 1000).toFixed(1) + 's'
 
-  // Clear and draw stage
-  ctx.clearRect(0, 0, W, H)
-  drawStage()
-
   // Get keyframes fresh (so they respond to resize)
   const keyframesSets = seq.getKeyframes()
 
-  // Interpolate and render dancer(s)
+  // Interpolate dancer A
   const stateA = interpolateKeyframes(keyframesSets[0], loopedTime, seq.duration, easeInOutSine)
-
-  // Update move label
   moveLabel.textContent = stateA.label || ''
 
-  // Draw shadow(s) first
-  drawShadow(stateA)
+  prevWidthA = positionDancer(dancerA, shadowA, stateA, preparedA, dancerAInner, dancerABg, dancerColorA, prevWidthA)
 
+  // Dancer B
   if (seq.dancers === 2 && keyframesSets[1]) {
     const stateB = interpolateKeyframes(keyframesSets[1], loopedTime, seq.duration, easeInOutSine)
-    drawShadow(stateB)
-    renderDancer(preparedA, stateA, dancerColorA, dancerColorSecA)
-    renderDancer(preparedB, stateB, dancerColorB, dancerColorSecB)
+    prevWidthB = positionDancer(dancerB, shadowB, stateB, preparedB, dancerBInner, dancerBBg, dancerColorB, prevWidthB)
   } else {
-    renderDancer(preparedA, stateA, dancerColorA, dancerColorSecA)
+    dancerB.style.display = 'none'
+    shadowB.style.display = 'none'
+    prevWidthB = -1
   }
 
   // Update Laban staff

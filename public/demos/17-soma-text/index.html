@@ -10,7 +10,63 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: #08080e; }
-  canvas { display: block; width: 100%; height: 100%; }
+
+  #text-container {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  #text-block {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    pointer-events: auto;
+  }
+
+  .text-line {
+    font-family: 'Literata', Georgia, serif;
+    font-weight: 400;
+    white-space: pre;
+    will-change: transform, opacity, color, letter-spacing;
+    transition: none;
+    line-height: 1;
+    user-select: text;
+    cursor: text;
+  }
+
+  #video-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    transform: scaleX(-1);
+    object-fit: cover;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    transition: opacity 0.6s;
+  }
+
+  #breath-glow {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    width: 600px;
+    height: 600px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(139, 158, 126, 0.06) 0%, rgba(139, 158, 126, 0) 70%);
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0;
+    transition: opacity 0.8s;
+  }
 
   #start-btn {
     position: fixed;
@@ -96,6 +152,7 @@
     color: #e8e4dc33;
     letter-spacing: 0.1em;
     text-align: right;
+    z-index: 5;
   }
 
   #label {
@@ -105,6 +162,7 @@
     font: 300 0.65rem/1.4 'Literata', Georgia, serif;
     color: #e8e4dc33;
     letter-spacing: 0.1em;
+    z-index: 5;
   }
 
   #motion-meter {
@@ -149,7 +207,11 @@
   <p>Text that responds to your body. The camera watches your motion and stillness. The words rearrange around your presence.</p>
   <button>begin</button>
 </div>
-<canvas id="canvas"></canvas>
+<div id="breath-glow"></div>
+<video id="video-overlay" playsinline autoplay muted></video>
+<div id="text-container">
+  <div id="text-block"></div>
+</div>
 <div id="camera-status"><span class="dot"></span><span class="text"></span></div>
 <div id="motion-meter"><span class="label">motion</span><span class="fill"></span></div>
 <div id="status"></div>
@@ -171,34 +233,32 @@ const COLOR_CALM = [139, 158, 126]      // sage #8B9E7E
 const COLOR_AGITATED = [194, 113, 79]   // terracotta #C2714F
 const OCHRE = '#C49A3C'
 
-const canvas = document.getElementById('canvas')
-const ctx = canvas.getContext('2d')
 const statusEl = document.getElementById('status')
 const cameraStatusEl = document.getElementById('camera-status')
 const cameraStatusText = cameraStatusEl.querySelector('.text')
 const motionMeterEl = document.getElementById('motion-meter')
 const motionFillEl = motionMeterEl.querySelector('.fill')
+const textBlock = document.getElementById('text-block')
+const textContainer = document.getElementById('text-container')
+const breathGlow = document.getElementById('breath-glow')
+const videoOverlay = document.getElementById('video-overlay')
 
-let W, H, dpr
+let W = window.innerWidth
+let H = window.innerHeight
 
 function resize() {
-  dpr = window.devicePixelRatio || 1
   W = window.innerWidth
   H = window.innerHeight
-  canvas.width = W * dpr
-  canvas.height = H * dpr
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 }
 resize()
 window.addEventListener('resize', resize)
 
 // --- Signals ---
-let motionLevel = 0       // 0 = still, 1 = moving a lot
-let brightnessLevel = 0.5 // 0 = dark/far, 1 = bright/close
-let stillnessScore = 0    // increases the longer you hold still
+let motionLevel = 0
+let brightnessLevel = 0.5
+let stillnessScore = 0
 let usingCamera = false
 
-// Smoothed values for rendering
 let smoothMotion = 0
 let smoothBrightness = 0.5
 let smoothStillness = 0
@@ -206,11 +266,10 @@ let smoothStillness = 0
 // --- Mouse fallback ---
 let mouseX = W / 2, mouseY = H / 2
 let prevMouseX = W / 2, prevMouseY = H / 2
-let mouseSpeed = 0
 let smoothMouseSpeed = 0
 let mouseActive = false
 
-canvas.addEventListener('pointermove', (e) => {
+document.addEventListener('pointermove', (e) => {
   mouseX = e.clientX
   mouseY = e.clientY
   mouseActive = true
@@ -231,13 +290,11 @@ let hiddenCtx = null
 let prevFrame = null
 const SAMPLE_W = 160
 const SAMPLE_H = 120
-let cameraFrameCount = 0
 
 async function initCamera() {
   setCameraStatus('pending', 'requesting camera access...')
 
   try {
-    // Check if getUserMedia is available
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       throw new Error('getUserMedia not supported')
     }
@@ -258,7 +315,6 @@ async function initCamera() {
     videoEl.setAttribute('autoplay', '')
     videoEl.muted = true
 
-    // Wait for video metadata to load so we know dimensions are ready
     await new Promise((resolve, reject) => {
       videoEl.onloadedmetadata = resolve
       videoEl.onerror = reject
@@ -267,31 +323,25 @@ async function initCamera() {
 
     await videoEl.play()
 
-    // Verify the video is actually producing frames
     if (videoEl.videoWidth === 0 || videoEl.videoHeight === 0) {
       throw new Error('Video stream has no dimensions')
     }
+
+    // Set up the visible video overlay
+    videoOverlay.srcObject = stream
+    videoOverlay.play()
 
     hiddenCanvas = document.createElement('canvas')
     hiddenCanvas.width = SAMPLE_W
     hiddenCanvas.height = SAMPLE_H
     hiddenCtx = hiddenCanvas.getContext('2d', { willReadFrequently: true })
 
-    // Do a test frame capture to verify everything works
+    // Test frame
     hiddenCtx.drawImage(videoEl, 0, 0, SAMPLE_W, SAMPLE_H)
-    const testData = hiddenCtx.getImageData(0, 0, SAMPLE_W, SAMPLE_H)
-    let nonZero = 0
-    for (let i = 0; i < testData.data.length; i += 4) {
-      if (testData.data[i] > 0 || testData.data[i+1] > 0 || testData.data[i+2] > 0) {
-        nonZero++
-        break
-      }
-    }
 
     usingCamera = true
     setCameraStatus('active', 'camera active')
 
-    // Fade out the status after a few seconds
     setTimeout(() => {
       if (usingCamera) {
         cameraStatusEl.style.transition = 'opacity 2s'
@@ -306,7 +356,6 @@ async function initCamera() {
     videoEl = null
     setCameraStatus('error', 'no camera — using mouse')
 
-    // Fade to subtle after a few seconds
     setTimeout(() => {
       cameraStatusEl.style.transition = 'opacity 2s'
       cameraStatusEl.style.opacity = '0.3'
@@ -324,25 +373,22 @@ function analyzeFrame() {
   const imageData = hiddenCtx.getImageData(0, 0, SAMPLE_W, SAMPLE_H)
   const data = imageData.data
 
-  // Calculate average brightness
   let totalBrightness = 0
   let sampleCount = 0
 
-  for (let i = 0; i < data.length; i += 16) { // sample every 4th pixel
+  for (let i = 0; i < data.length; i += 16) {
     const r = data[i]
     const g = data[i + 1]
     const b = data[i + 2]
-    totalBrightness += (r * 0.299 + g * 0.587 + b * 0.114) // perceptual brightness
+    totalBrightness += (r * 0.299 + g * 0.587 + b * 0.114)
     sampleCount++
   }
   const avgBrightness = totalBrightness / sampleCount
   brightnessLevel = Math.min(avgBrightness / 160, 1)
 
-  // Frame differencing for motion
   if (prevFrame) {
     let totalDiff = 0
     let diffSamples = 0
-    // Sample more densely for better motion detection
     for (let i = 0; i < data.length; i += 8) {
       const diff = Math.abs(data[i] - prevFrame[i]) +
                    Math.abs(data[i + 1] - prevFrame[i + 1]) +
@@ -351,12 +397,10 @@ function analyzeFrame() {
       diffSamples++
     }
     const avgDiff = totalDiff / diffSamples
-    // More sensitive motion detection — lower divisor = more sensitive
     motionLevel = Math.min(avgDiff / 18, 1)
   }
 
   prevFrame = new Uint8Array(data)
-  cameraFrameCount++
 }
 
 // --- Prepare text ---
@@ -375,38 +419,49 @@ function updatePrepared(fontSize) {
 
 prepared = prepareWithSegments(PASSAGE, currentFont)
 
+// --- DOM line pool ---
+let lineElements = []
+
+function ensureLineElements(count) {
+  while (lineElements.length < count) {
+    const div = document.createElement('div')
+    div.className = 'text-line'
+    textBlock.appendChild(div)
+    lineElements.push(div)
+  }
+  // Hide excess lines
+  for (let i = 0; i < lineElements.length; i++) {
+    lineElements[i].style.display = i < count ? '' : 'none'
+  }
+}
+
 // --- Render ---
 let lastTime = 0
-let frameCount = 0
 
 function render(time) {
   const dt = Math.min((time - lastTime) / 16.67, 3)
   lastTime = time
-  frameCount++
 
   // Update signals
   if (usingCamera) {
     analyzeFrame()
   } else {
-    // Mouse fallback — more responsive
     const dx = mouseX - prevMouseX
     const dy = mouseY - prevMouseY
     const rawSpeed = Math.sqrt(dx * dx + dy * dy)
     smoothMouseSpeed = smoothMouseSpeed * 0.75 + rawSpeed * 0.25
     motionLevel = Math.min(smoothMouseSpeed / 20, 1)
-    // Use vertical mouse position as proxy for "proximity"
     brightnessLevel = 1 - (mouseY / H)
     prevMouseX = mouseX
     prevMouseY = mouseY
   }
 
-  // Smooth the signals — faster response for more dramatic effect
+  // Smooth the signals
   const smoothingFast = 1 - Math.pow(0.015, dt / 60)
   const smoothingSlow = 1 - Math.pow(0.03, dt / 60)
   smoothMotion = smoothMotion + (motionLevel - smoothMotion) * smoothingFast
   smoothBrightness = smoothBrightness + (brightnessLevel - smoothBrightness) * smoothingSlow
 
-  // Stillness score — builds up when still, drops fast when moving
   if (smoothMotion < 0.06) {
     stillnessScore = Math.min(stillnessScore + 0.004 * dt, 1)
   } else {
@@ -417,7 +472,6 @@ function render(time) {
   // Motion meter display
   const meterHeight = Math.round(smoothMotion * 100)
   motionFillEl.style.height = meterHeight + '%'
-  // Color the meter: sage when calm, terracotta when moving
   if (smoothMotion > 0.5) {
     motionFillEl.style.backgroundColor = '#C2714F'
   } else if (smoothMotion > 0.2) {
@@ -426,59 +480,24 @@ function render(time) {
     motionFillEl.style.backgroundColor = '#8B9E7E'
   }
 
-  // Clear
-  ctx.fillStyle = BG
-  ctx.fillRect(0, 0, W, H)
-
-  // Draw webcam feed as faint overlay
-  if (usingCamera && videoEl && videoEl.readyState >= videoEl.HAVE_CURRENT_DATA) {
-    ctx.save()
-    ctx.globalAlpha = 0.04 + smoothStillness * 0.04
-    ctx.translate(W, 0)
-    ctx.scale(-1, 1)
-    const videoAspect = videoEl.videoWidth / videoEl.videoHeight
-    const canvasAspect = W / H
-    let drawW, drawH, drawX, drawY
-    if (videoAspect > canvasAspect) {
-      drawH = H
-      drawW = H * videoAspect
-      drawX = (W - drawW) / 2
-      drawY = 0
-    } else {
-      drawW = W
-      drawH = W / videoAspect
-      drawX = 0
-      drawY = (H - drawH) / 2
-    }
-    ctx.drawImage(videoEl, drawX, drawY, drawW, drawH)
-    ctx.restore()
+  // Video overlay opacity: faint, increases slightly with stillness
+  if (usingCamera) {
+    videoOverlay.style.opacity = (0.04 + smoothStillness * 0.04).toFixed(3)
   }
 
   // --- Compute layout parameters from signals ---
-  // MORE DRAMATIC difference between calm and agitated states
+  const motionExaggerated = Math.pow(smoothMotion, 0.7)
 
-  // Font size: calm = smaller, intimate. Agitated = bigger, louder.
-  const motionExaggerated = Math.pow(smoothMotion, 0.7) // boost lower values
   const fontSize = FONT_BASE + smoothBrightness * 6 + motionExaggerated * 4
 
-  // Line height: calm = generous breathing room. Agitated = compressed/chaotic.
-  const calmLineHeight = LINE_HEIGHT_RATIO + smoothStillness * 0.4  // very open when still
-  const agitatedLineHeight = LINE_HEIGHT_RATIO - motionExaggerated * 0.25 // tighter when moving
-  const lineHeight = fontSize * (smoothMotion > 0.15 ? agitatedLineHeight : calmLineHeight)
+  const calmLineHeight = LINE_HEIGHT_RATIO + smoothStillness * 0.4
+  const agitatedLineHeight = LINE_HEIGHT_RATIO - motionExaggerated * 0.25
+  const lineHeightValue = fontSize * (smoothMotion > 0.15 ? agitatedLineHeight : calmLineHeight)
 
   const baseWidth = Math.min(MAX_WIDTH, W - MARGIN * 2)
-
-  // Width variance: calm = uniform width. Agitated = wildly uneven.
   const widthVariance = motionExaggerated * 280
-
-  // Jitter: calm = zero. Agitated = strong.
   const jitterAmount = motionExaggerated * 8
-
-  // Letter spacing effect via slight x-offset per character position
-  const charJitter = motionExaggerated * 1.5
-
-  // Opacity: calm = full, settled. Agitated = flickering.
-  const baseAlpha = 0.5 + smoothStillness * 0.45 // calm: up to 0.95. Agitated: 0.5
+  const baseAlpha = 0.5 + smoothStillness * 0.45
 
   // Color: sage when calm, terracotta when agitated
   const colorT = Math.min(motionExaggerated * 1.8, 1)
@@ -486,17 +505,18 @@ function render(time) {
   const g = Math.round(COLOR_CALM[1] + (COLOR_AGITATED[1] - COLOR_CALM[1]) * colorT)
   const b = Math.round(COLOR_CALM[2] + (COLOR_AGITATED[2] - COLOR_CALM[2]) * colorT)
 
+  // Letter spacing: calm = normal, agitated = slightly erratic
+  const baseLetterSpacing = motionExaggerated * 1.5
+
   // Update font if size changed
   updatePrepared(fontSize)
-  ctx.font = currentFont
 
-  // Layout text
+  // Layout text with pretext
   let cursor = { segmentIndex: 0, graphemeIndex: 0 }
   const lines = []
 
   let lineIdx = 0
   while (true) {
-    // Calm: consistent width. Agitated: wavy, unpredictable.
     const noise = Math.sin(lineIdx * 3.7 + time * 0.001) * widthVariance
     const noise2 = Math.cos(lineIdx * 5.3 + time * 0.0015) * widthVariance * 0.4
     const width = Math.max(baseWidth + noise + noise2, 100)
@@ -507,28 +527,36 @@ function render(time) {
     lineIdx++
   }
 
-  // Center text block vertically — when calm, perfectly centered. When agitated, drifting.
-  const totalHeight = lines.length * lineHeight
-  const centerY = (H - totalHeight) / 2 + fontSize
-  const verticalDrift = Math.sin(time * 0.0005) * motionExaggerated * 30
-  let startY = Math.max(MARGIN, centerY + verticalDrift)
+  // Ensure we have enough DOM elements
+  ensureLineElements(lines.length)
 
-  // Draw lines
+  // Center text block vertically
+  const totalHeight = lines.length * lineHeightValue
+  const centerY = (H - totalHeight) / 2
+  const verticalDrift = Math.sin(time * 0.0005) * motionExaggerated * 30
+  const startY = Math.max(MARGIN - fontSize, centerY + verticalDrift)
+
+  // Position the text block
+  textBlock.style.paddingTop = startY + 'px'
+
+  // Update each DOM line
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
+    const el = lineElements[i]
 
-    // Calm: perfectly centered. Agitated: ragged, staggered.
-    const calmX = (W - line.width) / 2
-    const agitatedOffset = Math.sin(i * 2.7 + time * 0.002) * motionExaggerated * 60
-    const xOffset = calmX + agitatedOffset
+    // Text content
+    if (el.textContent !== line.text) {
+      el.textContent = line.text
+    }
 
-    const y = startY + i * lineHeight
-
-    if (y < -lineHeight || y > H + lineHeight) continue
-
-    // Per-line jitter — zero when calm, strong when agitated
+    // Per-line jitter
     const jx = Math.sin(i * 5.3 + time * 0.004) * jitterAmount
     const jy = Math.cos(i * 7.1 + time * 0.005) * jitterAmount * 0.6
+
+    // Horizontal offset: calm = centered, agitated = ragged
+    const calmX = (W - line.width) / 2
+    const agitatedOffset = Math.sin(i * 2.7 + time * 0.002) * motionExaggerated * 60
+    const xOffset = calmX + agitatedOffset + jx
 
     // Per-line alpha variation when agitated
     const alphaFlicker = smoothMotion > 0.15
@@ -537,31 +565,32 @@ function render(time) {
     const lineAlpha = Math.max(0.15, Math.min(1, baseAlpha + alphaFlicker))
 
     // Slight rotation when agitated
-    if (motionExaggerated > 0.1) {
-      ctx.save()
-      const rot = Math.sin(i * 4.3 + time * 0.003) * motionExaggerated * 0.012
-      const cx = xOffset + jx + line.width / 2
-      const cy = y + jy
-      ctx.translate(cx, cy)
-      ctx.rotate(rot)
-      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${lineAlpha})`
-      ctx.fillText(line.text, -line.width / 2, 0)
-      ctx.restore()
-    } else {
-      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${lineAlpha})`
-      ctx.fillText(line.text, xOffset + jx, y + jy)
-    }
+    const rot = motionExaggerated > 0.1
+      ? Math.sin(i * 4.3 + time * 0.003) * motionExaggerated * 0.012
+      : 0
+
+    // Per-line letter spacing variation
+    const lsNoise = Math.sin(i * 2.1 + time * 0.003) * baseLetterSpacing
+    const letterSpacing = lsNoise
+
+    // Apply styles
+    el.style.cssText = `
+      font: 400 ${currentFontSize}px ${FONT_FAMILY};
+      color: rgba(${r}, ${g}, ${b}, ${lineAlpha.toFixed(3)});
+      height: ${lineHeightValue.toFixed(1)}px;
+      line-height: ${lineHeightValue.toFixed(1)}px;
+      transform: translate(${xOffset.toFixed(1)}px, ${jy.toFixed(1)}px) rotate(${rot.toFixed(4)}rad);
+      letter-spacing: ${letterSpacing.toFixed(2)}px;
+      display: block;
+    `
   }
 
-  // Calm state: draw a subtle breathing glow behind text center
+  // Breath glow: visible when still
   if (smoothStillness > 0.3) {
-    const breathCycle = Math.sin(time * 0.001) * 0.5 + 0.5 // 0..1, slow
-    const glowAlpha = (smoothStillness - 0.3) * 0.06 * breathCycle
-    const gradient = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, 300)
-    gradient.addColorStop(0, `rgba(139, 158, 126, ${glowAlpha})`)
-    gradient.addColorStop(1, 'rgba(139, 158, 126, 0)')
-    ctx.fillStyle = gradient
-    ctx.fillRect(0, 0, W, H)
+    const breathCycle = Math.sin(time * 0.001) * 0.5 + 0.5
+    breathGlow.style.opacity = ((smoothStillness - 0.3) * 0.8 * breathCycle).toFixed(3)
+  } else {
+    breathGlow.style.opacity = '0'
   }
 
   // Status display

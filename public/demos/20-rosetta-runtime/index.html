@@ -193,14 +193,14 @@
     color: #6a8a6a;
   }
 
-  .canvas-pane {
+  .output-pane {
     flex: 1;
     display: flex;
     flex-direction: column;
     min-height: 0;
   }
 
-  .canvas-header {
+  .output-header {
     padding: 12px 20px 8px;
     display: flex;
     align-items: center;
@@ -209,30 +209,57 @@
     flex-shrink: 0;
   }
 
-  .canvas-header .label {
+  .output-header .label {
     font-size: 9px;
     letter-spacing: 0.15em;
     text-transform: uppercase;
     color: #5a564e;
   }
 
-  .canvas-header .info {
+  .output-header .info {
     font-size: 9px;
     color: #4a4640;
     letter-spacing: 0.05em;
   }
 
-  .canvas-wrap {
+  .output-wrap {
     flex: 1;
     position: relative;
     overflow: hidden;
     min-height: 0;
   }
 
-  canvas {
-    display: block;
+  #output {
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
+    overflow: hidden;
+  }
+
+  .text-line {
+    position: absolute;
+    white-space: nowrap;
+    line-height: 1;
+    font-family: Georgia, serif;
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  .text-line .hl-cmd {
+    color: #c49a6c;
+  }
+
+  .text-line .hl-arg {
+    color: #6a9a6a;
+  }
+
+  .circle-overlay {
+    position: absolute;
+    border-radius: 50%;
+    border: 1px solid rgba(196, 154, 108, 0.12);
+    pointer-events: none;
   }
 </style>
 </head>
@@ -273,13 +300,13 @@
     </div>
   </div>
 
-  <div class="canvas-pane">
-    <div class="canvas-header">
+  <div class="output-pane">
+    <div class="output-header">
       <span class="label">Output</span>
       <span class="info" id="line-count"></span>
     </div>
-    <div class="canvas-wrap">
-      <canvas id="c"></canvas>
+    <div class="output-wrap">
+      <div id="output"></div>
     </div>
   </div>
 </div>
@@ -289,24 +316,18 @@ import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pr
 
 // --- Elements ---
 const editor = document.getElementById('editor')
-const canvas = document.getElementById('c')
-const ctx = canvas.getContext('2d')
+const outputEl = document.getElementById('output')
 const statusEl = document.getElementById('status')
 const lineCountEl = document.getElementById('line-count')
-const canvasWrap = document.querySelector('.canvas-wrap')
+const outputWrap = document.querySelector('.output-wrap')
 
-// --- Canvas sizing ---
-let dpr = window.devicePixelRatio || 1
+// --- Output sizing ---
 let W, H
 
 function resize() {
-  dpr = window.devicePixelRatio || 1
-  const rect = canvasWrap.getBoundingClientRect()
+  const rect = outputWrap.getBoundingClientRect()
   W = rect.width
   H = rect.height
-  canvas.width = W * dpr
-  canvas.height = H * dpr
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 }
 resize()
 window.addEventListener('resize', resize)
@@ -322,8 +343,6 @@ const highlightEl = document.getElementById('editor-highlight')
 function updateHighlight() {
   const text = editor.value
   const html = buildHighlightedHtml(text)
-  // Add a trailing newline so the overlay height matches even when the
-  // textarea content ends with a newline (browsers add an extra blank line)
   highlightEl.innerHTML = html + '\n'
 }
 
@@ -351,10 +370,8 @@ function buildHighlightedHtml(text) {
   const spans = findHighlightSpans(text)
   if (spans.length === 0) return escapeHtml(text)
 
-  // Sort and merge overlapping spans, keeping type priority (command > arg)
   spans.sort((a, b) => a.start - b.start)
 
-  // Split into non-overlapping segments with type info
   const segments = []
   let pos = 0
   for (const span of spans) {
@@ -374,16 +391,12 @@ function buildHighlightedHtml(text) {
     const escaped = escapeHtml(seg.text)
     if (seg.type === 'command') return `<span class="cmd">${escaped}</span>`
     if (seg.type === 'arg') {
-      // Wrap individual numbers in draggable spans with text offsets
       let html = ''
       const numRegex = /([\s]*)([0-9]+\.?[0-9]*)/g
       let m, lastIdx = 0
       while ((m = numRegex.exec(seg.text)) !== null) {
-        // Text before this match
         if (m.index > lastIdx) html += escapeHtml(seg.text.slice(lastIdx, m.index))
-        // Whitespace before number
         html += escapeHtml(m[1])
-        // Number with data attributes for scrubbing
         const numStart = seg.start + m.index + m[1].length
         html += `<span class="num" data-start="${numStart}" data-len="${m[2].length}">${escapeHtml(m[2])}</span>`
         lastIdx = m.index + m[0].length
@@ -497,7 +510,6 @@ function findCommandSpans(text) {
   let match
   while ((match = regex.exec(text)) !== null) {
     spans.push({ start: match.index, end: match.index + match[0].length, type: 'command' })
-    // Also highlight the numeric arguments after
     const after = text.slice(match.index + match[0].length)
     const argMatch = after.match(/^(\s+[\d.#a-fA-F]+)(\s+[\d.]+)?/)
     if (argMatch) {
@@ -515,20 +527,95 @@ function findCommandSpans(text) {
 // --- Circle width calculation ---
 function getCircleWidthAtY(y, radius, centerX, centerY) {
   const dy = y - centerY
-  if (Math.abs(dy) >= radius) return null // no exclusion
+  if (Math.abs(dy) >= radius) return null
   const halfChord = Math.sqrt(radius * radius - dy * dy)
   return { left: centerX - halfChord, right: centerX + halfChord }
 }
 
+// --- Build highlighted HTML for a single output line ---
+function buildLineHtml(lineText, commands) {
+  const lineSpans = findCommandSpans(lineText)
+
+  if (lineSpans.length === 0) {
+    return `<span style="color:${commands.color}">${escapeHtml(lineText)}</span>`
+  }
+
+  lineSpans.sort((a, b) => a.start - b.start)
+
+  // Merge overlapping spans
+  const merged = []
+  for (const s of lineSpans) {
+    if (merged.length > 0 && s.start <= merged[merged.length - 1].end) {
+      merged[merged.length - 1].end = Math.max(merged[merged.length - 1].end, s.end)
+      merged[merged.length - 1].type = s.type === 'command' ? 'command' : merged[merged.length - 1].type
+    } else {
+      merged.push({ ...s })
+    }
+  }
+
+  let html = ''
+  let pos = 0
+
+  for (const span of merged) {
+    if (span.start > pos) {
+      html += `<span style="color:${commands.color}">${escapeHtml(lineText.slice(pos, span.start))}</span>`
+    }
+
+    const cmdPart = lineText.slice(span.start, span.end)
+    const cmdMatch = cmdPart.match(/^(\s*)(width|circle|columns|wave|indent|mirror|breathe|font|color|gravity)/i)
+
+    if (cmdMatch) {
+      const leadingSpace = cmdMatch[1]
+      const keyword = cmdMatch[2]
+      const rest = cmdPart.slice(cmdMatch[0].length)
+
+      if (leadingSpace) {
+        html += `<span style="color:${commands.color}">${escapeHtml(leadingSpace)}</span>`
+      }
+      html += `<span class="hl-cmd">${escapeHtml(keyword)}</span>`
+      if (rest) {
+        html += `<span class="hl-arg">${escapeHtml(rest)}</span>`
+      }
+    } else {
+      html += `<span class="hl-arg">${escapeHtml(cmdPart)}</span>`
+    }
+
+    pos = span.end
+  }
+
+  if (pos < lineText.length) {
+    html += `<span style="color:${commands.color}">${escapeHtml(lineText.slice(pos))}</span>`
+  }
+
+  return html
+}
+
+// --- DOM line pool for efficient reuse ---
+let linePool = []
+
+function acquireLine() {
+  if (linePool.length > 0) {
+    const el = linePool.pop()
+    el.style.display = ''
+    return el
+  }
+  const el = document.createElement('div')
+  el.className = 'text-line'
+  return el
+}
+
 // --- Render ---
 let animFrame = null
+let prevLineCount = 0
 
 function render() {
   animFrame = requestAnimationFrame(render)
 
   const text = editor.value
   if (!text.trim()) {
-    ctx.clearRect(0, 0, W, H)
+    outputEl.innerHTML = ''
+    linePool = []
+    prevLineCount = 0
     lineCountEl.textContent = '0 lines'
     return
   }
@@ -551,8 +638,6 @@ function render() {
   statusEl.textContent = 'running'
   statusEl.style.color = '#3a6a4a'
 
-  ctx.clearRect(0, 0, W, H)
-
   // Determine layout bounds
   let baseWidth = Math.min(commands.baseWidth, W - PAD * 2)
 
@@ -567,20 +652,17 @@ function render() {
   const totalAvail = baseWidth * breatheMod
   const colWidth = numCols > 1 ? (totalAvail - colGap * (numCols - 1)) / numCols : totalAvail
 
-  // Center of canvas for circle
-  const canvasCenterX = W / 2
-  const canvasCenterY = H / 2
+  // Center of output for circle
+  const centerX = W / 2
+  const centerY = H / 2
 
   // Compute starting X for centered layout
   const layoutStartX = Math.max(PAD, (W - totalAvail) / 2)
 
-  // --- Layout pass: line by line, adjusting width per Y position ---
-  // For circle mode, we need to know Y before we lay out. We do a forward
-  // pass, computing Y as we go and adjusting widths accordingly.
-
+  // --- Layout pass ---
   let cursor = { segmentIndex: 0, graphemeIndex: 0 }
   let lineIndex = 0
-  let allLines = [] // { text, x, y, lineIndex }
+  let allLines = []
   let y = PAD + lineHeight
   const maxIterations = 2000
   let iterations = 0
@@ -588,48 +670,40 @@ function render() {
   while (iterations++ < maxIterations) {
     if (y > H + lineHeight) break
 
-    // --- Step 1: Circle exclusion (depends on absolute canvas position) ---
-    // Start with the full column width; circle carves from this first.
     let availLeft = layoutStartX
     let availRight = layoutStartX + colWidth
     let circleActive = false
 
     if (commands.circle) {
-      const circ = getCircleWidthAtY(y - fontSize * 0.3, commands.circle.radius, canvasCenterX, canvasCenterY)
+      const circ = getCircleWidthAtY(y - fontSize * 0.3, commands.circle.radius, centerX, centerY)
       if (circ) {
         circleActive = true
         const leftSpace = Math.max(0, circ.left - availLeft)
         const rightSpace = Math.max(0, availRight - circ.right)
 
         if (leftSpace >= rightSpace && leftSpace > 20) {
-          // Use space to the left of the circle
           availRight = circ.left
         } else if (rightSpace > 20) {
-          // Use space to the right of the circle
           availLeft = circ.right + 4
         } else {
-          // Circle fills the whole width here -- skip this Y
           y += lineHeight
           continue
         }
       }
     }
 
-    // --- Step 2: Wave indent (applied after circle exclusion) ---
     let waveIndent = 0
     if (commands.wave) {
       waveIndent = (Math.sin(lineIndex * commands.wave.frequency) + 1) * 0.5 * commands.wave.amplitude
       availLeft += waveIndent
     }
 
-    // --- Step 3: Progressive indent (applied after circle exclusion) ---
     let indentPx = 0
     if (commands.indent) {
       indentPx = lineIndex * commands.indent
       availLeft += indentPx
     }
 
-    // Final line X and effective width
     let lineX = availLeft
     let effectiveWidth = Math.max(availRight - availLeft, 20)
 
@@ -649,15 +723,10 @@ function render() {
     lineIndex++
   }
 
-  const totalLines = allLines.length
-
-  // If columns, we need to re-layout into columns
-  // For columns mode, split text evenly and lay out each column separately
-  // Circle is disabled in multi-column mode (too complex to compose well)
+  // If columns, re-layout into columns
   if (numCols > 1) {
     allLines = []
     cursor = { segmentIndex: 0, graphemeIndex: 0 }
-    // First, collect all lines with single-column width to count them
     let tempLines = []
     let tempCursor = { segmentIndex: 0, graphemeIndex: 0 }
     let ti = 0
@@ -675,7 +744,6 @@ function render() {
     }
     const perCol = Math.ceil(tempLines.length / numCols)
 
-    // Now re-layout, assigning lines to columns
     cursor = { segmentIndex: 0, graphemeIndex: 0 }
     lineIndex = 0
     let colIdx = 0
@@ -701,7 +769,7 @@ function render() {
     }
   }
 
-  // Gravity: offset all lines downward
+  // Gravity
   if (commands.gravity && allLines.length > 0) {
     const minY = Math.min(...allLines.map(l => l.y))
     const maxY = Math.max(...allLines.map(l => l.y))
@@ -714,122 +782,77 @@ function render() {
     }
   }
 
-  // --- Render pass ---
-  ctx.font = fontStr
-  ctx.textBaseline = 'alphabetic'
+  // --- DOM render pass ---
+  const totalLines = allLines.length
 
-  for (const ln of allLines) {
-    if (ln.y < -lineHeight || ln.y > H + lineHeight) continue
+  // Collect existing line elements from outputEl (excluding the circle overlay)
+  const existingLines = outputEl.querySelectorAll('.text-line')
 
+  // Reuse or create line elements
+  for (let i = 0; i < totalLines; i++) {
+    const ln = allLines[i]
+    let el
+
+    if (i < existingLines.length) {
+      el = existingLines[i]
+    } else {
+      el = acquireLine()
+      outputEl.appendChild(el)
+    }
+
+    // Position
+    el.style.left = ln.x + 'px'
+    el.style.top = (ln.y - fontSize) + 'px'
+    el.style.fontSize = fontSize + 'px'
+    el.style.fontFamily = 'Georgia, serif'
+    el.style.width = ln.width + 'px'
+    el.style.whiteSpace = 'nowrap'
+    el.style.overflow = 'visible'
+
+    // Mirror
     if (commands.mirror) {
-      ctx.save()
-      ctx.translate(ln.x + ln.width, 0)
-      ctx.scale(-1, 1)
-      renderLineWithHighlighting(ctx, ln.text, 0, ln.y, commands, fontStr)
-      ctx.restore()
+      el.style.transform = 'scaleX(-1)'
+      el.style.transformOrigin = 'center'
     } else {
-      renderLineWithHighlighting(ctx, ln.text, ln.x, ln.y, commands, fontStr)
+      el.style.transform = ''
+      el.style.transformOrigin = ''
     }
+
+    // Build highlighted content
+    el.innerHTML = buildLineHtml(ln.text, commands)
   }
 
-  // Draw circle outline faintly if circle command active (disabled in multi-column mode)
+  // Remove excess line elements
+  for (let i = existingLines.length - 1; i >= totalLines; i--) {
+    const el = existingLines[i]
+    el.style.display = 'none'
+    linePool.push(el)
+    outputEl.removeChild(el)
+  }
+
+  // Circle overlay
+  let circleEl = outputEl.querySelector('.circle-overlay')
   if (commands.circle && numCols <= 1) {
-    ctx.beginPath()
-    ctx.arc(canvasCenterX, canvasCenterY, commands.circle.radius, 0, Math.PI * 2)
-    ctx.strokeStyle = 'rgba(196, 154, 108, 0.12)'
-    ctx.lineWidth = 1
-    ctx.stroke()
-  }
-
-  lineCountEl.textContent = `${allLines.length} lines`
-}
-
-// --- Render a line with command highlighting ---
-function renderLineWithHighlighting(ctx, lineText, x, y, commands, fontStr) {
-  const lineSpans = findCommandSpans(lineText)
-
-  if (lineSpans.length === 0) {
-    ctx.fillStyle = commands.color
-    ctx.font = fontStr
-    ctx.textAlign = 'left'
-    ctx.fillText(lineText, x, y)
-    return
-  }
-
-  // Sort spans by start position
-  lineSpans.sort((a, b) => a.start - b.start)
-
-  // Merge overlapping spans
-  const merged = []
-  for (const s of lineSpans) {
-    if (merged.length > 0 && s.start <= merged[merged.length - 1].end) {
-      merged[merged.length - 1].end = Math.max(merged[merged.length - 1].end, s.end)
-      merged[merged.length - 1].type = s.type === 'command' ? 'command' : merged[merged.length - 1].type
-    } else {
-      merged.push({ ...s })
+    if (!circleEl) {
+      circleEl = document.createElement('div')
+      circleEl.className = 'circle-overlay'
+      outputEl.appendChild(circleEl)
     }
+    const r = commands.circle.radius
+    circleEl.style.width = (r * 2) + 'px'
+    circleEl.style.height = (r * 2) + 'px'
+    circleEl.style.left = (centerX - r) + 'px'
+    circleEl.style.top = (centerY - r) + 'px'
+    circleEl.style.display = ''
+  } else if (circleEl) {
+    circleEl.style.display = 'none'
   }
 
-  // Render segments with color differentiation
-  let curX = x
-  let pos = 0
-  ctx.font = fontStr
-  ctx.textAlign = 'left'
-
-  for (const span of merged) {
-    // Text before this span
-    if (span.start > pos) {
-      const before = lineText.slice(pos, span.start)
-      ctx.fillStyle = commands.color
-      ctx.fillText(before, curX, y)
-      curX += ctx.measureText(before).width
-    }
-
-    const cmdPart = lineText.slice(span.start, span.end)
-
-    // Split command keyword from its arguments
-    const cmdMatch = cmdPart.match(/^(\s*)(width|circle|columns|wave|indent|mirror|breathe|font|color|gravity)/i)
-    if (cmdMatch) {
-      const leadingSpace = cmdMatch[1]
-      const keyword = cmdMatch[2]
-      const rest = cmdPart.slice(cmdMatch[0].length)
-
-      if (leadingSpace) {
-        ctx.fillStyle = commands.color
-        ctx.fillText(leadingSpace, curX, y)
-        curX += ctx.measureText(leadingSpace).width
-      }
-
-      // Command keyword in warm accent
-      ctx.fillStyle = '#c49a6c'
-      ctx.fillText(keyword, curX, y)
-      curX += ctx.measureText(keyword).width
-
-      // Arguments in muted green
-      if (rest) {
-        ctx.fillStyle = '#6a9a6a'
-        ctx.fillText(rest, curX, y)
-        curX += ctx.measureText(rest).width
-      }
-    } else {
-      ctx.fillStyle = '#6a9a6a'
-      ctx.fillText(cmdPart, curX, y)
-      curX += ctx.measureText(cmdPart).width
-    }
-
-    pos = span.end
-  }
-
-  // Remaining text after last span
-  if (pos < lineText.length) {
-    const after = lineText.slice(pos)
-    ctx.fillStyle = commands.color
-    ctx.fillText(after, curX, y)
-  }
+  lineCountEl.textContent = `${totalLines} lines`
+  prevLineCount = totalLines
 }
 
 // --- Number scrubbing ---
-// Click and drag on green numbers in the overlay to scrub their values
 highlightEl.addEventListener('mousedown', (e) => {
   const numSpan = e.target.closest('.num')
   if (!numSpan) return
@@ -839,7 +862,6 @@ highlightEl.addEventListener('mousedown', (e) => {
 
   const startOffset = parseInt(numSpan.dataset.start)
   const originalText = editor.value
-  // Find the current number at that offset
   const numMatch = originalText.slice(startOffset).match(/^[0-9]+\.?[0-9]*/)
   if (!numMatch) return
   const originalValue = parseFloat(numMatch[0])
@@ -853,14 +875,13 @@ highlightEl.addEventListener('mousedown', (e) => {
   function onMove(e2) {
     const dx = e2.clientX - startX
     let sensitivity = 1
-    if (e2.shiftKey) sensitivity = 0.1  // fine
-    if (e2.altKey) sensitivity = 5      // coarse
+    if (e2.shiftKey) sensitivity = 0.1
+    if (e2.altKey) sensitivity = 5
 
     let newValue = originalValue + dx * sensitivity
     newValue = Math.max(0, newValue)
     const newStr = isFloat ? newValue.toFixed(1) : String(Math.round(newValue))
 
-    // Re-find the number at startOffset (it may have changed length from prior drags)
     const text = editor.value
     const curMatch = text.slice(startOffset).match(/^[0-9]+\.?[0-9]*/)
     if (!curMatch) return
@@ -874,7 +895,6 @@ highlightEl.addEventListener('mousedown', (e) => {
     document.removeEventListener('mouseup', onUp)
     document.body.style.cursor = ''
     document.body.style.userSelect = ''
-    // The span may have been replaced by updateHighlight, so just remove class from all
     highlightEl.querySelectorAll('.scrubbing').forEach(el => el.classList.remove('scrubbing'))
   }
 

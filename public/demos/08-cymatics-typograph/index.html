@@ -31,8 +31,35 @@
     overflow: hidden;
   }
 
-  canvas {
-    display: block;
+  #bg-canvas {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  #text-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  #text-layer .text-line {
+    position: absolute;
+    font: 14px Literata, Georgia, serif;
+    white-space: nowrap;
+    line-height: 1;
+    pointer-events: auto;
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  #text-layer .text-line span {
+    transition: none;
   }
 
   #input-panel {
@@ -82,6 +109,7 @@
     color: var(--ochre);
     opacity: 0.5;
     letter-spacing: 0.1em;
+    z-index: 10;
   }
 
   #mode-display {
@@ -94,6 +122,7 @@
     color: var(--sage);
     opacity: 0.5;
     letter-spacing: 0.1em;
+    z-index: 10;
   }
 
   #title {
@@ -105,6 +134,7 @@
     font-size: 0.9rem;
     color: #C2714F88;
     letter-spacing: 0.05em;
+    z-index: 10;
   }
 
   #status-msg {
@@ -208,7 +238,8 @@
 <body>
 
 <div id="title">Cymatics Typograph</div>
-<canvas id="canvas"></canvas>
+<canvas id="bg-canvas"></canvas>
+<div id="text-layer"></div>
 
 <div id="input-panel">
   <button class="input-btn" id="mic-btn">Use Microphone</button>
@@ -234,8 +265,9 @@
 <script type="module">
 import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
 
-const canvas = document.getElementById('canvas')
-const ctx = canvas.getContext('2d')
+const bgCanvas = document.getElementById('bg-canvas')
+const bgCtx = bgCanvas.getContext('2d')
+const textLayer = document.getElementById('text-layer')
 const inputPanel = document.getElementById('input-panel')
 const micBtn = document.getElementById('mic-btn')
 const fileBtn = document.getElementById('file-btn')
@@ -258,7 +290,7 @@ const FONT = `${FONT_SIZE}px Literata, Georgia`
 const LINE_HEIGHT = FONT_SIZE * 1.6
 const MIN_WIDTH = FONT_SIZE * 3
 
-let canvasW, canvasH
+let viewW, viewH
 let audioCtx = null
 let analyser = null
 let freqData = null
@@ -279,6 +311,10 @@ let audioPauseOffset = 0
 let audioPlaying = false
 let oscillatorNode = null
 
+// DOM element pool for text lines
+let linePool = []
+let activeLineCount = 0
+
 function showStatus(msg) {
   statusMsg.textContent = msg
   statusMsg.classList.add('visible')
@@ -297,13 +333,13 @@ function formatTime(seconds) {
 // --- Resize ---
 function resize() {
   const dpr = window.devicePixelRatio || 1
-  canvasW = window.innerWidth
-  canvasH = window.innerHeight
-  canvas.width = canvasW * dpr
-  canvas.height = canvasH * dpr
-  canvas.style.width = canvasW + 'px'
-  canvas.style.height = canvasH + 'px'
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  viewW = window.innerWidth
+  viewH = window.innerHeight
+  bgCanvas.width = viewW * dpr
+  bgCanvas.height = viewH * dpr
+  bgCanvas.style.width = viewW + 'px'
+  bgCanvas.style.height = viewH + 'px'
+  bgCtx.setTransform(dpr, 0, 0, dpr, 0, 0)
 }
 resize()
 window.addEventListener('resize', resize)
@@ -509,21 +545,21 @@ function frequencyToModes(frequency, amplitude) {
   return { n, m }
 }
 
-// --- Draw background Chladni pattern ---
+// --- Draw background Chladni pattern (canvas, no text) ---
 function drawChladniBackground(n, m, amplitude) {
   const step = 3
   const bgAlpha = 0.03 + amplitude * 0.04
-  const imgW = Math.ceil(canvasW / step)
-  const imgH = Math.ceil(canvasH / step)
+  const imgW = Math.ceil(viewW / step)
+  const imgH = Math.ceil(viewH / step)
   const offscreen = new OffscreenCanvas(imgW, imgH)
   const offCtx = offscreen.getContext('2d')
   const imageData = offCtx.createImageData(imgW, imgH)
   const data = imageData.data
 
   for (let py = 0; py < imgH; py++) {
-    const yNorm = (py * step) / canvasH
+    const yNorm = (py * step) / viewH
     for (let px = 0; px < imgW; px++) {
-      const xNorm = (px * step) / canvasW
+      const xNorm = (px * step) / viewW
       const val = Math.abs(chladni(xNorm, yNorm, n, m))
 
       if (val < 0.15) {
@@ -539,8 +575,8 @@ function drawChladniBackground(n, m, amplitude) {
   }
 
   offCtx.putImageData(imageData, 0, 0)
-  ctx.imageSmoothingEnabled = false
-  ctx.drawImage(offscreen, 0, 0, canvasW, canvasH)
+  bgCtx.imageSmoothingEnabled = false
+  bgCtx.drawImage(offscreen, 0, 0, viewW, viewH)
 }
 
 // Update playback progress
@@ -559,6 +595,31 @@ function updateProgress() {
   }
 }
 
+// --- Get or create a pooled line element ---
+function getLineElement(index) {
+  if (index < linePool.length) {
+    return linePool[index]
+  }
+  const div = document.createElement('div')
+  div.className = 'text-line'
+  textLayer.appendChild(div)
+  linePool.push(div)
+  return div
+}
+
+// Hide unused pooled lines
+function hideExtraLines(usedCount) {
+  for (let i = usedCount; i < activeLineCount; i++) {
+    linePool[i].style.display = 'none'
+  }
+  activeLineCount = usedCount
+}
+
+// --- Offscreen canvas for measuring character widths ---
+const measureCanvas = document.createElement('canvas')
+const measureCtx = measureCanvas.getContext('2d')
+measureCtx.font = FONT
+
 // --- Prepare text once ---
 const repeatedText = (poem + ' ').repeat(8)
 let prepared = null
@@ -570,7 +631,7 @@ try {
 
 // --- Main render ---
 function render() {
-  ctx.clearRect(0, 0, canvasW, canvasH)
+  bgCtx.clearRect(0, 0, viewW, viewH)
 
   if (!prepared) {
     requestAnimationFrame(render)
@@ -599,21 +660,21 @@ function render() {
 
   const threshold = 0.12 + currentAmplitude * 0.25
 
-  // Draw faint Chladni pattern in background
+  // Draw faint Chladni pattern in background canvas
   drawChladniBackground(n, m, currentAmplitude)
 
-  ctx.font = FONT
-
+  // Layout text into DOM elements along nodal lines
   let cursor = { segmentIndex: 0, graphemeIndex: 0 }
   const margin = 40
+  let lineIndex = 0
 
-  for (let y = margin; y < canvasH - margin; y += LINE_HEIGHT) {
-    const yNorm = y / canvasH
+  for (let y = margin; y < viewH - margin; y += LINE_HEIGHT) {
+    const yNorm = y / viewH
     const ranges = getNodalRanges(yNorm, n, m, threshold)
 
     for (const range of ranges) {
-      const xStart = range.start * canvasW
-      const xEnd = range.end * canvasW
+      const xStart = range.start * viewW
+      const xEnd = range.end * viewW
       const availableWidth = xEnd - xStart - margin
 
       if (availableWidth < MIN_WIDTH) continue
@@ -621,17 +682,26 @@ function render() {
       const line = layoutNextLine(prepared, cursor, availableWidth)
       if (!line) break
 
-      const rangeWidth = range.end - range.start
       const text = line.text
+      const rangeWidth = range.end - range.start
 
-      const textWidth = ctx.measureText(text).width
+      // Measure full text width for centering
+      const textWidth = measureCtx.measureText(text).width
       const centeredX = xStart + (xEnd - xStart - textWidth) / 2
 
+      // Build per-character spans with Chladni-driven opacity
+      const div = getLineElement(lineIndex)
+      div.style.display = ''
+      div.style.left = centeredX + 'px'
+      div.style.top = y + 'px'
+
+      // Build innerHTML with per-character opacity
+      let html = ''
       let charX = centeredX
       for (let c = 0; c < text.length; c++) {
         const ch = text[c]
-        const charWidth = ctx.measureText(ch).width
-        const charXNorm = (charX + charWidth / 2) / canvasW
+        const charWidth = measureCtx.measureText(ch).width
+        const charXNorm = (charX + charWidth / 2) / viewW
 
         const distFromStart = (charXNorm - range.start) / rangeWidth
         const distFromEnd = (range.end - charXNorm) / rangeWidth
@@ -642,17 +712,24 @@ function render() {
         const nodalFade = Math.max(0.3, 1 - nodalVal / threshold)
 
         const alpha = edgeFade * nodalFade * (0.6 + currentAmplitude * 0.4)
+        const opacity = Math.max(0.05, alpha)
 
-        ctx.fillStyle = `rgba(232, 228, 220, ${Math.max(0.05, alpha)})`
-        ctx.fillText(ch, charX, y)
+        // Escape HTML entities
+        const safe = ch === '<' ? '&lt;' : ch === '>' ? '&gt;' : ch === '&' ? '&amp;' : ch
+        html += `<span style="opacity:${opacity.toFixed(2)}">${safe}</span>`
         charX += charWidth
       }
 
+      div.innerHTML = html
       cursor = line.end
+      lineIndex++
     }
 
     if (!cursor || (cursor.segmentIndex === 0 && cursor.graphemeIndex === 0)) continue
   }
+
+  // Hide any previously visible lines that are no longer needed
+  hideExtraLines(lineIndex)
 
   updateProgress()
 

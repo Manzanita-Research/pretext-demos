@@ -21,11 +21,47 @@
     width: 100vw;
   }
 
-  canvas {
+  /* --- Glow canvas (background effects only, no text) --- */
+  #glow-canvas {
     display: block;
     position: absolute;
     top: 0;
     left: 0;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* --- Text container --- */
+  #text-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  #text-body {
+    position: absolute;
+    max-width: 640px;
+    font-size: 18px;
+    line-height: 30px;
+    font-family: 'Literata', Georgia, serif;
+  }
+
+  .text-line {
+    position: relative;
+    height: 30px;
+    white-space: pre;
+  }
+
+  .text-char {
+    display: inline-block;
+    transition: none;
+    will-change: transform, opacity, color;
+    white-space: pre;
   }
 
   #note {
@@ -255,7 +291,11 @@
 </head>
 <body>
 
-<canvas id="canvas"></canvas>
+<canvas id="glow-canvas"></canvas>
+
+<div id="text-container">
+  <div id="text-body"></div>
+</div>
 
 <div id="controls">
   <div style="display: flex; gap: 6px;">
@@ -286,8 +326,9 @@
 <script type="module">
 import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
 
-const canvas = document.getElementById('canvas')
-const ctx = canvas.getContext('2d')
+const glowCanvas = document.getElementById('glow-canvas')
+const glowCtx = glowCanvas.getContext('2d')
+const textBody = document.getElementById('text-body')
 const radiusIndicator = document.getElementById('radius-indicator')
 const calibrationHint = document.getElementById('calibration-hint')
 const btnMouse = document.getElementById('btn-mouse')
@@ -318,7 +359,7 @@ const MAX_WIDTH = 640
 const FOVEAL_RADIUS_MIN = 60
 const FOVEAL_RADIUS_MAX = 400
 const FOVEAL_RADIUS_DEFAULT = 140
-const PARAFOVEAL_RATIO = 2.7 // parafoveal = foveal * this
+const PARAFOVEAL_RATIO = 2.7
 const SCRAMBLE_POOL = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.,;:\u2014\'"!?  '
 
 // --- State ---
@@ -331,22 +372,27 @@ let smoothY = -1000
 let fovealRadius = FOVEAL_RADIUS_DEFAULT
 let targetFovealRadius = FOVEAL_RADIUS_DEFAULT
 let lines = []
-let charPositions = [] // [{char, x, y, width}]
+let charData = [] // [{char, el, x, y, width}]
 let textOffsetX = 0
 let textOffsetY = 0
 let dpr = 1
 let frameCount = 0
-let inputMode = 'mouse' // 'mouse' or 'eyes'
+let inputMode = 'mouse'
 let webgazerReady = false
 let radiusFlashTimer = 0
-let lensRingPulse = 0 // for the resize pulse animation
+let lensRingPulse = 0
+
+// Offscreen canvas for text measurement only
+const measureCanvas = document.createElement('canvas')
+const measureCtx = measureCanvas.getContext('2d')
 
 // --- Prepare text layout ---
 const prepared = prepareWithSegments(passage, FONT)
 
 function layoutText() {
   lines = []
-  charPositions = []
+  charData = []
+  textBody.innerHTML = ''
 
   let cursor = { segmentIndex: 0, graphemeIndex: 0 }
   let y = 0
@@ -359,43 +405,60 @@ function layoutText() {
     y += LINE_HEIGHT
   }
 
-  // Measure each character position
+  // Compute centering offsets
   const totalHeight = lines.length * LINE_HEIGHT
-  textOffsetX = (canvas.width / dpr - MAX_WIDTH) / 2
-  textOffsetY = Math.max(60, (canvas.height / dpr - totalHeight) / 2)
+  textOffsetX = (window.innerWidth - MAX_WIDTH) / 2
+  textOffsetY = Math.max(60, (window.innerHeight - totalHeight) / 2)
 
-  charPositions = []
-  ctx.save()
-  ctx.font = FONT
+  // Position the text body container
+  textBody.style.left = textOffsetX + 'px'
+  textBody.style.top = textOffsetY + 'px'
+  textBody.style.width = MAX_WIDTH + 'px'
+
+  // Measure characters and build DOM
+  measureCtx.font = FONT
 
   for (const line of lines) {
+    const lineEl = document.createElement('div')
+    lineEl.className = 'text-line'
+    lineEl.style.height = LINE_HEIGHT + 'px'
+
     const chars = [...line.text]
     let xAccum = 0
 
     for (let i = 0; i < chars.length; i++) {
       const ch = chars[i]
-      const w = ctx.measureText(ch).width
-      charPositions.push({
+      const w = measureCtx.measureText(ch).width
+
+      const span = document.createElement('span')
+      span.className = 'text-char'
+      span.textContent = ch
+      span.dataset.origChar = ch
+      lineEl.appendChild(span)
+
+      charData.push({
         char: ch,
+        el: span,
         x: textOffsetX + xAccum,
         y: textOffsetY + line.y,
         width: w
       })
+
       xAccum += w
     }
-  }
 
-  ctx.restore()
+    textBody.appendChild(lineEl)
+  }
 }
 
 // --- Resize ---
 function resize() {
   dpr = window.devicePixelRatio || 1
-  canvas.width = window.innerWidth * dpr
-  canvas.height = window.innerHeight * dpr
-  canvas.style.width = window.innerWidth + 'px'
-  canvas.style.height = window.innerHeight + 'px'
-  ctx.scale(dpr, dpr)
+  glowCanvas.width = window.innerWidth * dpr
+  glowCanvas.height = window.innerHeight * dpr
+  glowCanvas.style.width = window.innerWidth + 'px'
+  glowCanvas.style.height = window.innerHeight + 'px'
+  glowCtx.scale(dpr, dpr)
   layoutText()
 }
 
@@ -414,21 +477,15 @@ window.addEventListener('mouseleave', () => {
 })
 
 // --- Scroll wheel lens size ---
-canvas.addEventListener('wheel', (e) => {
+window.addEventListener('wheel', (e) => {
   e.preventDefault()
-
-  // Scroll up (negative deltaY) = bigger lens, scroll down = smaller
   const delta = -e.deltaY * 0.5
   targetFovealRadius = Math.max(
     FOVEAL_RADIUS_MIN,
     Math.min(FOVEAL_RADIUS_MAX, targetFovealRadius + delta)
   )
-
-  // Trigger pulse animation
   lensRingPulse = 1.0
-
-  // Show radius indicator
-  radiusFlashTimer = 90 // ~1.5 seconds at 60fps
+  radiusFlashTimer = 90
 }, { passive: false })
 
 // --- Calibration system ---
@@ -437,7 +494,6 @@ const calProgressEl = document.getElementById('cal-progress')
 let calibrationTargets = []
 let calibrationComplete = false
 
-// 9-point calibration grid (percentage positions)
 const CAL_POINTS = [
   { x: 10, y: 10 }, { x: 50, y: 10 }, { x: 90, y: 10 },
   { x: 10, y: 50 }, { x: 50, y: 50 }, { x: 90, y: 50 },
@@ -445,11 +501,9 @@ const CAL_POINTS = [
 ]
 
 function createCalibrationTargets() {
-  // Remove old targets
   calibrationTargets.forEach(t => t.el.remove())
   calibrationTargets = []
 
-  // Shuffle order for variety
   const order = [...CAL_POINTS].sort(() => Math.random() - 0.5)
 
   order.forEach((pt, i) => {
@@ -468,12 +522,10 @@ function showNextTarget() {
   calProgressEl.textContent = `${clicked} / ${calibrationTargets.length}`
 
   if (clicked >= calibrationTargets.length) {
-    // All done — close calibration
     finishCalibration()
     return
   }
 
-  // Show the next unclicked target
   const next = calibrationTargets.find(t => !t.clicked)
   if (next) {
     next.el.classList.add('active')
@@ -486,19 +538,14 @@ function handleTargetClick(target) {
   target.el.classList.remove('active')
   target.el.classList.add('clicked')
 
-  // Feed click position to WebGazer for calibration
-  // WebGazer uses click events to train its regression model,
-  // so clicking while looking at the target IS the calibration
   const rect = target.el.getBoundingClientRect()
   const cx = rect.left + rect.width / 2
   const cy = rect.top + rect.height / 2
 
-  // Record a few extra training points around the click
   if (typeof webgazer !== 'undefined' && webgazer.recordScreenPosition) {
     webgazer.recordScreenPosition(cx, cy, 'click')
   }
 
-  // Brief pause, then show next
   setTimeout(showNextTarget, 400)
 }
 
@@ -506,13 +553,11 @@ function finishCalibration() {
   calibrationComplete = true
   calibrationOverlay.classList.remove('active')
 
-  // Clean up targets after fade
   setTimeout(() => {
     calibrationTargets.forEach(t => t.el.remove())
     calibrationTargets = []
   }, 500)
 
-  // Show a brief success message
   calibrationHint.textContent = 'Calibrated. Move your eyes to read.'
   calibrationHint.classList.add('visible')
   setTimeout(() => calibrationHint.classList.remove('visible'), 4000)
@@ -522,8 +567,6 @@ function startCalibration() {
   calibrationComplete = false
   calibrationOverlay.classList.add('active')
   createCalibrationTargets()
-
-  // Show first target after a brief pause (let user read instructions)
   setTimeout(showNextTarget, 1500)
 }
 
@@ -549,7 +592,6 @@ btnEyes.addEventListener('click', async () => {
 
   if (webgazerReady) {
     try { webgazer.resume() } catch (_) {}
-    // Offer recalibration
     if (calibrationComplete) {
       calibrationHint.textContent = 'Eye tracking active. Click "Eye Tracking" again to recalibrate.'
       calibrationHint.classList.add('visible')
@@ -560,7 +602,6 @@ btnEyes.addEventListener('click', async () => {
     return
   }
 
-  // Initialize WebGazer
   if (typeof webgazer === 'undefined') {
     console.warn('WebGazer not available. Falling back to mouse.')
     inputMode = 'mouse'
@@ -581,7 +622,6 @@ btnEyes.addEventListener('click', async () => {
     await webgazer.begin()
     webgazerReady = true
 
-    // Style the video preview
     setTimeout(() => {
       const videoContainer = document.getElementById('webgazerVideoContainer')
       if (videoContainer) {
@@ -604,7 +644,6 @@ btnEyes.addEventListener('click', async () => {
       if (gazeDot) gazeDot.style.display = 'none'
     }, 500)
 
-    // Start calibration after WebGazer initializes
     setTimeout(startCalibration, 1000)
 
   } catch (err) {
@@ -646,65 +685,65 @@ function render() {
 
   const parafovealRadius = fovealRadius * PARAFOVEAL_RATIO
 
-  const w = canvas.width / dpr
-  const h = canvas.height / dpr
+  const w = window.innerWidth
+  const h = window.innerHeight
 
-  // Clear
-  ctx.clearRect(0, 0, w, h)
+  // --- Draw glow/ring effects on canvas ---
+  glowCtx.clearRect(0, 0, w, h)
 
   const isActive = inputX > 0 && inputY > 0
 
-  // Draw radial glow around cursor
   if (isActive) {
-    const gradient = ctx.createRadialGradient(
+    // Radial glow
+    const gradient = glowCtx.createRadialGradient(
       smoothX, smoothY, 0,
       smoothX, smoothY, fovealRadius * 1.5
     )
     gradient.addColorStop(0, 'rgba(194, 113, 79, 0.03)')
     gradient.addColorStop(0.5, 'rgba(232, 228, 220, 0.015)')
     gradient.addColorStop(1, 'rgba(232, 228, 220, 0)')
-    ctx.fillStyle = gradient
-    ctx.fillRect(0, 0, w, h)
+    glowCtx.fillStyle = gradient
+    glowCtx.fillRect(0, 0, w, h)
+
+    // Foveal radius indicator ring
+    glowCtx.beginPath()
+    glowCtx.arc(smoothX, smoothY, fovealRadius, 0, Math.PI * 2)
+    glowCtx.strokeStyle = 'rgba(194, 113, 79, 0.04)'
+    glowCtx.lineWidth = 1
+    glowCtx.stroke()
+
+    // Cursor dot
+    glowCtx.beginPath()
+    glowCtx.arc(smoothX, smoothY, 3, 0, Math.PI * 2)
+    glowCtx.fillStyle = 'rgba(194, 113, 79, 0.6)'
+    glowCtx.fill()
   }
 
-  // Draw foveal radius indicator ring
-  if (isActive) {
-    ctx.beginPath()
-    ctx.arc(smoothX, smoothY, fovealRadius, 0, Math.PI * 2)
-    ctx.strokeStyle = 'rgba(194, 113, 79, 0.04)'
-    ctx.lineWidth = 1
-    ctx.stroke()
-  }
-
-  // Draw lens resize pulse ring
+  // Lens resize pulse ring
   if (lensRingPulse > 0.01 && isActive) {
-    ctx.beginPath()
+    glowCtx.beginPath()
     const pulseRadius = fovealRadius + (1 - lensRingPulse) * 20
-    ctx.arc(smoothX, smoothY, pulseRadius, 0, Math.PI * 2)
-    ctx.strokeStyle = `rgba(194, 113, 79, ${lensRingPulse * 0.35})`
-    ctx.lineWidth = 2
-    ctx.stroke()
+    glowCtx.arc(smoothX, smoothY, pulseRadius, 0, Math.PI * 2)
+    glowCtx.strokeStyle = `rgba(194, 113, 79, ${lensRingPulse * 0.35})`
+    glowCtx.lineWidth = 2
+    glowCtx.stroke()
     lensRingPulse *= 0.92
   }
 
-  // Draw each character
-  ctx.font = FONT
-  ctx.textBaseline = 'top'
-
-  for (let i = 0; i < charPositions.length; i++) {
-    const cp = charPositions[i]
+  // --- Update DOM character spans ---
+  for (let i = 0; i < charData.length; i++) {
+    const cp = charData[i]
     const ch = cp.char
 
     if (ch === ' ') continue
 
-    // Distance from cursor to character center
+    // Distance from gaze to character center
     const cx = cp.x + cp.width / 2
     const cy = cp.y + FONT_SIZE / 2
     const dx = cx - smoothX
     const dy = cy - smoothY
     const dist = Math.sqrt(dx * dx + dy * dy)
 
-    // Normalized distance zones
     let opacity, jitterX, jitterY, displayChar
 
     if (dist < fovealRadius) {
@@ -735,22 +774,19 @@ function render() {
     // Clamp opacity
     opacity = Math.max(0.05, Math.min(1, opacity))
 
-    // Color: warm terracotta near center, fading to dim
+    // Color: warm near center, dimming outward
     const colorT = Math.min(dist / parafovealRadius, 1)
     const r = Math.round(232 - colorT * (232 - 51))
     const g = Math.round(228 - colorT * (228 - 51))
     const b = Math.round(220 - colorT * (220 - 51))
 
-    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`
-    ctx.fillText(displayChar, cp.x + jitterX, cp.y + jitterY)
-  }
-
-  // Custom cursor — small dot with terracotta tint
-  if (isActive) {
-    ctx.beginPath()
-    ctx.arc(smoothX, smoothY, 3, 0, Math.PI * 2)
-    ctx.fillStyle = 'rgba(194, 113, 79, 0.6)'
-    ctx.fill()
+    const el = cp.el
+    el.textContent = displayChar
+    el.style.opacity = opacity
+    el.style.color = `rgb(${r}, ${g}, ${b})`
+    el.style.transform = (jitterX !== 0 || jitterY !== 0)
+      ? `translate(${jitterX.toFixed(1)}px, ${jitterY.toFixed(1)}px)`
+      : 'none'
   }
 
   // Radius indicator fade

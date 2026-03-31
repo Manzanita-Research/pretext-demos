@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Planetary Pulse</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&family=Literata:ital,opsz,wght@0,7..72,300;0,7..72,400;0,7..72,500;1,7..72,400&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Literata:ital,opsz,wght@0,7..72,300;0,7..72,400;0,7..72,500;1,7..72,400&display=swap');
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -52,7 +52,7 @@
     margin: 0 auto;
   }
 
-  #canvas-wrap {
+  #text-wrap {
     flex: 1;
     display: flex;
     align-items: center;
@@ -61,9 +61,100 @@
     position: relative;
   }
 
-  canvas {
-    display: block;
+  #text-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow: hidden;
+  }
+
+  #lines-area {
+    position: relative;
+    width: 100%;
+    z-index: 2;
+  }
+
+  .text-line {
+    font-family: 'Literata', Georgia, serif;
+    font-size: 13px;
+    line-height: 14.5px;
+    height: 14.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: clip;
+    margin: 0 auto;
     cursor: crosshair;
+    position: relative;
+    transition: opacity 0.1s ease;
+    opacity: 0.82;
+  }
+
+  .text-line:hover {
+    opacity: 1 !important;
+    color: #e8e4dc !important;
+  }
+
+  .text-line:hover .hover-bg {
+    opacity: 1;
+  }
+
+  .hover-bg {
+    position: absolute;
+    top: -1px;
+    left: -4px;
+    right: -4px;
+    bottom: 0;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.1s ease;
+  }
+
+  .text-line-content {
+    position: relative;
+    z-index: 1;
+  }
+
+  .year-label {
+    position: absolute;
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: #6a655c;
+    opacity: 0.9;
+    text-align: right;
+    pointer-events: none;
+    z-index: 3;
+    line-height: 14.5px;
+  }
+
+  .year-label.endpoint {
+    font-weight: 400;
+    font-size: 10px;
+    color: #4a4640;
+    opacity: 0.7;
+  }
+
+  .tick-line {
+    position: absolute;
+    height: 1px;
+    background: rgba(232, 228, 220, 0.06);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* SVG overlay for silhouette lines and mini chart */
+  #svg-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
   }
 
   #tooltip {
@@ -179,8 +270,11 @@
   <p>145 years of planetary change, written into the shape of the text itself. Each line is one year. Wider lines mean a warmer, higher, more carbon-heavy world. Watch the silhouette.</p>
 </div>
 
-<div id="canvas-wrap">
-  <canvas id="canvas"></canvas>
+<div id="text-wrap">
+  <div id="text-container">
+    <svg id="svg-overlay"></svg>
+    <div id="lines-area"></div>
+  </div>
   <div id="tooltip">
     <div class="year"></div>
     <div class="anomaly"></div>
@@ -201,8 +295,6 @@
 import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
 
 // --- Story text that matches the data year by year ---
-// 145 lines for 145 years (1880-2024)
-// The prose shifts tone as the warming accelerates.
 const CLIMATE_TEXT = `The ice held. In eighteen-eighty the world was cool and the glaciers crept forward in their ancient rhythm, grinding valleys wider grain by grain. Snow fell on schedules older than any calendar. The winters arrived when they should and stayed as long as they pleased and the rivers froze thick enough to walk on without thinking twice. Farmers read the sky the way their grandparents had taught them. The seasons turned like pages in a book everyone knew by heart. Spring came slowly, honestly, melting the frost at its own pace while songbirds returned to the same branches their parents had chosen. The ocean currents carried warmth from the equator to the poles in a rhythm so steady it might as well have been breathing. Volcanoes spoke occasionally and the sky dimmed and cleared and the planet adjusted without apparent effort. This was the cadence that built civilizations. Ten thousand years of relative stability. Long enough for wheat fields and irrigation and cities and the illusion that the weather was a thing you could count on. Sailors named the winds. Monks recorded the cherry blossoms. The world was not unchanging but it changed slowly and in familiar patterns. Coal smoke rose from factory towns but the sky was large and the atmosphere seemed infinite. The first measurements were made with mercury and glass, careful hands recording numbers that would not mean what they mean now for another century. The planet held steady. Anomalies were fractions of a degree, noise in a system so vast that the signal had not yet emerged from the static. Rivers ran clear from snowpack that replenished each winter without fail. The Arctic was a place on maps that few had seen. Ice sheets miles thick had been there longer than human memory could reach. Forests covered the continents in patterns set by rainfall that arrived on schedule, decade after decade. The monsoons came. The trade winds blew. The great ocean conveyor turned. Something was accumulating in the atmosphere but the instruments were young and the data was sparse and the world was busy building railroads and telegraph lines and electrical grids. Carbon dioxide was a known gas. Arrhenius had done the math. But math and consequence live in different time zones and the distance between a calculation on paper and a warming planet was still measured in generations nobody alive would see. The first world war burned through Europe and the smoke mixed with the ordinary clouds. The twenties roared on coal and oil and the exuberance of a species that had learned to fly. The numbers barely moved. A tenth of a degree here. A cold year there. The signal was still buried. The Depression slowed the factories and for a few years the air over Pittsburgh and Manchester and the Ruhr Valley thinned slightly and the rivers ran a little cleaner before the next war demanded everything the forges could produce. Then the atmosphere began to shift. Not dramatically. Not yet. But the running average started to lift off the baseline like a plane taxiing before anyone notices it has left the ground. Something was different in the arithmetic of heat. The postwar boom poured concrete across three continents and the cars multiplied and the suburbs spread and the power plants burned around the clock to feed the appetite of a species discovering convenience. Charles David Keeling drove to the top of Mauna Loa and started counting carbon dioxide molecules with a precision nobody had attempted before. Three hundred and fifteen parts per million. He kept counting. Three sixteen. Three seventeen. The line went up. It did not come back down. The sixties and seventies brought the first warnings that carried weight. Rachel Carson wrote about silence in spring. The Cuyahoga River caught fire. Scientists began to see the curve bending upward in their temperature records, a slow arc that was starting to look less like noise and more like a trend. The first Earth Day drew millions into the streets. The ozone layer developed a hole over Antarctica and the world actually cooperated to fix it, which proved that collective action was possible when the evidence was clear and the political will existed. But carbon dioxide was a harder problem. It was not a single chemical from a single industry. It was everything. It was how the world ran. The eighties arrived and the warmth became undeniable. James Hansen testified before Congress that the greenhouse effect was here, not theoretical, not future tense, but present and measurable and accelerating. The ten warmest years in the instrumental record started stacking up like a hand of cards dealt from a loaded deck. The glaciers were retreating visibly now, leaving behind moraines and meltwater lakes where ice had been for millennia. Coral reefs began to bleach in water too warm for the algae that gave them color and life. The Arctic sea ice started its long decline, each summer melting further than models had predicted. The numbers stopped pretending. Each year warmer than the last in the running average. Each decade a new record. The nineties brought the Kyoto Protocol and the first serious attempt to put a framework around emissions reductions, and it was not enough, and everyone who looked at the data honestly knew it was not enough. The permafrost began to thaw. Methane bubbled up from Siberian lakes. The West Antarctic ice sheet showed signs of instability that glaciologists had warned about for decades. The sea level kept rising. Millimeters per year that added up to centimeters per decade that would become meters per century if the trajectories held. The new millennium opened with the warmest year in the instrumental record and then broke that record and broke it again. Hurricane seasons intensified. Wildfire seasons lengthened until the word season stopped making sense because the fires burned year-round. The Arctic was warming three times faster than the global average. Greenland lost ice mass measured in gigatons. The heat was not abstract anymore. It was the farmer in the Sahel watching the rains fail. It was the coastal city planning for a flood line that moved upward with each new projection. It was the insect populations collapsing quietly while we argued about the data. Every fraction of a degree mattered now in ways that would have seemed theoretical a generation ago. The Paris Agreement set targets. One point five degrees. Two degrees. Lines in the sand drawn by diplomats who understood the physics even when the politics lagged behind. The world began to build wind farms and solar arrays at a pace that surprised even the optimists, and the emissions kept rising because the system had momentum and momentum does not care about intentions. Twenty-twenty brought a pandemic that grounded the planes and emptied the highways and for a few weeks the satellite data showed the sky clearing over cities that had not seen clean air in decades, and then it all came back. The last ten years shattered every record. Heat domes settled over cities built for rain. Ocean temperatures hit levels that made marine biologists stare at their instruments and check the calibration twice. The Antarctic recorded temperatures sixty degrees above normal. The Canadian wildfire season burned an area larger than some countries. Each data point a year. Each year a choice made and a consequence delivered. The line on the graph is not a prediction anymore. It is a measurement of what we have already done. The atmosphere does not negotiate. The physics is not partisan. The ice does not care about quarterly earnings. The question was never whether the planet would survive. It always has. The question is what kind of earth we leave behind and whether the word winter will mean what it meant to us or become something our grandchildren learn about from books. We are still writing this story. The next line has not been set yet.`
 
 // --- Temperature anomaly data (NASA GISS approximation, 1880-2024) ---
@@ -242,7 +334,6 @@ const co2Data = [
 ]
 
 // --- Sea level data (approximate global mean sea level change in mm, 1880-2024) ---
-// Relative to 1993 baseline. Accelerating curve from tide gauge + satellite data.
 const seaLevelData = [
   -150, -149, -148, -147, -146, -145, -144, -143, -142, -141,
   -139, -138, -136, -135, -133, -131, -130, -128, -126, -124,
@@ -265,63 +356,47 @@ const START_YEAR = 1880
 // --- State ---
 let activeDataset = 'temp'
 let breathPhase = 0
-let hoveredLine = -1
-let lineRects = []
 let animFrame
+let lineElements = []
+let lineWidths = []
+let lineYPositions = []
 
-// --- Canvas setup ---
-const canvas = document.getElementById('canvas')
-const ctx = canvas.getContext('2d')
+// --- DOM refs ---
+const linesArea = document.getElementById('lines-area')
+const svgOverlay = document.getElementById('svg-overlay')
 const tooltip = document.getElementById('tooltip')
 const tooltipYear = tooltip.querySelector('.year')
 const tooltipAnomaly = tooltip.querySelector('.anomaly')
 const tooltipContextEl = tooltip.querySelector('.context')
-const dpr = window.devicePixelRatio || 1
-
-function resizeCanvas() {
-  const wrap = document.getElementById('canvas-wrap')
-  const w = wrap.clientWidth
-  const h = wrap.clientHeight
-  canvas.width = w * dpr
-  canvas.height = h * dpr
-  canvas.style.width = w + 'px'
-  canvas.style.height = h + 'px'
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-}
 
 // --- Manzanita brand colors for temperature gradient ---
-// sage (#6B7F5E) -> ochre (#C49A3A) -> terracotta (#C45D3E) -> rust (#A0522D)
 function tempColor(anomaly) {
   const t = (anomaly + 0.5) / 1.8
   const clamped = Math.max(0, Math.min(1, t))
 
   if (clamped < 0.3) {
-    // Deep sage / cool blue-green
     const s = clamped / 0.3
-    const r = Math.round(50 + s * 57)  // 50 -> 107
-    const g = Math.round(80 + s * 47)  // 80 -> 127
-    const b = Math.round(70 + s * 24)  // 70 -> 94
+    const r = Math.round(50 + s * 57)
+    const g = Math.round(80 + s * 47)
+    const b = Math.round(70 + s * 24)
     return `rgb(${r}, ${g}, ${b})`
   } else if (clamped < 0.5) {
-    // Sage to ochre
     const s = (clamped - 0.3) / 0.2
-    const r = Math.round(107 + s * 89)  // 107 -> 196
-    const g = Math.round(127 + s * 27)  // 127 -> 154
-    const b = Math.round(94 - s * 36)   // 94 -> 58
+    const r = Math.round(107 + s * 89)
+    const g = Math.round(127 + s * 27)
+    const b = Math.round(94 - s * 36)
     return `rgb(${r}, ${g}, ${b})`
   } else if (clamped < 0.75) {
-    // Ochre to terracotta
     const s = (clamped - 0.5) / 0.25
-    const r = Math.round(196)            // stays warm
-    const g = Math.round(154 - s * 61)   // 154 -> 93
-    const b = Math.round(58 + s * 4)     // 58 -> 62
+    const r = Math.round(196)
+    const g = Math.round(154 - s * 61)
+    const b = Math.round(58 + s * 4)
     return `rgb(${r}, ${g}, ${b})`
   } else {
-    // Terracotta to hot rust-red
     const s = (clamped - 0.75) / 0.25
-    const r = Math.round(196 + s * 24)   // 196 -> 220
-    const g = Math.round(93 - s * 43)    // 93 -> 50
-    const b = Math.round(62 - s * 22)    // 62 -> 40
+    const r = Math.round(196 + s * 24)
+    const g = Math.round(93 - s * 43)
+    const b = Math.round(62 - s * 22)
     return `rgb(${r}, ${g}, ${b})`
   }
 }
@@ -352,36 +427,31 @@ function co2Color(ppm) {
 }
 
 function seaLevelColor(mm) {
-  // -150mm to +115mm range
   const t = (mm - (-150)) / (115 - (-150))
   const clamped = Math.max(0, Math.min(1, t))
 
   if (clamped < 0.35) {
-    // Deep sage greens
     const s = clamped / 0.35
-    const r = Math.round(55 + s * 52)   // 55 -> 107
-    const g = Math.round(85 + s * 42)   // 85 -> 127
-    const b = Math.round(65 + s * 29)   // 65 -> 94
+    const r = Math.round(55 + s * 52)
+    const g = Math.round(85 + s * 42)
+    const b = Math.round(65 + s * 29)
     return `rgb(${r}, ${g}, ${b})`
   } else if (clamped < 0.65) {
-    // Sage to ochre
     const s = (clamped - 0.35) / 0.3
-    const r = Math.round(107 + s * 89)  // 107 -> 196
-    const g = Math.round(127 + s * 27)  // 127 -> 154
-    const b = Math.round(94 - s * 36)   // 94 -> 58
+    const r = Math.round(107 + s * 89)
+    const g = Math.round(127 + s * 27)
+    const b = Math.round(94 - s * 36)
     return `rgb(${r}, ${g}, ${b})`
   } else {
-    // Ochre to terracotta/rust
     const s = (clamped - 0.65) / 0.35
-    const r = Math.round(196 + s * 14)  // 196 -> 210
-    const g = Math.round(154 - s * 82)  // 154 -> 72
-    const b = Math.round(58 - s * 13)   // 58 -> 45
+    const r = Math.round(196 + s * 14)
+    const g = Math.round(154 - s * 82)
+    const b = Math.round(58 - s * 13)
     return `rgb(${r}, ${g}, ${b})`
   }
 }
 
 // --- Data normalization for width mapping ---
-// Make the hockey stick DRAMATIC - use exponential scaling
 function getWidthForIndex(i, data, minWidth, maxWidth, breathOffset) {
   let normalized
   if (activeDataset === 'temp') {
@@ -392,26 +462,21 @@ function getWidthForIndex(i, data, minWidth, maxWidth, breathOffset) {
     normalized = (data[i] - (-150)) / (115 - (-150))
   }
   normalized = Math.max(0, Math.min(1, normalized))
-  // Apply power curve to exaggerate the hockey stick shape
   const curved = Math.pow(normalized, 0.6)
   return minWidth + curved * (maxWidth - minWidth) + breathOffset
 }
 
 function getColorForIndex(i, data) {
-  if (activeDataset === 'temp') {
-    return tempColor(data[i])
-  } else if (activeDataset === 'co2') {
-    return co2Color(data[i])
-  } else {
-    return seaLevelColor(data[i])
-  }
+  if (activeDataset === 'temp') return tempColor(data[i])
+  if (activeDataset === 'co2') return co2Color(data[i])
+  return seaLevelColor(data[i])
 }
 
 function getLabelForIndex(i, data) {
   if (activeDataset === 'temp') {
     const v = data[i]
     const sign = v >= 0 ? '+' : ''
-    return sign + v.toFixed(2) + ' °C anomaly'
+    return sign + v.toFixed(2) + ' \u00b0C anomaly'
   } else if (activeDataset === 'co2') {
     return data[i] + ' ppm CO\u2082'
   } else {
@@ -459,250 +524,275 @@ const lineHeight = 14.5
 const fontStr = `${fontSize}px "Literata", Georgia, serif`
 const prepared = prepareWithSegments(CLIMATE_TEXT, fontStr)
 
-// --- Main render ---
-function render() {
-  const wrap = document.getElementById('canvas-wrap')
+// --- Build DOM lines once, then update widths/colors in animation ---
+let builtForDataset = null
+let labelElements = []
+let tickElements = []
+
+function buildLines() {
+  const wrap = document.getElementById('text-wrap')
   const W = wrap.clientWidth
   const H = wrap.clientHeight
-
-  ctx.clearRect(0, 0, W, H)
 
   const data = activeDataset === 'temp' ? tempAnomalies : activeDataset === 'co2' ? co2Data : seaLevelData
   const numLines = data.length
 
-  // Layout parameters
   const totalTextHeight = numLines * lineHeight
   const marginTop = Math.max(70, (H - totalTextHeight) / 2)
   const layoutMaxWidth = Math.min(W - 120, 700)
-  const layoutMinWidth = layoutMaxWidth * 0.15 // narrower minimum for more dramatic contrast
+  const layoutMinWidth = layoutMaxWidth * 0.15
 
-  // Breath animation offset
-  const breathAmount = 2
+  // Clear previous
+  linesArea.innerHTML = ''
+  lineElements = []
+  labelElements = []
+  tickElements = []
 
-  lineRects = []
+  linesArea.style.paddingTop = marginTop + 'px'
 
-  ctx.textBaseline = 'top'
-
-  // First pass: compute all line rects for silhouette drawing
-  const allLineData = []
-  let tempCursor = { segmentIndex: 0, graphemeIndex: 0 }
+  // Use pretext for line breaking at the MAX width (we'll visually constrain via CSS width)
+  // Actually, we need per-line widths for accurate line breaking
+  let cursor = { segmentIndex: 0, graphemeIndex: 0 }
 
   for (let i = 0; i < numLines; i++) {
+    const width = getWidthForIndex(i, data, layoutMinWidth, layoutMaxWidth, 0)
+    const clampedWidth = Math.max(80, Math.min(width, layoutMaxWidth))
+
+    const line = layoutNextLine(prepared, cursor, clampedWidth)
+    if (!line) break
+
+    const color = getColorForIndex(i, data)
+    const year = START_YEAR + i
+
+    // Create line div
+    const lineDiv = document.createElement('div')
+    lineDiv.className = 'text-line'
+    lineDiv.style.width = clampedWidth + 'px'
+    lineDiv.style.color = color
+    lineDiv.setAttribute('data-index', i)
+    lineDiv.setAttribute('role', 'text')
+    lineDiv.setAttribute('aria-label', `${year}: ${line.text}`)
+
+    // Hover background
+    const hoverBg = document.createElement('div')
+    hoverBg.className = 'hover-bg'
+    hoverBg.style.background = color.replace('rgb', 'rgba').replace(')', ', 0.1)')
+    lineDiv.appendChild(hoverBg)
+
+    // Text content span
+    const textSpan = document.createElement('span')
+    textSpan.className = 'text-line-content'
+    textSpan.textContent = line.text
+    lineDiv.appendChild(textSpan)
+
+    // Hover events for tooltip
+    lineDiv.addEventListener('mouseenter', (e) => showTooltip(i, e))
+    lineDiv.addEventListener('mousemove', (e) => moveTooltip(e))
+    lineDiv.addEventListener('mouseleave', hideTooltip)
+
+    linesArea.appendChild(lineDiv)
+    lineElements.push({ el: lineDiv, hoverBg, textSpan, lineText: line.text, lineEnd: line.end })
+
+    cursor = line.end
+
+    // Year labels for decades and endpoints
+    const isDecade = year % 10 === 0
+    const isEndpoint = i === 0 || i === numLines - 1
+
+    if (isDecade || isEndpoint) {
+      const label = document.createElement('div')
+      label.className = 'year-label' + (isEndpoint && !isDecade ? ' endpoint' : '')
+      label.textContent = year.toString()
+      label.style.top = (marginTop + i * lineHeight + 1) + 'px'
+      // Position label to the left of the max-width area
+      const labelRight = (W + layoutMaxWidth) / 2 + 12
+      label.style.right = labelRight + 'px'
+      label.style.width = '40px'
+      linesArea.appendChild(label)
+      labelElements.push({ el: label, index: i })
+
+      // Tick marks for decades
+      if (isDecade) {
+        const tick = document.createElement('div')
+        tick.className = 'tick-line'
+        tick.style.top = (marginTop + i * lineHeight + lineHeight / 2) + 'px'
+        const labelLeftEdge = W - labelRight
+        const lineLeftEdge = (W - clampedWidth) / 2
+        tick.style.left = (labelLeftEdge + 44) + 'px'
+        tick.style.width = Math.max(0, lineLeftEdge - labelLeftEdge - 46) + 'px'
+        linesArea.appendChild(tick)
+        tickElements.push({ el: tick, index: i })
+      }
+    }
+  }
+
+  builtForDataset = activeDataset
+}
+
+// --- Update widths and colors during breath animation (no DOM rebuild) ---
+function updateBreath() {
+  const wrap = document.getElementById('text-wrap')
+  const W = wrap.clientWidth
+  const H = wrap.clientHeight
+
+  const data = activeDataset === 'temp' ? tempAnomalies : activeDataset === 'co2' ? co2Data : seaLevelData
+  const layoutMaxWidth = Math.min(W - 120, 700)
+  const layoutMinWidth = layoutMaxWidth * 0.15
+  const breathAmount = 2
+
+  lineWidths = []
+  lineYPositions = []
+
+  const totalTextHeight = lineElements.length * lineHeight
+  const marginTop = Math.max(70, (H - totalTextHeight) / 2)
+
+  for (let i = 0; i < lineElements.length; i++) {
     const perLineBreath = Math.sin(breathPhase + i * 0.08) * breathAmount
     const width = getWidthForIndex(i, data, layoutMinWidth, layoutMaxWidth, perLineBreath)
     const clampedWidth = Math.max(80, Math.min(width, layoutMaxWidth))
 
-    const line = layoutNextLine(prepared, tempCursor, clampedWidth)
-    if (!line) break
-
-    const xOffset = (W - clampedWidth) / 2
-    const lineY = marginTop + i * lineHeight
-
-    allLineData.push({
-      line,
-      xOffset,
-      y: lineY,
-      width: clampedWidth,
-      index: i
-    })
-
-    tempCursor = line.end
+    lineElements[i].el.style.width = clampedWidth + 'px'
+    lineWidths.push(clampedWidth)
+    lineYPositions.push(marginTop + i * lineHeight)
   }
 
-  // Draw faint traditional line chart overlay at very low opacity
-  if (allLineData.length > 1) {
-    ctx.save()
-    // Draw filled silhouette area
-    ctx.beginPath()
-    ctx.moveTo(allLineData[0].xOffset, allLineData[0].y)
-    for (const ld of allLineData) {
-      ctx.lineTo(ld.xOffset, ld.y + lineHeight / 2)
-    }
-    // Go back along right edge
-    for (let i = allLineData.length - 1; i >= 0; i--) {
-      const ld = allLineData[i]
-      ctx.lineTo(ld.xOffset + ld.width, ld.y + lineHeight / 2)
-    }
-    ctx.closePath()
-    ctx.fillStyle = 'rgba(232, 228, 220, 0.02)'
-    ctx.fill()
-
-    // Left silhouette edge
-    ctx.strokeStyle = 'rgba(232, 228, 220, 0.08)'
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    ctx.moveTo(allLineData[0].xOffset, allLineData[0].y)
-    for (const ld of allLineData) {
-      ctx.lineTo(ld.xOffset, ld.y + lineHeight / 2)
-    }
-    ctx.stroke()
-
-    // Right silhouette edge (the hockey stick side)
-    ctx.strokeStyle = 'rgba(232, 228, 220, 0.12)'
-    ctx.lineWidth = 1.5
-    ctx.beginPath()
-    ctx.moveTo(allLineData[0].xOffset + allLineData[0].width, allLineData[0].y)
-    for (const ld of allLineData) {
-      ctx.lineTo(ld.xOffset + ld.width, ld.y + lineHeight / 2)
-    }
-    ctx.stroke()
-
-    // Draw a faint traditional line chart on the right margin
-    const chartX = (W + layoutMaxWidth) / 2 + 30
-    const chartWidth = 40
-    if (chartX + chartWidth < W - 10) {
-      const chartTop = allLineData[0].y
-      const chartBottom = allLineData[allLineData.length - 1].y + lineHeight
-
-      ctx.strokeStyle = 'rgba(232, 228, 220, 0.06)'
-      ctx.lineWidth = 0.5
-      // Baseline
-      ctx.beginPath()
-      ctx.moveTo(chartX, chartTop)
-      ctx.lineTo(chartX, chartBottom)
-      ctx.stroke()
-
-      // The curve
-      ctx.strokeStyle = 'rgba(196, 93, 62, 0.3)'
-      ctx.lineWidth = 1.5
-      ctx.beginPath()
-      for (let i = 0; i < allLineData.length; i++) {
-        let norm
-        if (activeDataset === 'temp') {
-          norm = (data[i] - (-0.5)) / (1.3 - (-0.5))
-        } else if (activeDataset === 'co2') {
-          norm = (data[i] - 288) / (444 - 288)
-        } else {
-          norm = (data[i] - (-150)) / (115 - (-150))
-        }
-        norm = Math.max(0, Math.min(1, norm))
-        const cx = chartX + norm * chartWidth
-        const cy = allLineData[i].y + lineHeight / 2
-        if (i === 0) ctx.moveTo(cx, cy)
-        else ctx.lineTo(cx, cy)
-      }
-      ctx.stroke()
-    }
-
-    ctx.restore()
-  }
-
-  // Second pass: draw text and labels
-  for (let i = 0; i < allLineData.length; i++) {
-    const ld = allLineData[i]
-    const isHovered = (hoveredLine === i)
-    const color = getColorForIndex(i, data)
-    const year = START_YEAR + i
-
-    ctx.font = fontStr
-    ctx.fillStyle = isHovered ? '#e8e4dc' : color
-    ctx.globalAlpha = isHovered ? 1.0 : 0.82
-
-    ctx.fillText(ld.line.text, ld.xOffset, ld.y)
-
-    // Highlight bar on hover
-    if (isHovered) {
-      ctx.fillStyle = color
-      ctx.globalAlpha = 0.1
-      ctx.fillRect(ld.xOffset - 4, ld.y - 1, ld.width + 8, lineHeight)
-      ctx.globalAlpha = 1
-    }
-
-    // Decade markers + first/last
-    const isDecade = year % 10 === 0
-    const isEndpoint = i === 0 || i === allLineData.length - 1
-    if (isDecade || isEndpoint) {
-      const labelFont = isDecade
-        ? `500 11px "Fraunces", Georgia, serif`
-        : `400 10px "Fraunces", Georgia, serif`
-      ctx.font = labelFont
-      ctx.fillStyle = isHovered ? '#e8e4dc' : (isDecade ? '#6a655c' : '#4a4640')
-      ctx.globalAlpha = isHovered ? 1 : (isDecade ? 0.9 : 0.7)
-
-      const labelX = (W - layoutMaxWidth) / 2 - 12
-      ctx.textAlign = 'right'
-      ctx.fillText(year.toString(), labelX, ld.y + 1)
-      ctx.textAlign = 'left'
-
-      // Draw a faint tick mark for decades
-      if (isDecade) {
-        ctx.strokeStyle = 'rgba(232, 228, 220, 0.06)'
-        ctx.lineWidth = 0.5
-        ctx.beginPath()
-        ctx.moveTo(labelX + 4, ld.y + lineHeight / 2)
-        ctx.lineTo(ld.xOffset - 2, ld.y + lineHeight / 2)
-        ctx.stroke()
-      }
-    }
-
-    lineRects.push({
-      x: ld.xOffset,
-      y: ld.y,
-      w: ld.width,
-      h: lineHeight,
-      index: i
-    })
-
-    ctx.globalAlpha = 1
-  }
+  // Update SVG overlay
+  updateSVG(W, H, layoutMaxWidth, marginTop)
 }
 
-// --- Hover handling ---
-canvas.addEventListener('mousemove', (e) => {
-  const rect = canvas.getBoundingClientRect()
-  const mx = e.clientX - rect.left
-  const my = e.clientY - rect.top
+// --- SVG silhouette and mini chart ---
+function updateSVG(W, H, layoutMaxWidth, marginTop) {
+  if (lineWidths.length < 2) return
 
-  let found = -1
-  for (const lr of lineRects) {
-    if (my >= lr.y && my < lr.y + lr.h) {
-      found = lr.index
-      break
-    }
-  }
+  const data = activeDataset === 'temp' ? tempAnomalies : activeDataset === 'co2' ? co2Data : seaLevelData
+  const svgNS = 'http://www.w3.org/2000/svg'
 
-  if (found !== hoveredLine) {
-    hoveredLine = found
-  }
+  // Build paths
+  // Left silhouette edge
+  let leftPath = ''
+  let rightPath = ''
+  let fillPath = ''
 
-  if (found >= 0) {
-    const data = activeDataset === 'temp' ? tempAnomalies : activeDataset === 'co2' ? co2Data : seaLevelData
-    const year = START_YEAR + found
-    const color = getColorForIndex(found, data)
+  for (let i = 0; i < lineWidths.length; i++) {
+    const xOffset = (W - lineWidths[i]) / 2
+    const y = lineYPositions[i] + lineHeight / 2
+    const xRight = xOffset + lineWidths[i]
 
-    tooltipYear.textContent = year
-    tooltipYear.style.color = color
-    tooltipAnomaly.textContent = getLabelForIndex(found, data)
-    tooltipAnomaly.style.color = color
-
-    const ctx_text = tooltipContextData[year]
-    if (ctx_text) {
-      tooltipContextEl.textContent = ctx_text
-      tooltipContextEl.style.display = 'block'
+    if (i === 0) {
+      leftPath = `M ${xOffset} ${y}`
+      rightPath = `M ${xRight} ${y}`
+      fillPath = `M ${xOffset} ${y}`
     } else {
-      tooltipContextEl.style.display = 'none'
+      leftPath += ` L ${xOffset} ${y}`
+      rightPath += ` L ${xRight} ${y}`
+      fillPath += ` L ${xOffset} ${y}`
     }
-
-    tooltip.classList.add('visible')
-
-    // Position tooltip
-    const wrap = document.getElementById('canvas-wrap')
-    const wrapRect = wrap.getBoundingClientRect()
-    let tx = e.clientX - wrapRect.left + 16
-    let ty = e.clientY - wrapRect.top - 10
-    if (tx + 200 > wrapRect.width) tx = e.clientX - wrapRect.left - 210
-    if (ty < 0) ty = 10
-    tooltip.style.left = tx + 'px'
-    tooltip.style.top = ty + 'px'
-  } else {
-    tooltip.classList.remove('visible')
   }
-})
 
-canvas.addEventListener('mouseleave', () => {
-  hoveredLine = -1
+  // Complete fill path (go back along right edge)
+  for (let i = lineWidths.length - 1; i >= 0; i--) {
+    const xOffset = (W - lineWidths[i]) / 2
+    const xRight = xOffset + lineWidths[i]
+    const y = lineYPositions[i] + lineHeight / 2
+    fillPath += ` L ${xRight} ${y}`
+  }
+  fillPath += ' Z'
+
+  // Mini chart on the right margin
+  const chartX = (W + layoutMaxWidth) / 2 + 30
+  const chartWidth = 40
+  let miniChartPath = ''
+  let showMiniChart = chartX + chartWidth < W - 10
+
+  if (showMiniChart) {
+    const chartTop = lineYPositions[0]
+    const chartBottom = lineYPositions[lineYPositions.length - 1] + lineHeight
+
+    for (let i = 0; i < lineWidths.length; i++) {
+      let norm
+      if (activeDataset === 'temp') {
+        norm = (data[i] - (-0.5)) / (1.3 - (-0.5))
+      } else if (activeDataset === 'co2') {
+        norm = (data[i] - 288) / (444 - 288)
+      } else {
+        norm = (data[i] - (-150)) / (115 - (-150))
+      }
+      norm = Math.max(0, Math.min(1, norm))
+      const cx = chartX + norm * chartWidth
+      const cy = lineYPositions[i] + lineHeight / 2
+      if (i === 0) miniChartPath = `M ${cx} ${cy}`
+      else miniChartPath += ` L ${cx} ${cy}`
+    }
+  }
+
+  // Build SVG content
+  svgOverlay.setAttribute('viewBox', `0 0 ${W} ${H}`)
+  svgOverlay.style.width = W + 'px'
+  svgOverlay.style.height = H + 'px'
+
+  let svgContent = ''
+
+  // Fill area
+  svgContent += `<path d="${fillPath}" fill="rgba(232, 228, 220, 0.02)" />`
+
+  // Left silhouette edge
+  svgContent += `<path d="${leftPath}" fill="none" stroke="rgba(232, 228, 220, 0.08)" stroke-width="1" />`
+
+  // Right silhouette edge (the hockey stick side)
+  svgContent += `<path d="${rightPath}" fill="none" stroke="rgba(232, 228, 220, 0.12)" stroke-width="1.5" />`
+
+  // Mini chart
+  if (showMiniChart) {
+    const chartTop = lineYPositions[0]
+    const chartBottom = lineYPositions[lineYPositions.length - 1] + lineHeight
+
+    // Baseline
+    svgContent += `<line x1="${chartX}" y1="${chartTop}" x2="${chartX}" y2="${chartBottom}" stroke="rgba(232, 228, 220, 0.06)" stroke-width="0.5" />`
+
+    // The curve
+    svgContent += `<path d="${miniChartPath}" fill="none" stroke="rgba(196, 93, 62, 0.3)" stroke-width="1.5" />`
+  }
+
+  svgOverlay.innerHTML = svgContent
+}
+
+// --- Tooltip handling ---
+function showTooltip(index, e) {
+  const data = activeDataset === 'temp' ? tempAnomalies : activeDataset === 'co2' ? co2Data : seaLevelData
+  const year = START_YEAR + index
+  const color = getColorForIndex(index, data)
+
+  tooltipYear.textContent = year
+  tooltipYear.style.color = color
+  tooltipAnomaly.textContent = getLabelForIndex(index, data)
+  tooltipAnomaly.style.color = color
+
+  const ctx_text = tooltipContextData[year]
+  if (ctx_text) {
+    tooltipContextEl.textContent = ctx_text
+    tooltipContextEl.style.display = 'block'
+  } else {
+    tooltipContextEl.style.display = 'none'
+  }
+
+  tooltip.classList.add('visible')
+  moveTooltip(e)
+}
+
+function moveTooltip(e) {
+  const wrap = document.getElementById('text-wrap')
+  const wrapRect = wrap.getBoundingClientRect()
+  let tx = e.clientX - wrapRect.left + 16
+  let ty = e.clientY - wrapRect.top - 10
+  if (tx + 200 > wrapRect.width) tx = e.clientX - wrapRect.left - 210
+  if (ty < 0) ty = 10
+  tooltip.style.left = tx + 'px'
+  tooltip.style.top = ty + 'px'
+}
+
+function hideTooltip() {
   tooltip.classList.remove('visible')
-})
+}
 
 // --- Dataset toggle ---
 document.querySelectorAll('#dataset-toggle button').forEach(btn => {
@@ -719,19 +809,27 @@ document.querySelectorAll('#dataset-toggle button').forEach(btn => {
     } else {
       caption.innerHTML = 'Each line is one year &middot; wider = higher seas &middot; satellite + tide gauge 1880&ndash;2024'
     }
+
+    // Rebuild lines with new dataset (different line breaks per width)
+    buildLines()
   })
 })
 
 // --- Animation loop ---
 function animate() {
   breathPhase += 0.012
-  render()
+  updateBreath()
   animFrame = requestAnimationFrame(animate)
 }
 
+// --- Resize handler ---
+function handleResize() {
+  buildLines()
+}
+
 // --- Init ---
-window.addEventListener('resize', resizeCanvas)
-resizeCanvas()
+window.addEventListener('resize', handleResize)
+buildLines()
 animate()
 </script>
 </body>

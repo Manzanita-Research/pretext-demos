@@ -282,7 +282,6 @@
       0 2px 16px rgba(107, 58, 42, 0.15),
       0 0 0 1px rgba(107, 58, 42, 0.4);
     background: var(--bg);
-    /* Wood grain texture via repeating gradient */
     background-image:
       repeating-linear-gradient(
         90deg,
@@ -291,6 +290,7 @@
         rgba(107, 58, 42, 0.03) 3px,
         rgba(107, 58, 42, 0.03) 4px
       );
+    overflow: hidden;
   }
 
   /* Corner pegs on the loom frame */
@@ -322,15 +322,146 @@
   .loom-frame-bottom-pegs::before { bottom: -4px; left: -4px; }
   .loom-frame-bottom-pegs::after { bottom: -4px; right: -4px; }
 
-  .canvas-wrap {
+  /* Woven grid container */
+  .weave-container {
     position: absolute;
     inset: 0;
+    overflow: hidden;
   }
 
-  canvas {
-    display: block;
-    width: 100%;
-    height: 100%;
+  .weave-grid {
+    position: relative;
+    padding-top: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 1;
+  }
+
+  .weave-row {
+    display: flex;
+    height: 19px; /* CELL_H = round(13 * 1.45) */
+    position: relative;
+  }
+
+  .weave-cell {
+    width: 13px; /* CELL_W = FONT_SIZE */
+    height: 19px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding-left: 1px;
+    padding-top: 2px;
+    flex-shrink: 0;
+    position: relative;
+    cursor: default;
+  }
+
+  .weave-cell.warp-up {
+    color: var(--warp-color);
+    background: #C49A3C30;
+  }
+
+  .weave-cell.weft-up {
+    color: var(--weft-color);
+    background: transparent;
+  }
+
+  .weave-cell.warp-up.hovered {
+    color: #e8d48c;
+    background: #C49A3C55;
+  }
+
+  .weave-cell.weft-up.hovered {
+    color: #c8d4de;
+    background: #a0aab433;
+  }
+
+  /* Cross-highlights on hover row/col */
+  .weave-cell.warp-up.col-highlight {
+    background: #C49A3C3C;
+  }
+
+  .weave-cell.weft-up.row-highlight {
+    background: #a0aab40C;
+  }
+
+  .weave-cell.hidden {
+    visibility: hidden;
+  }
+
+  /* Grid lines overlay */
+  .grid-lines {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Shuttle */
+  .shuttle {
+    position: absolute;
+    left: 0;
+    top: 0;
+    pointer-events: none;
+    z-index: 5;
+    opacity: 0;
+    transition: opacity 0.1s;
+  }
+
+  .shuttle.active {
+    opacity: 1;
+  }
+
+  .shuttle-trail {
+    position: absolute;
+    height: 1px;
+    background: #C2714F66;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
+  .shuttle-head {
+    position: absolute;
+    width: 0;
+    height: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    filter: drop-shadow(0 0 8px var(--terracotta));
+  }
+
+  .shuttle-head.right {
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    border-left: 11px solid var(--terracotta);
+  }
+
+  .shuttle-head.left {
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    border-right: 11px solid var(--terracotta);
+  }
+
+  .shuttle-glow {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--terracotta);
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 8px var(--terracotta);
+  }
+
+  /* Completion line between rows during animation */
+  .row-separator {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: #C49A3C33;
+    pointer-events: none;
+    z-index: 3;
   }
 
   /* Thread type tooltip */
@@ -440,8 +571,13 @@
     <span class="section-label">Woven Textile</span>
     <div class="loom-frame">
       <div class="loom-frame-bottom-pegs"></div>
-      <div class="canvas-wrap">
-        <canvas id="loomCanvas"></canvas>
+      <div class="weave-container" id="weaveContainer">
+        <div class="weave-grid" id="weaveGrid"></div>
+        <div class="shuttle" id="shuttle">
+          <div class="shuttle-trail" id="shuttleTrail"></div>
+          <div class="shuttle-head right" id="shuttleHead"></div>
+          <div class="shuttle-glow" id="shuttleGlow"></div>
+        </div>
       </div>
       <div class="thread-tooltip" id="threadTooltip"></div>
     </div>
@@ -462,41 +598,44 @@ const FONT_SIZE = 13
 const FONT = `${FONT_SIZE}px 'JetBrains Mono', monospace`
 const CELL_W = FONT_SIZE
 const CELL_H = Math.round(FONT_SIZE * 1.45)
-const WARP_COLOR = '#C49A3C'
-const WEFT_COLOR = '#a0aab4'
-const WARP_DIM = '#C49A3C30'
-const WEFT_DIM = '#a0aab422'
 const TERRACOTTA = '#C2714F'
-const SHUTTLE_SPEED = 250 // ms per row
+const SHUTTLE_SPEED = 250
 
 // --- State ---
 let grid = Array.from({ length: GRID_ROWS }, () => Array(GRID_COLS).fill(false))
-let weaveProgress = -1 // -1 = show all, 0..rows = animating
-let shuttleX = 0 // 0..1 normalized shuttle position within current row
-let shuttleDirection = 1 // 1 = left-to-right, -1 = right-to-left
+let weaveProgress = -1
+let shuttleX = 0
+let shuttleDirection = 1
 let shuttleTimer = null
 let animFrame = null
 let isDrawing = false
 let drawValue = true
 let isWeaving = false
 let continuousWeave = false
-let hoverCell = null // { row, col, x, y } for thread hover
+let hoverCell = null
 
-// Precomputed weft lines cache
 let cachedWeftLines = null
 let cachedCols = 0
 let cachedRows = 0
 
+// DOM cell references: cellElements[row][col] = span element
+let cellElements = []
+let currentCols = 0
+let currentRows = 0
+
 // --- DOM ---
 const punchCard = document.getElementById('punchCard')
-const canvas = document.getElementById('loomCanvas')
-const ctx = canvas.getContext('2d')
+const weaveContainer = document.getElementById('weaveContainer')
+const weaveGrid = document.getElementById('weaveGrid')
 const warpInput = document.getElementById('warpInput')
 const weftInput = document.getElementById('weftInput')
 const weaveBtn = document.getElementById('weaveBtn')
 const continuousToggle = document.getElementById('continuousToggle')
 const threadTooltip = document.getElementById('threadTooltip')
-const loomFrame = document.querySelector('.loom-frame')
+const shuttle = document.getElementById('shuttle')
+const shuttleTrail = document.getElementById('shuttleTrail')
+const shuttleHead = document.getElementById('shuttleHead')
+const shuttleGlow = document.getElementById('shuttleGlow')
 
 // --- Punch Card Grid ---
 punchCard.style.gridTemplateColumns = `repeat(${GRID_COLS}, 1fr)`
@@ -591,183 +730,33 @@ continuousToggle.addEventListener('click', () => {
   continuousToggle.classList.toggle('on', continuousWeave)
   if (continuousWeave && !isWeaving) {
     startWeaving()
-  } else if (!continuousWeave && isWeaving) {
-    // Let current weave finish, then stop
   }
 })
 
-// --- Canvas Resize ---
-function resize() {
-  const wrap = canvas.parentElement
-  const dpr = window.devicePixelRatio || 1
-  canvas.width = wrap.clientWidth * dpr
-  canvas.height = wrap.clientHeight * dpr
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-  cachedWeftLines = null
-  renderLoom()
-}
+// --- Build DOM Grid ---
+function buildGrid(cols, rows) {
+  weaveGrid.innerHTML = ''
+  cellElements = []
+  currentCols = cols
+  currentRows = rows
 
-window.addEventListener('resize', resize)
+  for (let r = 0; r < rows; r++) {
+    const rowDiv = document.createElement('div')
+    rowDiv.className = 'weave-row'
+    cellElements[r] = []
 
-// --- Hover detection for thread visibility ---
-canvas.addEventListener('mousemove', (e) => {
-  const rect = canvas.getBoundingClientRect()
-  const mx = e.clientX - rect.left
-  const my = e.clientY - rect.top
-  const padding = 4
-
-  const col = Math.floor(mx / CELL_W)
-  const row = Math.floor((my - padding) / CELL_H)
-  const w = canvas.parentElement.clientWidth
-  const totalCols = Math.floor(w / CELL_W)
-  const totalRows = cachedWeftLines ? cachedWeftLines.length : 0
-
-  if (col >= 0 && col < totalCols && row >= 0 && row < totalRows) {
-    const patternRow = row % GRID_ROWS
-    const patternCol = col % GRID_COLS
-    const isWarpUp = grid[patternRow][patternCol]
-
-    // Only show for fully woven rows
-    if (weaveProgress >= 0 && row >= weaveProgress) {
-      hideTooltip()
-      hoverCell = null
-      renderLoom()
-      return
+    for (let c = 0; c < cols; c++) {
+      const span = document.createElement('span')
+      span.className = 'weave-cell'
+      rowDiv.appendChild(span)
+      cellElements[r][c] = span
     }
 
-    hoverCell = { row, col }
-
-    const tooltipText = isWarpUp ? 'warp thread' : 'weft thread'
-    const tooltipColor = isWarpUp ? WARP_COLOR : WEFT_COLOR
-    threadTooltip.textContent = tooltipText
-    threadTooltip.style.color = tooltipColor
-    threadTooltip.style.borderColor = tooltipColor + '44'
-
-    // Position tooltip
-    const tooltipX = Math.min(e.clientX - rect.left + 12, rect.width - 100)
-    const tooltipY = e.clientY - rect.top - 28
-    threadTooltip.style.left = tooltipX + 'px'
-    threadTooltip.style.top = tooltipY + 'px'
-    threadTooltip.classList.add('visible')
-
-    renderLoom()
-  } else {
-    hideTooltip()
-    if (hoverCell) {
-      hoverCell = null
-      renderLoom()
-    }
+    weaveGrid.appendChild(rowDiv)
   }
-})
-
-canvas.addEventListener('mouseleave', () => {
-  hideTooltip()
-  if (hoverCell) {
-    hoverCell = null
-    renderLoom()
-  }
-})
-
-function hideTooltip() {
-  threadTooltip.classList.remove('visible')
 }
 
-// --- Weave Animation (shuttle-based) ---
-function startWeaving() {
-  if (isWeaving) return
-  isWeaving = true
-  weaveProgress = 0
-  shuttleX = 0
-  shuttleDirection = 1
-  weaveBtn.textContent = 'Weaving...'
-  weaveBtn.classList.add('weaving')
-  cachedWeftLines = null // force recompute
-
-  animateShuttleRow()
-}
-
-function stopWeaving() {
-  isWeaving = false
-  if (shuttleTimer) {
-    clearTimeout(shuttleTimer)
-    shuttleTimer = null
-  }
-  if (animFrame) {
-    cancelAnimationFrame(animFrame)
-    animFrame = null
-  }
-  weaveBtn.textContent = 'Weave'
-  weaveBtn.classList.remove('weaving')
-}
-
-function animateShuttleRow() {
-  if (!isWeaving) return
-
-  const totalRows = computeTotalRows()
-
-  // Animate shuttle across current row
-  const shuttleDuration = SHUTTLE_SPEED
-  const startTime = performance.now()
-  const direction = shuttleDirection
-
-  function tickShuttle(now) {
-    if (!isWeaving) return
-    const elapsed = now - startTime
-    const progress = Math.min(elapsed / shuttleDuration, 1)
-
-    // Ease in-out for a rhythmic feel
-    const eased = progress < 0.5
-      ? 2 * progress * progress
-      : 1 - Math.pow(-2 * progress + 2, 2) / 2
-
-    shuttleX = direction === 1 ? eased : 1 - eased
-
-    renderLoom()
-
-    if (progress < 1) {
-      animFrame = requestAnimationFrame(tickShuttle)
-    } else {
-      // Row complete
-      weaveProgress++
-      shuttleDirection *= -1
-
-      if (weaveProgress <= totalRows) {
-        shuttleTimer = setTimeout(() => animateShuttleRow(), 30)
-      } else {
-        if (continuousWeave) {
-          // Loop: restart
-          weaveProgress = 0
-          shuttleX = 0
-          shuttleDirection = 1
-          shuttleTimer = setTimeout(() => animateShuttleRow(), 200)
-        } else {
-          weaveProgress = -1
-          stopWeaving()
-          renderLoom()
-        }
-      }
-    }
-  }
-
-  animFrame = requestAnimationFrame(tickShuttle)
-}
-
-weaveBtn.addEventListener('click', () => {
-  if (isWeaving) {
-    stopWeaving()
-    weaveProgress = -1
-    renderLoom()
-  } else {
-    startWeaving()
-  }
-})
-
-function computeTotalRows() {
-  const canvasH = canvas.parentElement.clientHeight
-  return Math.ceil(canvasH / CELL_H) + 1
-}
-
-// --- Prepare weft lines (cached) ---
+// --- Prepare weft lines (cached, pretext for line-breaking) ---
 function getWeftLines(cols, rows) {
   if (cachedWeftLines && cachedCols === cols && cachedRows >= rows) {
     return cachedWeftLines
@@ -800,185 +789,327 @@ function getWeftLines(cols, rows) {
   return weftLines
 }
 
-// --- Core Rendering ---
+// --- Hover handling on the woven grid ---
+weaveContainer.addEventListener('mousemove', (e) => {
+  const rect = weaveContainer.getBoundingClientRect()
+  const mx = e.clientX - rect.left
+  const my = e.clientY - rect.top
+  const padding = 4
+
+  const col = Math.floor(mx / CELL_W)
+  const row = Math.floor((my - padding) / CELL_H)
+  const totalRows = cachedWeftLines ? cachedWeftLines.length : 0
+
+  if (col >= 0 && col < currentCols && row >= 0 && row < totalRows) {
+    if (weaveProgress >= 0 && row >= weaveProgress) {
+      hideTooltip()
+      if (hoverCell) { hoverCell = null; updateHoverStyles() }
+      return
+    }
+
+    const prevHover = hoverCell
+    hoverCell = { row, col }
+
+    const patternRow = row % GRID_ROWS
+    const patternCol = col % GRID_COLS
+    const isWarpUp = grid[patternRow][patternCol]
+
+    const tooltipText = isWarpUp ? 'warp thread' : 'weft thread'
+    const tooltipColor = isWarpUp ? 'var(--warp-color)' : 'var(--weft-color)'
+    threadTooltip.textContent = tooltipText
+    threadTooltip.style.color = tooltipColor
+    threadTooltip.style.borderColor = isWarpUp ? '#C49A3C44' : '#a0aab444'
+
+    const tooltipX = Math.min(e.clientX - rect.left + 12, rect.width - 100)
+    const tooltipY = e.clientY - rect.top - 28
+    threadTooltip.style.left = tooltipX + 'px'
+    threadTooltip.style.top = tooltipY + 'px'
+    threadTooltip.classList.add('visible')
+
+    if (!prevHover || prevHover.row !== row || prevHover.col !== col) {
+      updateHoverStyles()
+    }
+  } else {
+    hideTooltip()
+    if (hoverCell) { hoverCell = null; updateHoverStyles() }
+  }
+})
+
+weaveContainer.addEventListener('mouseleave', () => {
+  hideTooltip()
+  if (hoverCell) { hoverCell = null; updateHoverStyles() }
+})
+
+function hideTooltip() {
+  threadTooltip.classList.remove('visible')
+}
+
+function updateHoverStyles() {
+  // Clear all hover classes
+  const hoveredEls = weaveGrid.querySelectorAll('.hovered, .row-highlight, .col-highlight')
+  for (const el of hoveredEls) {
+    el.classList.remove('hovered', 'row-highlight', 'col-highlight')
+  }
+
+  if (!hoverCell) return
+
+  const { row, col } = hoverCell
+  if (row >= cellElements.length || col >= currentCols) return
+
+  // Add hovered class to the cell
+  cellElements[row][col].classList.add('hovered')
+
+  // Cross-highlight: determine if hovered cell is warp or weft
+  const hoverPatternRow = row % GRID_ROWS
+  const hoverPatternCol = col % GRID_COLS
+  const hoverIsWarp = grid[hoverPatternRow][hoverPatternCol]
+
+  if (hoverIsWarp) {
+    // Highlight the warp column
+    for (let r = 0; r < cellElements.length; r++) {
+      if (r === row) continue
+      const el = cellElements[r][col]
+      if (el && el.classList.contains('warp-up')) {
+        el.classList.add('col-highlight')
+      }
+    }
+  } else {
+    // Highlight the weft row
+    for (let c = 0; c < currentCols; c++) {
+      if (c === col) continue
+      const el = cellElements[row][c]
+      if (el && el.classList.contains('weft-up')) {
+        el.classList.add('row-highlight')
+      }
+    }
+  }
+}
+
+// --- Weave Animation ---
+function startWeaving() {
+  if (isWeaving) return
+  isWeaving = true
+  weaveProgress = 0
+  shuttleX = 0
+  shuttleDirection = 1
+  weaveBtn.textContent = 'Weaving...'
+  weaveBtn.classList.add('weaving')
+  cachedWeftLines = null
+
+  renderLoom()
+  animateShuttleRow()
+}
+
+function stopWeaving() {
+  isWeaving = false
+  if (shuttleTimer) {
+    clearTimeout(shuttleTimer)
+    shuttleTimer = null
+  }
+  if (animFrame) {
+    cancelAnimationFrame(animFrame)
+    animFrame = null
+  }
+  weaveBtn.textContent = 'Weave'
+  weaveBtn.classList.remove('weaving')
+  shuttle.classList.remove('active')
+}
+
+function animateShuttleRow() {
+  if (!isWeaving) return
+
+  const totalRows = computeTotalRows()
+  const shuttleDuration = SHUTTLE_SPEED
+  const startTime = performance.now()
+  const direction = shuttleDirection
+
+  shuttle.classList.add('active')
+
+  function tickShuttle(now) {
+    if (!isWeaving) return
+    const elapsed = now - startTime
+    const progress = Math.min(elapsed / shuttleDuration, 1)
+
+    const eased = progress < 0.5
+      ? 2 * progress * progress
+      : 1 - Math.pow(-2 * progress + 2, 2) / 2
+
+    shuttleX = direction === 1 ? eased : 1 - eased
+
+    updateShuttleDOM()
+    updateRowVisibility()
+
+    if (progress < 1) {
+      animFrame = requestAnimationFrame(tickShuttle)
+    } else {
+      weaveProgress++
+      shuttleDirection *= -1
+
+      if (weaveProgress <= totalRows) {
+        shuttleTimer = setTimeout(() => animateShuttleRow(), 30)
+      } else {
+        if (continuousWeave) {
+          weaveProgress = 0
+          shuttleX = 0
+          shuttleDirection = 1
+          shuttleTimer = setTimeout(() => animateShuttleRow(), 200)
+        } else {
+          weaveProgress = -1
+          stopWeaving()
+          renderLoom()
+        }
+      }
+    }
+  }
+
+  animFrame = requestAnimationFrame(tickShuttle)
+}
+
+function updateShuttleDOM() {
+  if (!isWeaving || weaveProgress < 0 || weaveProgress >= (cachedWeftLines?.length ?? 0)) {
+    shuttle.classList.remove('active')
+    return
+  }
+
+  const padding = 4
+  const pixelX = shuttleX * (currentCols * CELL_W)
+  const pixelY = padding + weaveProgress * CELL_H + CELL_H / 2
+
+  shuttle.style.top = pixelY + 'px'
+  shuttle.style.left = pixelX + 'px'
+
+  // Trail
+  const fullWidth = currentCols * CELL_W
+  if (shuttleDirection === 1) {
+    shuttleTrail.style.left = -pixelX + 'px'
+    shuttleTrail.style.width = pixelX + 'px'
+  } else {
+    shuttleTrail.style.left = '0px'
+    shuttleTrail.style.width = (fullWidth - pixelX) + 'px'
+  }
+
+  // Head direction
+  shuttleHead.className = 'shuttle-head ' + (shuttleDirection === 1 ? 'right' : 'left')
+  if (shuttleDirection === 1) {
+    shuttleHead.style.left = '0px'
+  } else {
+    shuttleHead.style.left = '-11px'
+  }
+}
+
+function updateRowVisibility() {
+  if (weaveProgress < 0) return
+
+  const weftLines = cachedWeftLines
+  if (!weftLines) return
+
+  const shuttlePixelX = shuttleX * (currentCols * CELL_W)
+  const shuttleRow = weaveProgress
+
+  for (let r = 0; r < weftLines.length && r < cellElements.length; r++) {
+    if (r > weaveProgress) {
+      // Hide rows not yet woven
+      for (let c = 0; c < currentCols; c++) {
+        cellElements[r][c].classList.add('hidden')
+      }
+    } else if (r === shuttleRow) {
+      // Partially reveal current row based on shuttle position
+      for (let c = 0; c < currentCols; c++) {
+        const charCenterX = c * CELL_W + CELL_W / 2
+        const revealed = shuttleDirection === 1
+          ? charCenterX <= shuttlePixelX
+          : charCenterX >= shuttlePixelX
+
+        if (revealed) {
+          cellElements[r][c].classList.remove('hidden')
+        } else {
+          cellElements[r][c].classList.add('hidden')
+        }
+      }
+    } else {
+      // Fully woven rows - make sure visible
+      for (let c = 0; c < currentCols; c++) {
+        cellElements[r][c].classList.remove('hidden')
+      }
+    }
+  }
+}
+
+weaveBtn.addEventListener('click', () => {
+  if (isWeaving) {
+    stopWeaving()
+    weaveProgress = -1
+    renderLoom()
+  } else {
+    startWeaving()
+  }
+})
+
+function computeTotalRows() {
+  const containerH = weaveContainer.clientHeight
+  return Math.ceil(containerH / CELL_H) + 1
+}
+
+// --- Core Rendering (DOM) ---
 function renderLoom() {
-  const w = canvas.parentElement.clientWidth
-  const h = canvas.parentElement.clientHeight
-  ctx.clearRect(0, 0, w, h)
+  const w = weaveContainer.clientWidth
+  const h = weaveContainer.clientHeight
 
   const warpText = warpInput.value || '01'
-
   const cols = Math.floor(w / CELL_W)
   const rows = Math.ceil(h / CELL_H) + 1
 
   const weftLines = getWeftLines(cols, rows)
   if (!weftLines) return
 
-  // Build warp columns
-  const warpChars = []
-  for (let c = 0; c < cols; c++) {
-    warpChars.push(warpText[c % warpText.length])
+  // Rebuild grid if dimensions changed
+  if (cols !== currentCols || rows !== currentRows) {
+    buildGrid(cols, rows)
   }
 
-  ctx.font = FONT
-  ctx.textBaseline = 'top'
-
-  const padding = 4
-
-  // Determine shuttle pixel position for current animating row
-  let shuttlePixelX = -1
-  let shuttleRow = -1
-  if (isWeaving && weaveProgress >= 0 && weaveProgress < weftLines.length) {
-    shuttleRow = weaveProgress
-    shuttlePixelX = shuttleX * (cols * CELL_W)
-  }
-
-  for (let r = 0; r < weftLines.length; r++) {
-    // During animation: only show completed rows + partially revealed current row
-    if (weaveProgress >= 0 && r > weaveProgress) break
-
+  // Populate cells
+  for (let r = 0; r < weftLines.length && r < cellElements.length; r++) {
     const weftLine = weftLines[r]
     const patternRow = r % GRID_ROWS
-    const y = padding + r * CELL_H
     const weftChars = [...weftLine]
 
-    const isCurrentShuttleRow = r === shuttleRow
-
     for (let c = 0; c < cols; c++) {
+      const el = cellElements[r][c]
       const patternCol = c % GRID_COLS
       const isWarpUp = grid[patternRow][patternCol]
-      const x = c * CELL_W
 
-      // During shuttle animation on current row, only reveal chars behind shuttle
-      if (isCurrentShuttleRow) {
-        const charCenterX = x + CELL_W / 2
-        const revealed = shuttleDirection === 1
-          ? charCenterX <= shuttlePixelX
-          : charCenterX >= shuttlePixelX
-        if (!revealed) continue
-      }
-
-      // Thread tension wobble: chars near shuttle position get a subtle vertical offset
-      let wobbleY = 0
-      if (isCurrentShuttleRow || (shuttleRow >= 0 && r === shuttleRow - 1)) {
-        const charCenterX = x + CELL_W / 2
-        const dist = Math.abs(charCenterX - shuttlePixelX)
-        if (dist < CELL_W * 4) {
-          const proximity = 1 - dist / (CELL_W * 4)
-          wobbleY = Math.sin(performance.now() * 0.015 + c * 0.8) * proximity * 2.5
-        }
-      }
-
-      // Hover highlight
-      const isHovered = hoverCell && hoverCell.row === r && hoverCell.col === c
-      const isHoverRowOrCol = hoverCell && (hoverCell.row === r || hoverCell.col === c)
-
-      // Draw background cell
       if (isWarpUp) {
-        ctx.fillStyle = isHovered ? '#C49A3C55' : WARP_DIM
-        ctx.fillRect(x, y, CELL_W, CELL_H)
-      } else if (isHovered) {
-        ctx.fillStyle = '#a0aab433'
-        ctx.fillRect(x, y, CELL_W, CELL_H)
-      }
-
-      // Subtle cross-highlight on hover (row/col)
-      if (isHoverRowOrCol && !isHovered) {
-        const hoverIsWarp = hoverCell ? grid[hoverCell.row % GRID_ROWS][hoverCell.col % GRID_COLS] : false
-        if (hoverIsWarp && hoverCell.col === c) {
-          // Highlight warp column
-          ctx.fillStyle = '#C49A3C0C'
-          ctx.fillRect(x, y, CELL_W, CELL_H)
-        } else if (!hoverIsWarp && hoverCell.row === r) {
-          // Highlight weft row
-          ctx.fillStyle = '#a0aab40C'
-          ctx.fillRect(x, y, CELL_W, CELL_H)
-        }
-      }
-
-      // Draw the visible thread character
-      if (isWarpUp) {
-        ctx.fillStyle = isHovered ? '#e8d48c' : WARP_COLOR
+        el.className = 'weave-cell warp-up'
         const warpChar = warpText[(r + c) % warpText.length]
-        ctx.fillText(warpChar, x + 1, y + 2 + wobbleY)
+        el.textContent = warpChar
       } else {
-        ctx.fillStyle = isHovered ? '#c8d4de' : WEFT_COLOR
-        const weftChar = weftChars[c] || ' '
-        ctx.fillText(weftChar, x + 1, y + 2 + wobbleY)
+        el.className = 'weave-cell weft-up'
+        el.textContent = weftChars[c] || '\u00A0'
       }
-    }
 
-    // Draw shuttle line
-    if (isCurrentShuttleRow) {
-      // Shuttle indicator - a small bright mark
-      const sy = y + CELL_H / 2
-      ctx.save()
-
-      // Shuttle trail line
-      ctx.strokeStyle = TERRACOTTA + '66'
-      ctx.lineWidth = 1
-      ctx.beginPath()
-      if (shuttleDirection === 1) {
-        ctx.moveTo(0, sy)
-        ctx.lineTo(shuttlePixelX, sy)
-      } else {
-        ctx.moveTo(cols * CELL_W, sy)
-        ctx.lineTo(shuttlePixelX, sy)
+      // During animation, hide not-yet-woven rows
+      if (weaveProgress >= 0 && r > weaveProgress) {
+        el.classList.add('hidden')
       }
-      ctx.stroke()
-
-      // Shuttle head (small triangle/diamond)
-      ctx.fillStyle = TERRACOTTA
-      ctx.beginPath()
-      const sx = shuttlePixelX
-      const dir = shuttleDirection
-      ctx.moveTo(sx + dir * 8, sy)
-      ctx.lineTo(sx - dir * 3, sy - 4)
-      ctx.lineTo(sx - dir * 3, sy + 4)
-      ctx.closePath()
-      ctx.fill()
-
-      // Glow around shuttle
-      ctx.shadowColor = TERRACOTTA
-      ctx.shadowBlur = 8
-      ctx.fillStyle = TERRACOTTA
-      ctx.beginPath()
-      ctx.arc(sx, sy, 2, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.shadowBlur = 0
-
-      ctx.restore()
-    }
-
-    // Bottom edge line for just-completed row during animation
-    if (weaveProgress >= 0 && r === weaveProgress - 1 && !isCurrentShuttleRow) {
-      ctx.strokeStyle = WARP_COLOR + '33'
-      ctx.lineWidth = 0.5
-      ctx.beginPath()
-      ctx.moveTo(0, y + CELL_H)
-      ctx.lineTo(w, y + CELL_H)
-      ctx.stroke()
     }
   }
 
-  // Draw faint grid lines for texture
-  ctx.strokeStyle = '#e8e4dc08'
-  ctx.lineWidth = 0.5
-  for (let r = 0; r <= rows; r++) {
-    const y = padding + r * CELL_H
-    ctx.beginPath()
-    ctx.moveTo(0, y)
-    ctx.lineTo(w, y)
-    ctx.stroke()
-  }
-  for (let c = 0; c <= cols; c++) {
-    const x = c * CELL_W
-    ctx.beginPath()
-    ctx.moveTo(x, padding)
-    ctx.lineTo(x, padding + rows * CELL_H)
-    ctx.stroke()
+  // Clear any extra rows beyond weftLines
+  for (let r = weftLines.length; r < cellElements.length; r++) {
+    for (let c = 0; c < cols; c++) {
+      cellElements[r][c].textContent = ''
+      cellElements[r][c].className = 'weave-cell'
+    }
   }
 }
+
+// --- Resize ---
+function resize() {
+  cachedWeftLines = null
+  renderLoom()
+}
+
+window.addEventListener('resize', resize)
 
 // --- Input listeners ---
 warpInput.addEventListener('input', () => {
@@ -996,12 +1127,10 @@ weftInput.addEventListener('input', () => {
 // --- Init ---
 applyPreset('plain')
 
-// Wait for fonts then re-render
 document.fonts.ready.then(() => {
   resize()
 })
 
-// Initial resize
 requestAnimationFrame(resize)
 </script>
 

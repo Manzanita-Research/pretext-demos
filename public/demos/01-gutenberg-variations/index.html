@@ -20,16 +20,147 @@
     flex-direction: column;
   }
 
-  #canvas-wrap {
+  /* Paper grain texture overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.03;
+    background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 200px 200px;
+  }
+
+  #page-wrap {
     flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    position: relative;
     overflow: hidden;
   }
 
-  canvas {
-    display: block;
+  #page {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+  }
+
+  /* Vignette overlay */
+  #vignette {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2;
+    background: radial-gradient(ellipse at center, rgba(107,58,42,0) 30%, rgba(107,58,42,0.06) 100%);
+  }
+
+  #content-area {
+    position: absolute;
+    z-index: 1;
+  }
+
+  .column {
+    position: absolute;
+    top: 0;
+    overflow: hidden;
+  }
+
+  .text-line {
+    position: absolute;
+    white-space: nowrap;
+    left: 0;
+    right: 0;
+  }
+
+  /* Headline */
+  .headline-block {
+    position: absolute;
+    left: 0;
+    right: 0;
+    text-align: center;
+    z-index: 3;
+  }
+
+  .headline-main {
+    font-weight: 700;
+    margin: 0;
+  }
+
+  .headline-sub {
+    margin: 0;
+    font-style: italic;
+    opacity: 0.55;
+  }
+
+  .headline-rule {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1px;
+  }
+
+  /* Pull quote */
+  .pull-quote {
+    position: absolute;
+    font-style: italic;
+    z-index: 3;
+  }
+
+  .pull-quote-rule {
+    position: absolute;
+    left: 0;
+    top: -4px;
+    bottom: -4px;
+    width: 2px;
+    opacity: 0.25;
+  }
+
+  .pull-quote .pq-line {
+    position: absolute;
+    white-space: nowrap;
+    opacity: 0.65;
+  }
+
+  /* Image block */
+  .image-block {
+    position: absolute;
+    z-index: 3;
+  }
+
+  .image-block-inner {
+    width: 100%;
+    height: 100%;
+    border: 0.5px solid rgba(44,44,44,0.1);
+    background: linear-gradient(135deg, rgba(44,44,44,0.06) 0%, rgba(44,44,44,0.1) 50%, rgba(44,44,44,0.06) 100%);
+  }
+
+  .image-caption {
+    position: absolute;
+    bottom: -18px;
+    left: 8px;
+    font-style: italic;
+    opacity: 0.4;
+    white-space: nowrap;
+  }
+
+  /* Drop cap */
+  .drop-cap {
+    position: absolute;
+    font-weight: 600;
+    opacity: 0.85;
+    line-height: 1;
+  }
+
+  /* Decorative rules */
+  .rule-line {
+    position: absolute;
+    z-index: 0;
+  }
+
+  /* SVG ornaments */
+  .ornament-svg {
+    position: absolute;
+    z-index: 0;
+    pointer-events: none;
   }
 
   #controls {
@@ -151,8 +282,9 @@
   <h1>The Gutenberg Variations</h1>
 </div>
 
-<div id="canvas-wrap">
-  <canvas id="canvas"></canvas>
+<div id="page-wrap">
+  <div id="page"></div>
+  <div id="vignette"></div>
 </div>
 
 <div id="controls">
@@ -185,34 +317,13 @@ The digital age collapsed the column. Text reflowed to fill whatever vessel held
 
 And still the fundamental act persists: symbols arranged in sequence, decoded by a mind trained to find meaning in marks. From Gutenberg's press to this glowing rectangle, the work continues — setting words in order, making thought visible, believing that what we write might outlast the vessels that carry it.`
 
-// --- Canvas setup ---
-const canvas = document.getElementById('canvas')
-const ctx = canvas.getContext('2d')
+// --- DOM references ---
+const page = document.getElementById('page')
 const slider = document.getElementById('slider')
 const yearDisplay = document.getElementById('year-display')
 const eraLabel = document.getElementById('era-label')
-const dpr = window.devicePixelRatio || 1
 
-function resizeCanvas() {
-  const wrap = document.getElementById('canvas-wrap')
-  const w = wrap.clientWidth
-  const h = wrap.clientHeight
-  canvas.width = w * dpr
-  canvas.height = h * dpr
-  canvas.style.width = w + 'px'
-  canvas.style.height = h + 'px'
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-  render()
-}
-
-// --- Era definitions with per-era fonts ---
-// Font families per era:
-//   Incunabula: Cormorant Garamond (heavy serif, blackletter feel)
-//   Renaissance: EB Garamond (refined serif)
-//   Broadsheet: Playfair Display headlines, Literata body
-//   Magazine: Literata body, Fraunces display
-//   Modernist: Inter (sans-serif — the key fix)
-//   Mobile: system sans-serif stack
+// --- Era definitions ---
 const ERAS = [
   { year: 1440, name: 'Incunabula', columns: 1, fontSize: 19, lineHeight: 30, marginX: 0.2, marginTop: 0.12, colGap: 0, dropCap: true, pullQuote: false, headline: false, imageBlock: false, font: 'Cormorant Garamond', fontFallback: 'Georgia, serif', headlineFont: 'Cormorant Garamond', textColor: '#3a3020', bgColor: '#f0e6d0', ornamentColor: '#6b5c3e', ruleColor: 'rgba(58,48,32,0.12)' },
   { year: 1500, name: 'Renaissance Print', columns: 2, fontSize: 15, lineHeight: 24, marginX: 0.1, marginTop: 0.08, colGap: 30, dropCap: false, pullQuote: false, headline: false, imageBlock: false, font: 'EB Garamond', fontFallback: 'Georgia, serif', headlineFont: 'EB Garamond', textColor: '#2e2a22', bgColor: '#ede6d6', ornamentColor: '#5a5040', ruleColor: 'rgba(46,42,34,0.1)' },
@@ -268,7 +379,7 @@ function getEraParams(year) {
   }
 }
 
-// --- Pretext preparation cache (keyed by font string for per-font caching) ---
+// --- Pretext preparation cache ---
 const preparedCache = new Map()
 function getPrepared(text, fontStr) {
   const key = text.slice(0, 40) + '|' + fontStr
@@ -278,29 +389,54 @@ function getPrepared(text, fontStr) {
   return preparedCache.get(key)
 }
 
-// Pull quote text
+// Pull quote & headline text
 const PULL_QUOTE = 'Language might be multiplied without diminishing.'
 const HEADLINE_TEXT = 'THE GUTENBERG PRESS'
 const HEADLINE_SUB = 'How Movable Type Remade the Western World'
 
-// --- Main render ---
+// --- SVG ornament path data ---
+function createOrnamentSVG(color, alpha, flip) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  svg.setAttribute('width', '28')
+  svg.setAttribute('height', '20')
+  svg.setAttribute('viewBox', '-2 -6 28 22')
+  svg.style.opacity = alpha * 0.3
+
+  const transform = flip ? 'scale(-1,1) translate(-24,0)' : ''
+
+  const p1 = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+  p1.setAttribute('d', 'M0,0 C8,-4 16,-2 20,4 C24,10 18,14 12,10 C6,6 10,2 14,4')
+  p1.setAttribute('fill', 'none')
+  p1.setAttribute('stroke', color)
+  p1.setAttribute('stroke-width', '1')
+  if (transform) p1.setAttribute('transform', transform)
+
+  const p2 = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+  p2.setAttribute('d', 'M0,0 C6,2 12,8 10,14')
+  p2.setAttribute('fill', 'none')
+  p2.setAttribute('stroke', color)
+  p2.setAttribute('stroke-width', '1')
+  if (transform) p2.setAttribute('transform', transform)
+
+  svg.appendChild(p1)
+  svg.appendChild(p2)
+  return svg
+}
+
+// --- Main render (DOM-based) ---
 function render() {
-  const w = canvas.width / dpr
-  const h = canvas.height / dpr
+  const wrap = document.getElementById('page-wrap')
+  const w = wrap.clientWidth
+  const h = wrap.clientHeight
 
   const year = parseInt(slider.value)
   const p = getEraParams(year)
 
-  // Clear with era-appropriate background color
-  ctx.fillStyle = p.bgColor
-  ctx.fillRect(0, 0, w, h)
+  // Clear previous content
+  page.innerHTML = ''
 
-  // Subtle vignette (warm-tinted, never pure black)
-  const vg = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.3, w / 2, h / 2, Math.max(w, h) * 0.75)
-  vg.addColorStop(0, 'rgba(107,58,42,0)')
-  vg.addColorStop(1, 'rgba(107,58,42,0.06)')
-  ctx.fillStyle = vg
-  ctx.fillRect(0, 0, w, h)
+  // Set page background
+  page.style.backgroundColor = p.bgColor
 
   const marginX = Math.round(w * p.marginX)
   const marginTop = Math.round(h * p.marginTop)
@@ -310,68 +446,119 @@ function render() {
   const fontSize = Math.round(p.fontSize)
   const lineHeight = Math.round(p.lineHeight)
   const fontStr = `${fontSize}px "${p.font}", ${p.fontFallback}`
+  const fontFamily = `"${p.font}", ${p.fontFallback}`
 
-  // Decorative rule lines at margins
-  ctx.strokeStyle = p.ruleColor
-  ctx.lineWidth = 0.5
-  for (let c = 0; c < p.columns; c++) {
-    const colX = marginX + c * (colWidth + p.colGap)
-    if (c > 0) {
-      const ruleX = colX - p.colGap / 2
-      ctx.beginPath()
-      ctx.moveTo(ruleX, marginTop)
-      ctx.lineTo(ruleX, marginTop + contentHeight)
-      ctx.stroke()
-    }
-  }
+  // --- Decorative rules (SVG layer) ---
+  const rulesSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  rulesSvg.setAttribute('width', w)
+  rulesSvg.setAttribute('height', h)
+  rulesSvg.style.position = 'absolute'
+  rulesSvg.style.left = '0'
+  rulesSvg.style.top = '0'
+  rulesSvg.style.pointerEvents = 'none'
+  rulesSvg.style.zIndex = '0'
 
   // Top decorative rule
-  ctx.strokeStyle = p.ruleColor
-  ctx.lineWidth = 0.5
-  ctx.beginPath()
-  ctx.moveTo(marginX, marginTop - 8)
-  ctx.lineTo(w - marginX, marginTop - 8)
-  ctx.stroke()
+  const topRule = document.createElementNS('http://www.w3.org/2000/svg', 'line')
+  topRule.setAttribute('x1', marginX)
+  topRule.setAttribute('y1', marginTop - 8)
+  topRule.setAttribute('x2', w - marginX)
+  topRule.setAttribute('y2', marginTop - 8)
+  topRule.setAttribute('stroke', p.ruleColor)
+  topRule.setAttribute('stroke-width', '0.5')
+  rulesSvg.appendChild(topRule)
 
-  // Headline for newspaper era
+  // Bottom decorative rule
+  const bottomRule = document.createElementNS('http://www.w3.org/2000/svg', 'line')
+  bottomRule.setAttribute('x1', marginX)
+  bottomRule.setAttribute('y1', marginTop + contentHeight + 4)
+  bottomRule.setAttribute('x2', w - marginX)
+  bottomRule.setAttribute('y2', marginTop + contentHeight + 4)
+  bottomRule.setAttribute('stroke', p.ruleColor)
+  bottomRule.setAttribute('stroke-width', '0.5')
+  rulesSvg.appendChild(bottomRule)
+
+  // Column separator rules
+  for (let c = 1; c < p.columns; c++) {
+    const colX = marginX + c * (colWidth + p.colGap)
+    const ruleX = colX - p.colGap / 2
+    const colRule = document.createElementNS('http://www.w3.org/2000/svg', 'line')
+    colRule.setAttribute('x1', ruleX)
+    colRule.setAttribute('y1', marginTop)
+    colRule.setAttribute('x2', ruleX)
+    colRule.setAttribute('y2', marginTop + contentHeight)
+    colRule.setAttribute('stroke', p.ruleColor)
+    colRule.setAttribute('stroke-width', '0.5')
+    rulesSvg.appendChild(colRule)
+  }
+
+  page.appendChild(rulesSvg)
+
+  // --- Corner ornaments (early eras) ---
+  if (year < 1600) {
+    const ornAlpha = Math.max(0, 1 - (year - 1440) / 160)
+
+    const ornLeft = createOrnamentSVG(p.ornamentColor, ornAlpha, false)
+    ornLeft.classList.add('ornament-svg')
+    ornLeft.style.left = (marginX - 4) + 'px'
+    ornLeft.style.top = (marginTop - 16) + 'px'
+    page.appendChild(ornLeft)
+
+    const ornRight = createOrnamentSVG(p.ornamentColor, ornAlpha, true)
+    ornRight.classList.add('ornament-svg')
+    ornRight.style.left = (w - marginX + 4 - 28) + 'px'
+    ornRight.style.top = (marginTop - 16) + 'px'
+    page.appendChild(ornRight)
+  }
+
+  // --- Headline (newspaper era) ---
   let headlineOffset = 0
   if (p.headline) {
     const headFontSize = Math.round(fontSize * 2.2)
-    const headFont = `700 ${headFontSize}px "${p.headlineFont}", ${p.fontFallback}`
-    ctx.font = headFont
-    ctx.fillStyle = p.textColor
-    ctx.textAlign = 'center'
-    ctx.fillText(HEADLINE_TEXT, w / 2, marginTop + headFontSize)
-
     const subFontSize = Math.round(fontSize * 1.1)
-    ctx.font = `italic ${subFontSize}px "${p.font}", ${p.fontFallback}`
-    ctx.fillStyle = p.textColor
-    ctx.globalAlpha = 0.55
-    ctx.fillText(HEADLINE_SUB, w / 2, marginTop + headFontSize + subFontSize + 8)
-    ctx.globalAlpha = 1.0
-    ctx.textAlign = 'left'
 
-    // Rule under headline
-    ctx.strokeStyle = p.ruleColor
-    ctx.lineWidth = 1
-    const ruleY = marginTop + headFontSize + subFontSize + 20
-    ctx.beginPath()
-    ctx.moveTo(marginX, ruleY)
-    ctx.lineTo(w - marginX, ruleY)
-    ctx.stroke()
+    const headBlock = document.createElement('div')
+    headBlock.className = 'headline-block'
+    headBlock.style.top = marginTop + 'px'
+    headBlock.style.left = marginX + 'px'
+    headBlock.style.right = marginX + 'px'
+    headBlock.style.width = contentWidth + 'px'
+
+    const headMain = document.createElement('div')
+    headMain.className = 'headline-main'
+    headMain.style.fontFamily = `"${p.headlineFont}", ${p.fontFallback}`
+    headMain.style.fontSize = headFontSize + 'px'
+    headMain.style.color = p.textColor
+    headMain.style.lineHeight = '1.1'
+    headMain.textContent = HEADLINE_TEXT
+    headBlock.appendChild(headMain)
+
+    const headSub = document.createElement('div')
+    headSub.className = 'headline-sub'
+    headSub.style.fontFamily = fontFamily
+    headSub.style.fontSize = subFontSize + 'px'
+    headSub.style.color = p.textColor
+    headSub.style.marginTop = '8px'
+    headSub.textContent = HEADLINE_SUB
+    headBlock.appendChild(headSub)
+
+    page.appendChild(headBlock)
 
     headlineOffset = headFontSize + subFontSize + 32
+
+    // Headline rule (in SVG layer)
+    const hRule = document.createElementNS('http://www.w3.org/2000/svg', 'line')
+    const hRuleY = marginTop + headFontSize + subFontSize + 20
+    hRule.setAttribute('x1', marginX)
+    hRule.setAttribute('y1', hRuleY)
+    hRule.setAttribute('x2', w - marginX)
+    hRule.setAttribute('y2', hRuleY)
+    hRule.setAttribute('stroke', p.ruleColor)
+    hRule.setAttribute('stroke-width', '1')
+    rulesSvg.appendChild(hRule)
   }
 
-  // Prepare text with pretext (cached per font string)
-  const prepared = getPrepared(ARTICLE_TEXT, fontStr)
-
-  // Layout text into columns
-  let cursor = { segmentIndex: 0, graphemeIndex: 0 }
-  let currentCol = 0
-  const maxY = contentHeight - lineHeight
-
-  // Image block placement (magazine era)
+  // --- Image block (magazine era) ---
   let imageBlock = null
   if (p.imageBlock) {
     imageBlock = {
@@ -380,9 +567,33 @@ function render() {
       width: colWidth,
       height: Math.round(colWidth * 0.6),
     }
+
+    const imgColX = marginX + imageBlock.col * (colWidth + p.colGap)
+    const imgY = marginTop + headlineOffset + imageBlock.top
+
+    const imgEl = document.createElement('div')
+    imgEl.className = 'image-block'
+    imgEl.style.left = imgColX + 'px'
+    imgEl.style.top = imgY + 'px'
+    imgEl.style.width = imageBlock.width + 'px'
+    imgEl.style.height = imageBlock.height + 'px'
+
+    const imgInner = document.createElement('div')
+    imgInner.className = 'image-block-inner'
+    imgEl.appendChild(imgInner)
+
+    const caption = document.createElement('div')
+    caption.className = 'image-caption'
+    caption.style.fontFamily = fontFamily
+    caption.style.fontSize = Math.round(fontSize * 0.75) + 'px'
+    caption.style.color = p.textColor
+    caption.textContent = 'A compositor at his type case, circa 1900'
+    imgEl.appendChild(caption)
+
+    page.appendChild(imgEl)
   }
 
-  // Pull quote placement
+  // --- Pull quote (magazine era) ---
   let pullQuoteArea = null
   if (p.pullQuote) {
     pullQuoteArea = {
@@ -390,103 +601,95 @@ function render() {
       topLine: 8,
       lines: 5,
     }
+
+    const pqFontSize = Math.round(fontSize * 1.6)
+    const pqLineH = Math.round(pqFontSize * 1.45)
+    const pqColX = marginX + pullQuoteArea.col * (colWidth + p.colGap)
+    const pqY = marginTop + headlineOffset + pullQuoteArea.topLine * lineHeight
+    const pqHeight = pullQuoteArea.lines * lineHeight
+    const pqFontStr = `italic ${pqFontSize}px "${p.headlineFont}", ${p.fontFallback}`
+
+    const pqEl = document.createElement('div')
+    pqEl.className = 'pull-quote'
+    pqEl.style.left = pqColX + 'px'
+    pqEl.style.top = pqY + 'px'
+    pqEl.style.width = colWidth + 'px'
+    pqEl.style.height = pqHeight + 'px'
+
+    // Left rule bar
+    const pqRule = document.createElement('div')
+    pqRule.className = 'pull-quote-rule'
+    pqRule.style.backgroundColor = p.textColor
+    pqEl.appendChild(pqRule)
+
+    // Layout pull quote text with pretext
+    const pqPrepared = getPrepared(PULL_QUOTE, pqFontStr)
+    let pqCursor = { segmentIndex: 0, graphemeIndex: 0 }
+    let pqLineY = 0
+
+    while (true) {
+      const line = layoutNextLine(pqPrepared, pqCursor, colWidth - 16)
+      if (!line) break
+
+      const pqLine = document.createElement('div')
+      pqLine.className = 'pq-line'
+      pqLine.style.left = '12px'
+      pqLine.style.top = pqLineY + 'px'
+      pqLine.style.fontFamily = `"${p.headlineFont}", ${p.fontFallback}`
+      pqLine.style.fontStyle = 'italic'
+      pqLine.style.fontSize = pqFontSize + 'px'
+      pqLine.style.lineHeight = pqLineH + 'px'
+      pqLine.style.color = p.textColor
+      pqLine.textContent = line.text
+      pqEl.appendChild(pqLine)
+
+      pqCursor = line.end
+      pqLineY += pqLineH
+    }
+
+    page.appendChild(pqEl)
   }
 
-  // Drop cap state
-  let isFirstLine = true
-  let dropCapDone = false
+  // --- Prepare text with pretext ---
+  const prepared = getPrepared(ARTICLE_TEXT, fontStr)
 
-  ctx.fillStyle = p.textColor
-  ctx.font = fontStr
+  // --- Layout text into columns as DOM elements ---
+  let cursor = { segmentIndex: 0, graphemeIndex: 0 }
+  const maxY = contentHeight - lineHeight
+
+  let dropCapDone = false
+  let isFirstLine = true
 
   for (let col = 0; col < p.columns; col++) {
     const colX = marginX + col * (colWidth + p.colGap)
-    let y = marginTop + headlineOffset
 
-    // Draw image block
-    if (imageBlock && col === imageBlock.col) {
-      const imgX = colX
-      const imgY = marginTop + headlineOffset + imageBlock.top
-      const grad = ctx.createLinearGradient(imgX, imgY, imgX + imageBlock.width, imgY + imageBlock.height)
-      grad.addColorStop(0, 'rgba(44,44,44,0.06)')
-      grad.addColorStop(0.5, 'rgba(44,44,44,0.1)')
-      grad.addColorStop(1, 'rgba(44,44,44,0.06)')
-      ctx.fillStyle = grad
-      ctx.fillRect(imgX, imgY, imageBlock.width, imageBlock.height)
+    const colEl = document.createElement('div')
+    colEl.className = 'column'
+    colEl.style.left = colX + 'px'
+    colEl.style.top = (marginTop + headlineOffset) + 'px'
+    colEl.style.width = colWidth + 'px'
+    colEl.style.height = (maxY) + 'px'
 
-      // Border
-      ctx.strokeStyle = p.ruleColor
-      ctx.lineWidth = 0.5
-      ctx.strokeRect(imgX, imgY, imageBlock.width, imageBlock.height)
-
-      // Caption text
-      ctx.fillStyle = p.textColor
-      ctx.globalAlpha = 0.4
-      ctx.font = `italic ${Math.round(fontSize * 0.75)}px "${p.font}", ${p.fontFallback}`
-      ctx.fillText('A compositor at his type case, circa 1900', imgX + 8, imgY + imageBlock.height + 14)
-      ctx.globalAlpha = 1.0
-      ctx.font = fontStr
-      ctx.fillStyle = p.textColor
-    }
-
-    // Draw pull quote
-    if (pullQuoteArea && col === pullQuoteArea.col) {
-      const pqFontSize = Math.round(fontSize * 1.6)
-      const pqLineH = Math.round(pqFontSize * 1.45)
-      const pqY = marginTop + headlineOffset + pullQuoteArea.topLine * lineHeight
-      const pqHeight = pullQuoteArea.lines * lineHeight
-      const pqFontStr = `italic ${pqFontSize}px "${p.headlineFont}", ${p.fontFallback}`
-
-      // Pull quote rule
-      ctx.strokeStyle = p.textColor
-      ctx.globalAlpha = 0.25
-      ctx.lineWidth = 2
-      ctx.beginPath()
-      ctx.moveTo(colX, pqY - 4)
-      ctx.lineTo(colX, pqY + pqHeight + 4)
-      ctx.stroke()
-      ctx.lineWidth = 0.5
-      ctx.globalAlpha = 1.0
-
-      // Pull quote text
-      ctx.fillStyle = p.textColor
-      ctx.globalAlpha = 0.65
-      ctx.font = pqFontStr
-      const pqPrepared = getPrepared(PULL_QUOTE, pqFontStr)
-      let pqCursor = { segmentIndex: 0, graphemeIndex: 0 }
-      let pqY2 = pqY + pqFontSize
-      while (true) {
-        const line = layoutNextLine(pqPrepared, pqCursor, colWidth - 16)
-        if (!line) break
-        ctx.fillText(line.text, colX + 12, pqY2)
-        pqCursor = line.end
-        pqY2 += pqLineH
-      }
-
-      ctx.globalAlpha = 1.0
-      ctx.font = fontStr
-      ctx.fillStyle = p.textColor
-    }
-
+    let y = 0
     let lineIndex = 0
 
-    while (y < marginTop + maxY + headlineOffset) {
-      let effectiveWidth = colWidth
-      let xOffset = 0
+    while (y < maxY) {
       let skipLine = false
 
+      // Check pull quote exclusion zone
       if (pullQuoteArea && col === pullQuoteArea.col) {
-        const pqY = marginTop + headlineOffset + pullQuoteArea.topLine * lineHeight
-        const pqHeight = pullQuoteArea.lines * lineHeight
-        if (y >= pqY - lineHeight && y < pqY + pqHeight + lineHeight) {
+        const pqYRel = pullQuoteArea.topLine * lineHeight
+        const pqHeightRel = pullQuoteArea.lines * lineHeight
+        if (y >= pqYRel - lineHeight && y < pqYRel + pqHeightRel + lineHeight) {
           skipLine = true
         }
       }
 
+      // Check image block exclusion zone
       if (imageBlock && col === imageBlock.col) {
-        const imgY = marginTop + headlineOffset + imageBlock.top
-        const imgBottom = imgY + imageBlock.height + 24
-        if (y + lineHeight > imgY && y < imgBottom) {
+        const imgYRel = imageBlock.top
+        const imgBottom = imgYRel + imageBlock.height + 24
+        if (y + lineHeight > imgYRel && y < imgBottom) {
           skipLine = true
         }
       }
@@ -497,38 +700,73 @@ function render() {
         continue
       }
 
-      const line = layoutNextLine(prepared, cursor, effectiveWidth)
-      if (!line) break
+      const effectiveWidth = colWidth
 
-      // Drop cap
+      // Drop cap handling
       if (p.dropCap && isFirstLine && !dropCapDone && col === 0) {
         dropCapDone = true
         isFirstLine = false
 
+        const line = layoutNextLine(prepared, cursor, effectiveWidth)
+        if (!line) break
+
         const dcChar = line.text.charAt(0)
         const dcFontSize = Math.round(fontSize * 3.8)
-        const dcFont = `600 ${dcFontSize}px "${p.font}", ${p.fontFallback}`
-        ctx.font = dcFont
-        ctx.fillStyle = p.textColor
-        ctx.globalAlpha = 0.85
-        const dcMetrics = ctx.measureText(dcChar)
-        const dcWidth = dcMetrics.width + 6
+        // We need to measure the drop cap width - use a temp span
+        const dcMeasure = document.createElement('span')
+        dcMeasure.style.font = `600 ${dcFontSize}px ${fontFamily}`
+        dcMeasure.style.position = 'absolute'
+        dcMeasure.style.visibility = 'hidden'
+        dcMeasure.textContent = dcChar
+        document.body.appendChild(dcMeasure)
+        const dcWidth = dcMeasure.offsetWidth + 6
+        document.body.removeChild(dcMeasure)
 
-        ctx.fillText(dcChar, colX, y + dcFontSize * 0.78)
-        ctx.globalAlpha = 1.0
+        // Drop cap element
+        const dcEl = document.createElement('div')
+        dcEl.className = 'drop-cap'
+        dcEl.style.left = '0px'
+        dcEl.style.top = y + 'px'
+        dcEl.style.fontSize = dcFontSize + 'px'
+        dcEl.style.fontFamily = fontFamily
+        dcEl.style.color = p.textColor
+        dcEl.style.lineHeight = (lineHeight * 3.5) + 'px'
+        dcEl.textContent = dcChar
+        colEl.appendChild(dcEl)
 
-        ctx.font = fontStr
-        ctx.fillStyle = p.textColor
+        // First line (rest of text after drop cap char)
         const restText = line.text.substring(1).trimStart()
-        ctx.fillText(restText, colX + dcWidth, y + fontSize)
+        const firstLineEl = document.createElement('div')
+        firstLineEl.className = 'text-line'
+        firstLineEl.style.top = y + 'px'
+        firstLineEl.style.left = dcWidth + 'px'
+        firstLineEl.style.fontFamily = fontFamily
+        firstLineEl.style.fontSize = fontSize + 'px'
+        firstLineEl.style.lineHeight = lineHeight + 'px'
+        firstLineEl.style.color = p.textColor
+        firstLineEl.textContent = restText
+        colEl.appendChild(firstLineEl)
 
         cursor = line.end
         y += lineHeight
+
+        // Indented lines next to drop cap
         const dcLines = 3
-        for (let dl = 0; dl < dcLines && y < marginTop + maxY + headlineOffset; dl++) {
+        for (let dl = 0; dl < dcLines && y < maxY; dl++) {
           const indentLine = layoutNextLine(prepared, cursor, effectiveWidth - dcWidth)
           if (!indentLine) break
-          ctx.fillText(indentLine.text, colX + dcWidth, y + fontSize)
+
+          const lineEl = document.createElement('div')
+          lineEl.className = 'text-line'
+          lineEl.style.top = y + 'px'
+          lineEl.style.left = dcWidth + 'px'
+          lineEl.style.fontFamily = fontFamily
+          lineEl.style.fontSize = fontSize + 'px'
+          lineEl.style.lineHeight = lineHeight + 'px'
+          lineEl.style.color = p.textColor
+          lineEl.textContent = indentLine.text
+          colEl.appendChild(lineEl)
+
           cursor = indentLine.end
           y += lineHeight
         }
@@ -537,52 +775,27 @@ function render() {
       }
 
       isFirstLine = false
-      ctx.font = fontStr
-      ctx.fillStyle = p.textColor
-      ctx.fillText(line.text, colX + xOffset, y + fontSize)
+
+      const line = layoutNextLine(prepared, cursor, effectiveWidth)
+      if (!line) break
+
+      const lineEl = document.createElement('div')
+      lineEl.className = 'text-line'
+      lineEl.style.top = y + 'px'
+      lineEl.style.fontFamily = fontFamily
+      lineEl.style.fontSize = fontSize + 'px'
+      lineEl.style.lineHeight = lineHeight + 'px'
+      lineEl.style.color = p.textColor
+      lineEl.textContent = line.text
+      colEl.appendChild(lineEl)
+
       cursor = line.end
       y += lineHeight
       lineIndex++
     }
+
+    page.appendChild(colEl)
   }
-
-  // Bottom margin decorative rule
-  ctx.strokeStyle = p.ruleColor
-  ctx.lineWidth = 0.5
-  ctx.beginPath()
-  ctx.moveTo(marginX, marginTop + contentHeight + 4)
-  ctx.lineTo(w - marginX, marginTop + contentHeight + 4)
-  ctx.stroke()
-
-  // Corner ornaments for early eras (before 1600)
-  if (year < 1600) {
-    const ornAlpha = Math.max(0, 1 - (year - 1440) / 160)
-    drawOrnament(ctx, marginX - 4, marginTop - 16, ornAlpha, p.ornamentColor)
-    drawOrnament(ctx, w - marginX + 4, marginTop - 16, ornAlpha, p.ornamentColor, true)
-  }
-}
-
-function drawOrnament(ctx, x, y, alpha, color, flip = false) {
-  ctx.save()
-  ctx.globalAlpha = alpha * 0.3
-  ctx.strokeStyle = color
-  ctx.lineWidth = 1
-  ctx.translate(x, y)
-  if (flip) ctx.scale(-1, 1)
-
-  ctx.beginPath()
-  ctx.moveTo(0, 0)
-  ctx.bezierCurveTo(8, -4, 16, -2, 20, 4)
-  ctx.bezierCurveTo(24, 10, 18, 14, 12, 10)
-  ctx.bezierCurveTo(6, 6, 10, 2, 14, 4)
-  ctx.stroke()
-
-  ctx.beginPath()
-  ctx.moveTo(0, 0)
-  ctx.bezierCurveTo(6, 2, 12, 8, 10, 14)
-  ctx.stroke()
-
-  ctx.restore()
 }
 
 // --- Event handling with rAF throttle ---
@@ -619,14 +832,14 @@ document.addEventListener('keydown', (e) => {
 })
 
 // Resize handling
-window.addEventListener('resize', resizeCanvas)
+window.addEventListener('resize', () => scheduleRender())
 
 // Wait for fonts to load before first render
 document.fonts.ready.then(() => {
   preparedCache.clear()
-  resizeCanvas()
+  render()
 })
-resizeCanvas()
+render()
 </script>
 </body>
 </html>

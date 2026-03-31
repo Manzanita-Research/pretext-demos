@@ -17,11 +17,50 @@
     height: 100vh;
     width: 100vw;
   }
-  canvas {
-    display: block;
+  #world {
     position: absolute;
-    top: 0;
+    inset: 0;
+    overflow: hidden;
+  }
+  #shake-layer {
+    position: absolute;
+    inset: 0;
+    will-change: transform;
+  }
+  #ground-line {
+    position: absolute;
     left: 0;
+    right: 0;
+    height: 1px;
+    background: rgba(250,249,246,0.1);
+    pointer-events: none;
+  }
+  #ground-glow {
+    position: absolute;
+    left: 0;
+    right: 0;
+    pointer-events: none;
+    background: linear-gradient(to bottom, rgba(250,249,246,0.03) 0%, rgba(8,8,14,0) 100%);
+  }
+  .word-brick {
+    position: absolute;
+    left: 0;
+    top: 0;
+    font-family: 'Literata', Georgia, serif;
+    font-size: 22px;
+    line-height: 1;
+    white-space: nowrap;
+    pointer-events: none;
+    user-select: text;
+    will-change: transform, opacity;
+    text-shadow: 0 0 4px var(--glow-color);
+  }
+  .dust-particle {
+    position: absolute;
+    left: 0;
+    top: 0;
+    pointer-events: none;
+    will-change: transform, opacity;
   }
   #input-bar {
     position: fixed;
@@ -98,16 +137,22 @@
   <h1>THE TOWER OF BABEL</h1>
 </div>
 
-<canvas id="canvas"></canvas>
+<div id="world">
+  <div id="shake-layer">
+    <div id="ground-line"></div>
+    <div id="ground-glow"></div>
+  </div>
+</div>
 
 <script type="module">
+import { prepareWithSegments, layoutNextLine } from 'https://esm.sh/@chenglou/pretext'
+
 // -- Constants --
 const GRAVITY = 800;
 const GROUND_MARGIN = 60;
 const FONT_SIZE = 22;
+const FONT = `${FONT_SIZE}px Literata, Georgia, serif`;
 const COLLAPSE_RATIO = 0.38;
-const SWAY_AMOUNT = 0;
-const SWAY_SPEED = 0;
 const RESTITUTION = 0.08;
 const FRICTION = 0.6;
 const ANGULAR_DAMPING = 0.75;
@@ -143,15 +188,21 @@ const FOUNDATION_WORDS = [
 
 const LANG_KEYS = Object.keys(WORD_POOLS);
 
-// -- Canvas setup --
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-let W, H, groundY;
+// -- DOM setup --
+const shakeLayer = document.getElementById('shake-layer');
+const groundLine = document.getElementById('ground-line');
+const groundGlow = document.getElementById('ground-glow');
+let W = window.innerWidth;
+let H = window.innerHeight;
+let groundY = H - GROUND_MARGIN;
 
 function resize() {
-  W = canvas.width = window.innerWidth;
-  H = canvas.height = window.innerHeight;
+  W = window.innerWidth;
+  H = window.innerHeight;
   groundY = H - GROUND_MARGIN;
+  groundLine.style.top = groundY + 'px';
+  groundGlow.style.top = groundY + 'px';
+  groundGlow.style.height = (H - groundY) + 'px';
 }
 resize();
 window.addEventListener('resize', resize);
@@ -160,7 +211,25 @@ window.addEventListener('resize', resize);
 const hudHeight = document.getElementById('hud-height');
 const hudWords = document.getElementById('hud-words');
 
-// -- Particles --
+// -- Measure text with pretext --
+// We use pretext to measure word widths for accurate physics sizing.
+// A hidden span is also available as a fallback.
+function measureTextWidth(text) {
+  const prepared = prepareWithSegments(text, FONT);
+  const cursor = { segmentIndex: 0, graphemeIndex: 0 };
+  const line = layoutNextLine(prepared, cursor, 9999);
+  if (line && line.width != null) return line.width;
+  // Fallback: use a hidden measurement span
+  const span = document.createElement('span');
+  span.style.cssText = `position:absolute;visibility:hidden;font:${FONT};white-space:nowrap;`;
+  span.textContent = text;
+  document.body.appendChild(span);
+  const w = span.offsetWidth;
+  document.body.removeChild(span);
+  return w;
+}
+
+// -- Particles (small positioned divs) --
 const particles = [];
 
 class Particle {
@@ -173,6 +242,14 @@ class Particle {
     this.decay = opts.decay || (0.6 + Math.random() * 1.2);
     this.size = opts.size || (1.5 + Math.random() * 2.5);
     this.color = color;
+
+    // Create DOM element
+    this.el = document.createElement('div');
+    this.el.className = 'dust-particle';
+    this.el.style.width = this.size + 'px';
+    this.el.style.height = this.size + 'px';
+    this.el.style.background = this.color;
+    shakeLayer.appendChild(this.el);
   }
   update(dt) {
     this.vy += 200 * dt;
@@ -180,12 +257,13 @@ class Particle {
     this.y += this.vy * dt;
     this.life -= this.decay * dt;
   }
-  draw(ctx) {
+  render() {
     if (this.life <= 0) return;
-    ctx.globalAlpha = this.life * 0.6;
-    ctx.fillStyle = this.color;
-    ctx.fillRect(this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
-    ctx.globalAlpha = 1;
+    this.el.style.transform = `translate3d(${this.x - this.size / 2}px, ${this.y - this.size / 2}px, 0)`;
+    this.el.style.opacity = this.life * 0.6;
+  }
+  remove() {
+    this.el.remove();
   }
 }
 
@@ -216,33 +294,37 @@ let collapseTimer = 0;
 let collapseCooldown = 0;
 
 // -- Tension state (pre-collapse) --
-let tensionLevel = 0; // 0 = calm, builds toward 1 = imminent collapse
+let tensionLevel = 0;
 let tensionSwayMultiplier = 1;
 let collapseImminent = false;
-
-ctx.font = `${FONT_SIZE}px Literata, Georgia, serif`;
 
 class WordBody {
   constructor(text, lang, x) {
     this.text = text;
     this.lang = lang;
     this.color = LANG_COLORS[lang] || LANG_COLORS.english;
-    ctx.font = `${FONT_SIZE}px Literata, Georgia, serif`;
-    const m = ctx.measureText(text);
-    this.width = m.width + 12;
+    this.width = measureTextWidth(text) + 12;
     this.height = FONT_SIZE + 6;
     this.mass = Math.max(this.width / 10, 1);
     this.x = x;
     this.y = -this.height - Math.random() * 40;
-    this.vx = (Math.random() - 0.5) * 2; // near-zero horizontal drift
+    this.vx = (Math.random() - 0.5) * 2;
     this.vy = 60 + Math.random() * 20;
-    this.rotation = (Math.random() - 0.5) * 0.04; // very slight initial rotation
-    this.angularVel = (Math.random() - 0.5) * 0.08; // minimal spin
+    this.rotation = (Math.random() - 0.5) * 0.04;
+    this.angularVel = (Math.random() - 0.5) * 0.08;
     this.grounded = false;
     this.restFrames = 0;
     this.sleeping = false;
     this.opacity = 0;
     this.landed = false;
+
+    // Create DOM element
+    this.el = document.createElement('div');
+    this.el.className = 'word-brick';
+    this.el.style.color = this.color;
+    this.el.style.setProperty('--glow-color', this.color);
+    this.el.textContent = text;
+    shakeLayer.appendChild(this.el);
   }
 
   get left() { return this.x - this.width / 2; }
@@ -268,7 +350,7 @@ class WordBody {
       this.rotation = Math.max(-MAX_ROTATION, Math.min(MAX_ROTATION, this.rotation));
     }
 
-    // Heavy angular damping — tumble should settle fast
+    // Heavy angular damping
     this.angularVel *= Math.pow(ANGULAR_DAMPING, dt * 20);
 
     // Damping on horizontal movement
@@ -324,27 +406,13 @@ class WordBody {
     this.restFrames = 0;
   }
 
-  draw(ctx, time) {
-    ctx.save();
-    ctx.translate(this.x, this.y);
+  render() {
+    this.el.style.transform = `translate3d(${this.x - this.width / 2}px, ${this.y - this.height / 2}px, 0) rotate(${this.rotation}rad)`;
+    this.el.style.opacity = this.opacity;
+  }
 
-    // No sway — tower stands still when stable
-
-    ctx.rotate(this.rotation);
-    ctx.globalAlpha = this.opacity;
-    ctx.font = `${FONT_SIZE}px Literata, Georgia, serif`;
-    ctx.fillStyle = this.color;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    // Subtle glow
-    ctx.shadowColor = this.color;
-    ctx.shadowBlur = 4;
-    ctx.fillText(this.text, 0, 0);
-    ctx.shadowBlur = 0;
-
-    ctx.globalAlpha = 1;
-    ctx.restore();
+  remove() {
+    this.el.remove();
   }
 }
 
@@ -372,7 +440,6 @@ function resolveCollisions() {
         // Vertical collision
         const totalMass = a.mass + b.mass;
         if (a.y < b.y) {
-          // a is above b
           const pushA = b.sleeping ? overlapY : overlapY * (b.mass / totalMass);
           const pushB = a.sleeping ? overlapY : overlapY * (a.mass / totalMass);
           if (!a.sleeping) a.y -= pushA;
@@ -388,7 +455,6 @@ function resolveCollisions() {
             a.grounded = true;
             a.landed = true;
 
-            // Snap rotation toward zero on stacking
             a.rotation *= 0.3;
             a.angularVel *= 0.15;
           }
@@ -398,17 +464,15 @@ function resolveCollisions() {
           }
           if (!a.sleeping) a.vx *= FRICTION;
 
-          // Very slight angular impulse from offset
           const offset = (a.x - b.x) / b.width;
           if (!a.sleeping) a.angularVel += offset * 0.05;
 
-          // Guide word toward center of support (stacking neatly)
+          // Guide word toward center of support
           if (!a.sleeping && b.landed) {
             const centerPull = (b.x - a.x) * 0.08;
             a.vx += centerPull;
           }
         } else {
-          // b is above a
           const pushA = b.sleeping ? overlapY : overlapY * (b.mass / totalMass);
           const pushB = a.sleeping ? overlapY : overlapY * (a.mass / totalMass);
           if (!a.sleeping) a.y += pushA;
@@ -509,16 +573,14 @@ function checkStability() {
 
   const { comX, baseCenterX, heightRatio, comOffset, groundedBodies } = metrics;
 
-  // Calculate tension — how close are we to collapse?
   let t = 0;
   if (heightRatio > 2.0) t = Math.max(t, (heightRatio - 2.0) / 1.5);
   if (comOffset > 0.2) t = Math.max(t, (comOffset - 0.2) / 0.18);
   if (groundedBodies.length > 40) t = Math.max(t, (groundedBodies.length - 40) / 20);
 
   tensionLevel = Math.min(1, t);
-  tensionSwayMultiplier = 1; // sway disabled
+  tensionSwayMultiplier = 1;
 
-  // Collapse conditions
   if ((comOffset > COLLAPSE_RATIO && heightRatio > 0.8) || heightRatio > 3.5 || groundedBodies.length > 60) {
     collapseImminent = true;
   }
@@ -558,7 +620,6 @@ function triggerCollapse(comX, baseCenterX) {
     ));
   }
 
-  // Pause before rebuilding — schedule a post-collapse cooldown
   postCollapsePause = 2.5;
 }
 
@@ -566,7 +627,6 @@ let postCollapsePause = 0;
 
 // -- Word dropping --
 function dropWord(text, lang) {
-  // Tighter spread — words land closer to center for tower shape
   const spread = W * 0.2;
   const centerX = W / 2 + (Math.random() - 0.5) * spread;
   const body = new WordBody(text, lang, centerX);
@@ -591,15 +651,13 @@ input.addEventListener('keydown', (e) => {
 });
 
 // -- Startup sequence --
-// Drop foundation words immediately, then rapid-fire the first batch
 let startupPhase = true;
 let startupDropCount = 0;
 const STARTUP_RAPID_COUNT = 10;
-const STARTUP_RAPID_INTERVAL = 500; // ms
+const STARTUP_RAPID_INTERVAL = 500;
 const NORMAL_DROP_MIN = 2000;
 const NORMAL_DROP_MAX = 3000;
 
-// Drop foundation (3-5 wider words simultaneously)
 function dropFoundation() {
   for (const fw of FOUNDATION_WORDS.slice(0, 3 + Math.floor(Math.random() * 2))) {
     const spread = W * 0.15;
@@ -631,6 +689,7 @@ function cleanup() {
   for (let i = bodies.length - 1; i >= 0; i--) {
     const b = bodies[i];
     if (b.y > H + 200 || b.x < -300 || b.x > W + 300) {
+      b.remove();
       bodies.splice(i, 1);
     }
   }
@@ -649,34 +708,16 @@ function updateHUD() {
   hudWords.textContent = `${bodies.length} ${bodies.length === 1 ? 'word' : 'words'}`;
 }
 
-// -- Draw ground --
-function drawGround() {
-  ctx.strokeStyle = 'rgba(250,249,246,0.1)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(0, groundY);
-  ctx.lineTo(W, groundY);
-  ctx.stroke();
-
-  const grd = ctx.createLinearGradient(0, groundY, 0, H);
-  grd.addColorStop(0, 'rgba(250,249,246,0.03)');
-  grd.addColorStop(1, 'rgba(8,8,14,0)');
-  ctx.fillStyle = grd;
-  ctx.fillRect(0, groundY, W, H - groundY);
-}
-
 // -- Collapse tension effects --
 let tensionPebbleTimer = 0;
 
 function updateTension(dt) {
   if (tensionLevel <= 0 || collapseCooldown > 0) return;
 
-  // Spawn pebble particles from "cracks" in the tower
   tensionPebbleTimer += dt;
-  const pebbleRate = 0.3 - tensionLevel * 0.25; // faster as tension builds
+  const pebbleRate = 0.3 - tensionLevel * 0.25;
   if (tensionPebbleTimer > pebbleRate && tensionLevel > 0.3) {
     tensionPebbleTimer = 0;
-    // Pick a random sleeping body in the tower
     const towerBodies = bodies.filter(b => b.sleeping && b.y < groundY - 30);
     if (towerBodies.length > 0) {
       const b = towerBodies[Math.floor(Math.random() * towerBodies.length)];
@@ -684,7 +725,6 @@ function updateTension(dt) {
     }
   }
 
-  // If collapse is imminent, give a brief dramatic pause then collapse
   if (collapseImminent) {
     const metrics = getTowerMetrics();
     if (metrics) {
@@ -705,12 +745,12 @@ function loop(timestamp) {
   lastTime = timestamp;
   const time = timestamp / 1000;
 
-  // Post-collapse pause — don't drop new words right after a collapse
+  // Post-collapse pause
   if (postCollapsePause > 0) {
     postCollapsePause -= dt;
   }
 
-  // Auto drop (skip during post-collapse pause)
+  // Auto drop
   if (postCollapsePause <= 0) {
     autoDropAccum += dt * 1000;
     if (autoDropAccum >= nextAutoDrop) {
@@ -747,7 +787,10 @@ function loop(timestamp) {
   // Update particles
   for (let i = particles.length - 1; i >= 0; i--) {
     particles[i].update(dt);
-    if (particles[i].life <= 0) particles.splice(i, 1);
+    if (particles[i].life <= 0) {
+      particles[i].remove();
+      particles.splice(i, 1);
+    }
   }
 
   // Cleanup
@@ -757,28 +800,22 @@ function loop(timestamp) {
   shakeAmount *= shakeDecay;
   if (shakeAmount < 0.1) shakeAmount = 0;
 
-  // -- Draw --
-  ctx.clearRect(0, 0, W, H);
-
-  ctx.save();
+  // -- Render DOM --
   if (shakeAmount > 0) {
-    ctx.translate(
-      (Math.random() - 0.5) * shakeAmount * 2,
-      (Math.random() - 0.5) * shakeAmount * 2
-    );
+    const sx = (Math.random() - 0.5) * shakeAmount * 2;
+    const sy = (Math.random() - 0.5) * shakeAmount * 2;
+    shakeLayer.style.transform = `translate3d(${sx}px, ${sy}px, 0)`;
+  } else {
+    shakeLayer.style.transform = '';
   }
 
-  drawGround();
-
   for (const b of bodies) {
-    b.draw(ctx, time);
+    b.render();
   }
 
   for (const p of particles) {
-    p.draw(ctx);
+    p.render();
   }
-
-  ctx.restore();
 
   // HUD
   updateHUD();
